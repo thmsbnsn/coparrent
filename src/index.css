@@ -1,0 +1,174 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* CoParrent Design System - Calm, Professional, Court-Friendly */
+
+@layer base {
+  :root {
+    /* Core Brand Colors - Calming Navy & Sage */
+    --background: 210 25% 98%;
+    --foreground: 222 47% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+
+    /* Primary - Deep Navy Blue (Trust, Professionalism) */
+    --primary: 222 47% 20%;
+    --primary-foreground: 210 40% 98%;
+
+    /* Secondary - Warm Sage Green (Calm, Growth) */
+    --secondary: 150 25% 92%;
+    --secondary-foreground: 150 30% 25%;
+
+    /* Muted - Soft Slate */
+    --muted: 210 20% 94%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent - Soft Teal (Clarity, Balance) */
+    --accent: 174 42% 90%;
+    --accent-foreground: 174 50% 25%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
+    --ring: 222 47% 20%;
+
+    --radius: 0.75rem;
+
+    /* Semantic Colors */
+    --success: 150 50% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 200 80% 50%;
+    --info-foreground: 0 0% 100%;
+
+    /* Parent Colors */
+    --parent-a: 222 60% 55%;
+    --parent-a-light: 222 60% 95%;
+    --parent-b: 150 45% 45%;
+    --parent-b-light: 150 45% 92%;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(135deg, hsl(222 47% 20%) 0%, hsl(200 60% 30%) 50%, hsl(174 42% 35%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 25% 98%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(174 42% 35%) 0%, hsl(150 45% 45%) 100%);
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(222 47% 11% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(222 47% 11% / 0.08), 0 2px 4px -2px hsl(222 47% 11% / 0.05);
+    --shadow-lg: 0 10px 15px -3px hsl(222 47% 11% / 0.08), 0 4px 6px -4px hsl(222 47% 11% / 0.05);
+    --shadow-xl: 0 20px 25px -5px hsl(222 47% 11% / 0.08), 0 8px 10px -6px hsl(222 47% 11% / 0.05);
+    --shadow-glow: 0 0 40px hsl(174 42% 35% / 0.15);
+
+    /* Sidebar */
+    --sidebar-background: 222 47% 11%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 174 42% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 40% 18%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 222 40% 20%;
+    --sidebar-ring: 174 42% 50%;
+  }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 98%;
+
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 174 42% 50%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 150 20% 18%;
+    --secondary-foreground: 150 30% 85%;
+
+    --muted: 222 40% 15%;
+    --muted-foreground: 215 16% 65%;
+
+    --accent: 174 30% 18%;
+    --accent-foreground: 174 42% 70%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 222 40% 18%;
+    --input: 222 40% 18%;
+    --ring: 174 42% 50%;
+
+    --sidebar-background: 222 50% 6%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 174 42% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 222 45% 12%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 222 45% 12%;
+    --sidebar-ring: 174 42% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display font-semibold tracking-tight;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-clip-text text-transparent;
+    background-image: var(--gradient-hero);
+  }
+
+  .bg-gradient-hero {
+    background-image: var(--gradient-hero);
+  }
+
+  .bg-gradient-accent {
+    background-image: var(--gradient-accent);
+  }
+
+  .shadow-elegant {
+    box-shadow: var(--shadow-lg);
+  }
+
+  .shadow-glow {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .glass {
+    @apply bg-card/80 backdrop-blur-md border border-border/50;
+  }
+
+  .parent-a {
+    @apply bg-[hsl(var(--parent-a-light))] border-[hsl(var(--parent-a))] text-[hsl(var(--parent-a))];
+  }
+
+  .parent-b {
+    @apply bg-[hsl(var(--parent-b-light))] border-[hsl(var(--parent-b))] text-[hsl(var(--parent-b))];
+  }
+}

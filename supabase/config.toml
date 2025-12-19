@@ -1,0 +1,4 @@
+project_id = "znxiydmycxcjkflihfxn"
+
+[functions.send-coparent-invite]
+verify_jwt = false
