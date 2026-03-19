@@ -239,6 +239,12 @@ export default function KidsDashboard() {
     }
   }, [authLoading, permLoading, isChildAccount, user, navigate]);
 
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/login");
+    }
+  }, [authLoading, navigate, user]);
+
   const handleSignOut = async () => {
     await signOut();
     toast({
@@ -257,7 +263,6 @@ export default function KidsDashboard() {
   }
 
   if (!user) {
-    navigate("/login");
     return null;
   }
 

@@ -176,7 +176,7 @@ export const FamilyProvider = ({ children }: { children: ReactNode }) => {
   }, [refresh]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || loading) {
       return;
     }
 
@@ -186,7 +186,7 @@ export const FamilyProvider = ({ children }: { children: ReactNode }) => {
     } else {
       localStorage.removeItem(storageKey);
     }
-  }, [activeFamilyId, user]);
+  }, [activeFamilyId, loading, user]);
 
   const setActiveFamilyId = useCallback(
     (familyId: string) => {

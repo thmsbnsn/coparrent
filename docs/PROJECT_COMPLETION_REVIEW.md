@@ -20,10 +20,13 @@ Completed in this pass:
 10. Added `ProtectedRoute` integration coverage so auth loading, redirects, parent-only enforcement, and child/third-party routing decisions are exercised through the component, not just pure helpers.
 11. Added `AcceptInvite` component coverage so invalid/expired tokens, pending invite redirects, co-parent acceptance, third-party acceptance, and email-mismatch handling are exercised through the page, not just pure invitation helpers.
 12. Added shared auth-redirect coverage for `Login` and `Signup` so pending invite handoff plus onboarding-versus-dashboard routing is exercised through the real pages after authentication.
+13. Added `FamilyProvider` regression coverage and fixed the persisted active-family restoration bug that was clearing the stored family before the initial refresh completed.
+14. Added `PremiumFeatureGate` regression coverage for upgrade prompts, expired trials, hidden locked states, and custom fallbacks.
+15. Added `KidsDashboard` smoke coverage and fixed the signed-out redirect so login navigation happens in an effect instead of during render.
 
 Remaining Codex-only backlog:
 
-1. Expand the current regression suite into broader family-switching, premium-gating, and cross-route post-login smoke coverage after the live-system dependencies are settled.
+1. No remaining release-blocking Codex-only tasks are currently identified in the local repo state.
 
 ## Tasks That Need User Assistance
 
@@ -40,4 +43,4 @@ Remaining Codex-only backlog:
 - Local test status: passing
 - Local lint status: passing cleanly
 - Highest remaining release risk: live-system verification, not local code compilation
-- Highest remaining Codex-only risk: regression breadth is still narrower than a full onboarding and cross-route UI smoke suite
+- Highest remaining Codex-only risk: no major local release-blocking gaps are currently identified; the remaining risks are live-system verification and launch decisions

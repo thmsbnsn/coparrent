@@ -156,7 +156,7 @@ For security architecture, see **`docs/SECURITY_MODEL.md`**.
 
 - Local `npm run build` succeeds.
 - Local `npm run lint` succeeds with zero warnings.
-- Local `npm run test` succeeds with 44 targeted regression tests.
+- Local `npm run test` succeeds with 58 targeted regression tests.
 - Local `npm run verify` now provides a single lint + test + build verification path.
 - The family-scoped authorization refactor now has a live bootstrap path: parent and guardian accounts create and activate a family membership before family-gated features run.
 - New co-parent invitations are now stamped with `family_id`, so invited users have an existing family to join instead of creating a duplicate family during onboarding.
@@ -165,6 +165,9 @@ For security architecture, see **`docs/SECURITY_MODEL.md`**.
 - `ProtectedRoute` now has direct integration coverage for auth loading, redirects, and role/child gating behavior.
 - `AcceptInvite` now has direct component coverage for invalid and expired tokens, pending invite redirects, and both co-parent and third-party acceptance branches.
 - `Login` and `Signup` now have shared redirect coverage for pending invite handoff and onboarding-versus-dashboard routing after family bootstrap.
+- `FamilyProvider` now has coverage for persisted active-family restoration, family bootstrap edge cases, and safe active-family switching.
+- `PremiumFeatureGate` now has coverage for upgrade prompts, expired-trial messaging, fallback rendering, and hidden locked states.
+- `KidsDashboard` now has smoke coverage for loading, child rendering, and parent/signed-out redirects, and the signed-out redirect now happens in an effect instead of during render.
 - The access-code beta flow has been verified end to end in production for two tester accounts.
 - The production frontend is still behind this local repo and should not be promoted without a preview review.
 - `LOVABLE_API_KEY` was not found in production Edge Function secrets on March 13, 2026, so Lovable-backed AI features remain high-risk until restored or replaced.
@@ -288,7 +291,6 @@ No Lovable-specific runtime dependencies exist in the application code.
 - Restore or replace missing Lovable-backed AI secrets and test every AI tool end to end
 - Run a live Stripe checkout, webhook, and customer-portal verification pass
 - Validate push delivery on iOS, Android, and desktop with current production config
-- Broaden component and smoke coverage around family switching, premium gating, and cross-route post-login access
 - Re-enable auth captcha after controlled QA is complete
 
 ### Known Blocking Issues
@@ -1498,7 +1500,7 @@ The `.env` file is auto-configured by Lovable Cloud with:
 
 ### Low Priority / Nice to Have
 
-- [ ] **UI Smoke Coverage**: Extend the current regression suite into broader family switching, premium gating, and post-login smoke checks
+- [ ] **Preview-Based Playwright Smoke**: Add a thin deployed smoke pass once the preview target is agreed
 - [ ] **Multiple Children Calendars**: Per-child schedule overrides for split custody
 - [ ] **Mileage Tracking**: Exchange location distance tracking and reimbursement
 - [ ] **Integration with Family Law Portals**: Direct court filing integration
@@ -1545,7 +1547,7 @@ The `.env` file is auto-configured by Lovable Cloud with:
 ### Technical Debt
 
 - [x] **Critical Regression Tests**: Added Vitest coverage for invite classification, family bootstrap helpers, plan limits, route/security gating, and reminder helpers on March 19, 2026
-- [ ] **Broader Unit/Component Coverage**: Extend the current Vitest suite beyond the covered route/invite flows and critical-path helpers
+- [x] **Broader Unit/Component Coverage**: Extended the Vitest suite across route guards, invite flows, auth redirects, family switching, premium gating, and kids-route smoke coverage on March 19, 2026
 - [ ] **E2E Tests**: Expand Playwright end-to-end testing coverage
 - [ ] **Accessibility Audit**: Full WCAG 2.1 AA compliance review
 - [x] **Route Lazy Loading & Bundle Splitting**: Implemented on March 19, 2026

@@ -1,6 +1,6 @@
 # CoParrent Next 10 Tasks
 
-Ranked by immediate value after the March 19, 2026 cleanup pass that restored a clean local build, brought lint to zero warnings, raised the regression suite to 44 tests, removed stale runtime URLs, split the frontend into lazy-loaded route chunks, and added `npm run verify`.
+Ranked by immediate value after the March 19, 2026 cleanup pass that restored a clean local build, brought lint to zero warnings, raised the regression suite to 58 tests, removed stale runtime URLs, split the frontend into lazy-loaded route chunks, and added `npm run verify`.
 
 ## 1. Verify invite acceptance end-to-end
 
@@ -59,14 +59,14 @@ Owner: User-assisted
 - Document the verified code format and redemption behavior
 - Decide whether code creation remains manual in Supabase or gets a product UI later
 
-## 7. Expand regression and smoke coverage further
+## 7. Run a preview-based Playwright smoke pass
 
-Owner: Codex
+Owner: Mixed
 
-- Add smoke coverage for family switching and parent-only redirects
-- Add verification around premium gating from real subscription payload shapes
-- Add smoke coverage for post-login cross-route behavior after onboarding completes
-- Add a thin Playwright smoke pass once the current preview target is agreed
+- Agree on the exact preview or staging target to hit
+- Add a thin Playwright pass for login, invite landing, and dashboard reachability
+- Keep the scope to smoke coverage, not full end-to-end billing/device verification
+- Use it as a final confidence pass before production promotion
 
 ## 8. Clean deployment and environment hygiene
 
@@ -79,7 +79,7 @@ Owner: Mixed
 
 ## 9. Add automated security regression checks
 
-Owner: Codex
+Owner: Codex optional hardening
 
 - Extend the current `securityAssertions` coverage into family role changes and admin-only paths
 - Add tests around trial expiry and premium gating edge cases
@@ -88,7 +88,7 @@ Owner: Codex
 
 ## 10. Keep performance drift in check
 
-Owner: Codex
+Owner: Codex optional hardening
 
 - Watch the largest vendor chunks as features change
 - Add a lightweight size-budget check if chunk growth starts regressing

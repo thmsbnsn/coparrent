@@ -9,7 +9,7 @@ This document is the current operational snapshot for the repo and live services
 - This workspace is still the active project copy.
 - `npm run build` passes locally as of March 19, 2026.
 - `npm run lint` now passes locally as of March 19, 2026 with zero warnings.
-- `npm run test` now passes locally as of March 19, 2026 with 44 targeted regression tests.
+- `npm run test` now passes locally as of March 19, 2026 with 58 targeted regression tests.
 - `npm run verify` now passes locally as of March 19, 2026 and runs lint, tests, then build.
 - Route-level lazy loading and manual vendor chunking are now in place. The largest verified chunks from the current build are:
   - `dist/assets/pdf-vendor-DrmE4z1P.js`
@@ -23,6 +23,11 @@ This document is the current operational snapshot for the repo and live services
 - The regression suite now includes `ProtectedRoute` integration coverage for loading, auth redirects, parent-only enforcement, third-party redirects, and child-account redirects.
 - The regression suite now also includes `AcceptInvite` component coverage for invalid and expired tokens, unauthenticated pending-token redirects, co-parent acceptance, third-party acceptance, and third-party email-mismatch handling.
 - The regression suite now also includes shared auth-redirect coverage for `Login` and `Signup`, including pending invite handoff, family bootstrap invocation, and dashboard versus onboarding routing after authentication.
+- The regression suite now also includes `FamilyProvider` coverage for persisted active-family restoration, valid family switching, auto-bootstrap behavior, and invite-pending suppression.
+- The regression suite now also includes `PremiumFeatureGate` coverage for premium-required denials, expired-trial messaging, custom fallbacks, and hidden locked states.
+- The regression suite now also includes `KidsDashboard` smoke coverage for loading, child rendering, signed-out redirects, and parent-account redirects.
+- `FamilyContext` no longer wipes the persisted active-family selection before the initial membership load reads it.
+- `KidsDashboard` no longer calls `navigate("/login")` during render for signed-out users.
 - Current lint warning count: 0
 - The local repo is still ahead of the live Vercel frontend and should be previewed before any production deploy.
 
@@ -107,4 +112,4 @@ These are still temporary settings and should be reviewed before promoting new p
 2. Restore or replace `LOVABLE_API_KEY`, then test all AI tools.
 3. Run a real live Stripe checkout and webhook verification.
 4. Validate push notifications and PWA behavior on real devices.
-5. Continue broadening component and smoke coverage around family switching, premium gating, and cross-route post-login access.
+5. No remaining release-blocking Codex-only local tasks are currently identified; the remaining blockers are live-system verification and product decisions.
