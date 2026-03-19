@@ -1,6 +1,6 @@
 # CoParrent Next 10 Tasks
 
-Ranked by immediate value after the March 19, 2026 cleanup pass that restored a clean local build, brought lint to zero warnings, raised the regression suite to 32 tests, removed stale runtime URLs, split the frontend into lazy-loaded route chunks, and added `npm run verify`.
+Ranked by immediate value after the March 19, 2026 cleanup pass that restored a clean local build, brought lint to zero warnings, raised the regression suite to 38 tests, removed stale runtime URLs, split the frontend into lazy-loaded route chunks, and added `npm run verify`.
 
 ## 1. Verify invite acceptance end-to-end
 
@@ -63,7 +63,7 @@ Owner: User-assisted
 
 Owner: Codex
 
-- Add component or integration coverage around invite acceptance UI states
+- Add smoke coverage for onboarding redirect behavior and pending invite handoff after auth
 - Add smoke coverage for family switching and parent-only redirects
 - Add verification around premium gating from real subscription payload shapes
 - Add a thin Playwright smoke pass once the current preview target is agreed

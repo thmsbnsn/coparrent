@@ -9,7 +9,7 @@ This document is the current operational snapshot for the repo and live services
 - This workspace is still the active project copy.
 - `npm run build` passes locally as of March 19, 2026.
 - `npm run lint` now passes locally as of March 19, 2026 with zero warnings.
-- `npm run test` now passes locally as of March 19, 2026 with 32 targeted regression tests.
+- `npm run test` now passes locally as of March 19, 2026 with 38 targeted regression tests.
 - `npm run verify` now passes locally as of March 19, 2026 and runs lint, tests, then build.
 - Route-level lazy loading and manual vendor chunking are now in place. The largest verified chunks from the current build are:
   - `dist/assets/pdf-vendor-DrmE4z1P.js`
@@ -21,6 +21,7 @@ This document is the current operational snapshot for the repo and live services
 - Route-access rules are now centralized in `src/lib/routeAccess.ts`, and the prior third-party `"/dashboard"` prefix leak has been closed.
 - Sports reminder calculations and responsibility assignment now run through shared pure helpers, including a midnight-safe leave-by calculation path.
 - The regression suite now includes `ProtectedRoute` integration coverage for loading, auth redirects, parent-only enforcement, third-party redirects, and child-account redirects.
+- The regression suite now also includes `AcceptInvite` component coverage for invalid and expired tokens, unauthenticated pending-token redirects, co-parent acceptance, third-party acceptance, and third-party email-mismatch handling.
 - Current lint warning count: 0
 - The local repo is still ahead of the live Vercel frontend and should be previewed before any production deploy.
 
@@ -63,9 +64,9 @@ This document is the current operational snapshot for the repo and live services
   - confirming the parent tester gained an active family membership
   - confirming Nurse Nancy stopped failing on `Parent Access Only`
   - confirming a new co-parent invitation row was created with the same `family_id` as the inviter
-- Fresh invite-acceptance regression testing is still pending for:
-  - co-parent acceptance
-  - third-party acceptance
+- Fresh live invite-acceptance verification is still pending for:
+  - co-parent acceptance with a clean account and real inbox
+  - third-party acceptance with a clean account and real inbox
 
 ## AI Status
 
@@ -105,4 +106,4 @@ These are still temporary settings and should be reviewed before promoting new p
 2. Restore or replace `LOVABLE_API_KEY`, then test all AI tools.
 3. Run a real live Stripe checkout and webhook verification.
 4. Validate push notifications and PWA behavior on real devices.
-5. Continue broadening component and smoke coverage around invite flows, onboarding, and family-scoped access.
+5. Continue broadening component and smoke coverage around onboarding, family switching, and family-scoped access.

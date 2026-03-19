@@ -18,10 +18,11 @@ Completed in this pass:
 8. Added repeatable local verification scripts: `npm run test`, `npm run test:watch`, and `npm run verify`.
 9. Burned down the local lint backlog to zero warnings, including typed cleanup across frontend hooks/pages and edge functions plus a targeted Fast Refresh allowlist for intentional companion exports.
 10. Added `ProtectedRoute` integration coverage so auth loading, redirects, parent-only enforcement, and child/third-party routing decisions are exercised through the component, not just pure helpers.
+11. Added `AcceptInvite` component coverage so invalid/expired tokens, pending invite redirects, co-parent acceptance, third-party acceptance, and email-mismatch handling are exercised through the page, not just pure invitation helpers.
 
 Remaining Codex-only backlog:
 
-1. Expand the current regression suite into broader component and end-to-end smoke coverage after the live-system dependencies are settled.
+1. Expand the current regression suite into broader onboarding, family-switching, and post-login smoke coverage after the live-system dependencies are settled.
 
 ## Tasks That Need User Assistance
 
@@ -38,4 +39,4 @@ Remaining Codex-only backlog:
 - Local test status: passing
 - Local lint status: passing cleanly
 - Highest remaining release risk: live-system verification, not local code compilation
-- Highest remaining Codex-only risk: regression breadth is still narrower than a full UI smoke suite
+- Highest remaining Codex-only risk: regression breadth is still narrower than a full onboarding and cross-route UI smoke suite
