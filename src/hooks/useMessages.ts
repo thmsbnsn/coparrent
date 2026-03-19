@@ -1,7 +1,24 @@
-import { useState, useEffect } from "react";
+/**
+ * @deprecated LEGACY HOOK - Use useMessagingHub instead
+ * 
+ * This hook uses the old `messages` table for 1:1 co-parent messaging.
+ * The modern messaging system uses `thread_messages` with support for:
+ * - Direct messages (1:1)
+ * - Group chats
+ * - Family channel
+ * 
+ * This file is retained for backward compatibility with MessagesPage.tsx
+ * but should not be used for new features. See useMessagingHub.ts for
+ * the authoritative messaging implementation.
+ * 
+ * Migration note: The old `messages` table remains in the database
+ * for historical data access. New messages go to `thread_messages`.
+ */
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useNotificationService } from "@/hooks/useNotificationService";
 
 export interface Message {
   id: string;
@@ -24,6 +41,7 @@ export interface Profile {
 export const useMessages = () => {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { notifyNewMessage, showLocalNotification } = useNotificationService();
   const [messages, setMessages] = useState<Message[]>([]);
   const [coParent, setCoParent] = useState<Profile | null>(null);
   const [userProfile, setUserProfile] = useState<Profile | null>(null);
@@ -113,7 +131,7 @@ export const useMessages = () => {
             schema: "public",
             table: "messages",
           },
-          (payload) => {
+          async (payload) => {
             const newMsg = payload.new as Message;
             if (
               newMsg.sender_id === userProfile.id ||
@@ -123,6 +141,17 @@ export const useMessages = () => {
                 ...prev,
                 { ...newMsg, is_from_me: newMsg.sender_id === userProfile.id },
               ]);
+
+              // Show local notification for incoming messages
+              if (newMsg.recipient_id === userProfile.id) {
+                const senderName = coParent?.full_name || "Your co-parent";
+                await showLocalNotification(
+                  `New message from ${senderName}`,
+                  newMsg.content.length > 50 
+                    ? `${newMsg.content.substring(0, 50)}...` 
+                    : newMsg.content
+                );
+              }
             }
           }
         )
@@ -132,7 +161,7 @@ export const useMessages = () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [userProfile, toast]);
+  }, [userProfile, coParent, toast, showLocalNotification]);
 
   const sendMessage = async (content: string) => {
     if (!userProfile || !coParent) {
@@ -159,6 +188,10 @@ export const useMessages = () => {
       });
       return false;
     }
+
+    // Send notification to co-parent
+    const senderName = userProfile.full_name || "Your co-parent";
+    await notifyNewMessage(coParent.id, senderName, content);
 
     return true;
   };

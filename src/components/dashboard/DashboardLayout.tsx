@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -10,45 +10,104 @@ import {
   Settings,
   LogOut,
   ChevronLeft,
-  Bell,
+  BookHeart,
   Menu,
+  BookOpen,
+  DollarSign,
+  Scale,
+  Trophy,
+  Baby,
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { NotificationDropdown } from "@/components/notifications/NotificationDropdown";
+import { TrialBadge } from "@/components/dashboard/TrialBadge";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
+import { FamilySwitcher } from "@/components/family/FamilySwitcher";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
   userRole?: "parent" | "lawoffice";
 }
 
+// Full navigation for parents/guardians
 const parentNavItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  { icon: Calendar, label: "Parenting Calendar", href: "/dashboard/calendar" },
-  { icon: Users, label: "Child Info", href: "/dashboard/children" },
-  { icon: MessageSquare, label: "Messages", href: "/dashboard/messages" },
-  { icon: FileText, label: "Documents", href: "/dashboard/documents" },
-  { icon: Settings, label: "Settings", href: "/dashboard/settings" },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", thirdPartyAllowed: true, id: "nav-dashboard" },
+  { icon: Calendar, label: "Parenting Calendar", href: "/dashboard/calendar", thirdPartyAllowed: false, id: "nav-calendar" },
+  { icon: Users, label: "Child Info", href: "/dashboard/children", thirdPartyAllowed: false, id: "nav-children" },
+  { icon: Trophy, label: "Sports Hub", href: "/dashboard/sports", thirdPartyAllowed: false, id: "nav-sports" },
+  { icon: Baby, label: "Kids Hub", href: "/dashboard/kids-hub", thirdPartyAllowed: false, id: "nav-kids-hub" },
+  { icon: MessageSquare, label: "Messaging Hub", href: "/dashboard/messages", thirdPartyAllowed: true, id: "nav-messages" },
+  { icon: FileText, label: "Documents", href: "/dashboard/documents", thirdPartyAllowed: false, id: "nav-documents" },
+  { icon: DollarSign, label: "Expenses", href: "/dashboard/expenses", thirdPartyAllowed: false, id: "nav-expenses" },
+  { icon: BookHeart, label: "Journal", href: "/dashboard/journal", thirdPartyAllowed: true, id: "nav-journal" },
+  { icon: Scale, label: "Law Library", href: "/dashboard/law-library", thirdPartyAllowed: true, id: "nav-law-library" },
+  { icon: BookOpen, label: "Blog", href: "/dashboard/blog", thirdPartyAllowed: true, id: "nav-blog" },
+  { icon: Settings, label: "Settings", href: "/dashboard/settings", thirdPartyAllowed: false, id: "nav-settings" },
 ];
 
+/**
+ * Law office navigation - routes must exist
+ * 
+ * REGRESSION PREVENTION:
+ * - /dashboard/cases was removed as it doesn't exist
+ * - Law offices use the same document management as parents
+ * 
+ * @see src/lib/routes.ts for route registry
+ */
 const lawOfficeNavItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
-  { icon: Users, label: "Cases", href: "/dashboard/cases" },
-  { icon: FileText, label: "Documents", href: "/dashboard/documents" },
-  { icon: Settings, label: "Settings", href: "/dashboard/settings" },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", thirdPartyAllowed: true, id: "nav-dashboard" },
+  { icon: FileText, label: "Documents", href: "/dashboard/documents", thirdPartyAllowed: false, id: "nav-documents" },
+  { icon: Settings, label: "Settings", href: "/dashboard/settings", thirdPartyAllowed: false, id: "nav-settings" },
 ];
 
 export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayoutProps) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [userInitials, setUserInitials] = useState("");
   const location = useLocation();
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
+  const { isThirdParty } = useFamilyRole();
   const { toast } = useToast();
 
-  const navItems = userRole === "lawoffice" ? lawOfficeNavItems : parentNavItems;
+  // Filter nav items based on user role
+  const allNavItems = userRole === "lawoffice" ? lawOfficeNavItems : parentNavItems;
+  const navItems = isThirdParty 
+    ? allNavItems.filter(item => item.thirdPartyAllowed) 
+    : allNavItems;
+
+  useEffect(() => {
+    const fetchUserProfile = async () => {
+      if (!user) return;
+      
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      
+      if (profile?.full_name) {
+        const names = profile.full_name.split(" ");
+        const initials = names.length >= 2 
+          ? `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase()
+          : profile.full_name.substring(0, 2).toUpperCase();
+        setUserInitials(initials);
+      } else if (profile?.email) {
+        setUserInitials(profile.email.substring(0, 2).toUpperCase());
+      } else if (user.email) {
+        setUserInitials(user.email.substring(0, 2).toUpperCase());
+      }
+    };
+
+    fetchUserProfile();
+  }, [user]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -60,21 +119,30 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
   };
 
   const SidebarContent = () => (
-    <>
-      {/* Logo */}
-      <div className="p-4 border-b border-sidebar-border">
-        <Link to="/dashboard">
-          <Logo size="md" showText={!sidebarCollapsed} className="[&_span]:text-sidebar-foreground" />
-        </Link>
+    <div className="flex flex-col h-full">
+      {/* Logo - Fixed at top, no safe area here (handled by container) */}
+      <div className="p-4 border-b border-sidebar-border shrink-0">
+        <div className="flex items-center justify-between gap-2">
+          <Link to="/dashboard">
+            <Logo size="md" showText={!sidebarCollapsed} className="[&_span]:text-sidebar-foreground" />
+          </Link>
+          <TrialBadge collapsed={sidebarCollapsed} />
+        </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1">
+      {/* Family Switcher */}
+      <div className="px-3 py-2 border-b border-sidebar-border shrink-0">
+        <FamilySwitcher collapsed={sidebarCollapsed} />
+      </div>
+
+      {/* Navigation - Scrollable with custom scrollbar */}
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto sidebar-scroll">
         {navItems.map((item) => {
           const isActive = location.pathname === item.href;
           return (
             <Link
               key={item.href}
+              id={item.id}
               to={item.href}
               className={cn(
                 "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors",
@@ -92,8 +160,8 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
         })}
       </nav>
 
-      {/* Bottom Section */}
-      <div className="p-3 border-t border-sidebar-border">
+      {/* Bottom Section - Fixed at bottom with safe area padding */}
+      <div className="p-3 border-t border-sidebar-border space-y-1 shrink-0" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}>
         <button
           onClick={handleSignOut}
           className="flex items-center gap-3 px-3 py-2.5 rounded-lg w-full text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
@@ -102,7 +170,7 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
           {!sidebarCollapsed && <span className="text-sm font-medium">Sign Out</span>}
         </button>
       </div>
-    </>
+    </div>
   );
 
   return (
@@ -146,11 +214,18 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
       </AnimatePresence>
 
       {/* Main Content */}
-      <div className={cn("flex-1 flex flex-col", sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-[256px]")}>
-        {/* Top Bar */}
-        <header className="h-16 bg-card border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30">
+      <div className={cn("flex-1 flex flex-col min-h-screen", sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-[256px]")}>
+        {/* Top Bar with safe area support - consistent across all pages */}
+        <header 
+          className="bg-card border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30"
+          style={{ 
+            paddingTop: 'env(safe-area-inset-top, 0)', 
+            minHeight: '4rem',
+            paddingBottom: '0.5rem'
+          }}
+        >
           <button
-            className="lg:hidden p-2 rounded-lg hover:bg-muted"
+            className="lg:hidden p-2 rounded-lg hover:bg-muted mt-auto mb-auto"
             onClick={() => setMobileSidebarOpen(true)}
           >
             <Menu className="w-5 h-5" />
@@ -159,12 +234,10 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
           <div className="flex-1" />
 
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" className="relative">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-destructive" />
-            </Button>
+            <ThemeToggle />
+            <NotificationDropdown />
             <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
-              JD
+              {userInitials || "U"}
             </div>
           </div>
         </header>
@@ -174,6 +247,9 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
           {children}
         </main>
       </div>
+
+      {/* Onboarding Tooltips */}
+      <OnboardingOverlay />
     </div>
   );
 };

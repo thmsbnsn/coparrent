@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Mail, Send, Clock, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Mail, Send, Clock, CheckCircle, XCircle, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import { ensureCurrentUserFamilyMembership } from "@/lib/familyMembership";
 
 interface Invitation {
   id: string;
@@ -33,6 +34,7 @@ export const CoParentInvite = ({
 }: CoParentInviteProps) => {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleSendInvite = async (e: React.FormEvent) => {
@@ -50,12 +52,20 @@ export const CoParentInvite = ({
     setIsLoading(true);
 
     try {
+      const ensuredFamily = await ensureCurrentUserFamilyMembership(inviterName || null);
+      if (!ensuredFamily.familyId) {
+        throw new Error("Could not determine your family for this invitation.");
+      }
+
       // Create invitation in database
       const { data: invitation, error: insertError } = await supabase
         .from("invitations")
         .insert({
           inviter_id: profileId,
+          family_id: ensuredFamily.familyId,
           invitee_email: email.toLowerCase().trim(),
+          invitation_type: "co_parent",
+          role: "parent",
         })
         .select()
         .single();
@@ -98,15 +108,65 @@ export const CoParentInvite = ({
 
       setEmail("");
       onInviteSent();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error sending invitation:", error);
       toast({
         title: "Failed to send invitation",
-        description: error.message || "Please try again later.",
+        description: "Unable to send invitation. Please try again later.",
         variant: "destructive",
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendInvite = async (invitation: Invitation) => {
+    setResendingId(invitation.id);
+
+    try {
+      // Update the invitation to refresh expiration
+      const { error: updateError } = await supabase
+        .from("invitations")
+        .update({
+          expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", invitation.id);
+
+      if (updateError) throw updateError;
+
+      // Resend email via edge function
+      const { error: emailError } = await supabase.functions.invoke("send-coparent-invite", {
+        body: {
+          inviteeEmail: invitation.invitee_email,
+          inviterName: inviterName || "Your co-parent",
+          token: invitation.token,
+        },
+      });
+
+      if (emailError) {
+        console.error("Email error:", emailError);
+        toast({
+          title: "Email may not have been sent",
+          description: "The invitation was refreshed but the email might not have been delivered.",
+        });
+      } else {
+        toast({
+          title: "Invitation resent!",
+          description: `A new invitation email has been sent to ${invitation.invitee_email}.`,
+        });
+      }
+
+      onInviteSent();
+    } catch (error: unknown) {
+      console.error("Error resending invitation:", error);
+      toast({
+        title: "Failed to resend invitation",
+        description: "Unable to resend invitation. Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setResendingId(null);
     }
   };
 
@@ -123,7 +183,7 @@ export const CoParentInvite = ({
     }
   };
 
-  const pendingInvitations = existingInvitations.filter(i => i.status === "pending");
+  const isExpired = (expiresAt: string) => new Date(expiresAt) < new Date();
 
   return (
     <Card>
@@ -168,20 +228,46 @@ export const CoParentInvite = ({
           <div className="space-y-3">
             <h4 className="text-sm font-medium">Sent Invitations</h4>
             <div className="space-y-2">
-              {existingInvitations.map((invitation) => (
-                <div
-                  key={invitation.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                >
-                  <div>
-                    <p className="text-sm font-medium">{invitation.invitee_email}</p>
-                    <p className="text-xs text-muted-foreground">
-                      Sent {format(new Date(invitation.created_at), "MMM d, yyyy")}
-                    </p>
+              {existingInvitations.map((invitation) => {
+                const expired = invitation.status === "expired" || isExpired(invitation.expires_at);
+                const canResend = invitation.status === "pending" || expired;
+                
+                return (
+                  <div
+                    key={invitation.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{invitation.invitee_email}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Sent {format(new Date(invitation.created_at), "MMM d, yyyy")}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {canResend && invitation.status !== "accepted" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleResendInvite(invitation)}
+                          disabled={resendingId === invitation.id}
+                          title="Resend invitation email"
+                        >
+                          {resendingId === invitation.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <RefreshCw className="w-4 h-4" />
+                          )}
+                        </Button>
+                      )}
+                      {expired && invitation.status !== "accepted" ? (
+                        <Badge variant="destructive"><XCircle className="w-3 h-3 mr-1" />Expired</Badge>
+                      ) : (
+                        getStatusBadge(invitation.status)
+                      )}
+                    </div>
                   </div>
-                  {getStatusBadge(invitation.status)}
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

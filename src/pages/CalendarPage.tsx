@@ -1,13 +1,33 @@
-import { useState } from "react";
+/**
+ * @page-role Overview/Action
+ * @summary-pattern Custody calendar with parenting time visualization
+ * @ownership Parent A (blue) vs Parent B (green) via semantic tokens
+ * @court-view Print export and calendar export dialog for legal documentation
+ * 
+ * LAW 1: Hybrid Overview (calendar view) + Action (wizard setup)
+ * LAW 3: Uses parent-a/parent-b semantic classes for ownership distinction
+ * LAW 5: Colors are purely semantic - blue=you, green=co-parent
+ * LAW 6: Export dialog provides court-ready schedule documentation
+ */
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Printer, Download, Settings2, ArrowRightLeft } from "lucide-react";
+import { ChevronLeft, ChevronRight, Printer, Download, Settings2, ArrowRightLeft, Loader2, Calendar, Trophy, X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { CalendarWizard, ScheduleConfig } from "@/components/calendar/CalendarWizard";
+import { CalendarExportDialog } from "@/components/calendar/CalendarExportDialog";
 import { ScheduleChangeRequest, ScheduleChangeRequestData } from "@/components/calendar/ScheduleChangeRequest";
-import { useToast } from "@/hooks/use-toast";
+import { SportsEventDetail } from "@/components/calendar/SportsEventDetail";
+import { SportsEventListPopup } from "@/components/calendar/SportsEventListPopup";
+import { useScheduleRequests } from "@/hooks/useScheduleRequests";
+import { useSchedulePersistence } from "@/hooks/useSchedulePersistence";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useSportsEvents, CalendarSportsEvent } from "@/hooks/useSportsEvents";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { ViewOnlyBadge } from "@/components/ui/ViewOnlyBadge";
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -50,13 +70,54 @@ const getParentForDate = (date: Date, config: ScheduleConfig | null): "A" | "B" 
 
 const CalendarPage = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { user } = useAuth();
+  const { permissions, isThirdParty, isChildAccount, loading: roleLoading } = usePermissions();
+  const { createRequest } = useScheduleRequests();
+  const { scheduleConfig, loading: scheduleLoading, saving, saveSchedule } = useSchedulePersistence();
+  const { events: sportsEvents, getEventsForDate, hasEventsOnDate, loading: sportsLoading } = useSportsEvents();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<"calendar" | "court">("calendar");
   const [showWizard, setShowWizard] = useState(false);
   const [showChangeRequest, setShowChangeRequest] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>();
-  const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig | null>(null);
+  const [selectedSportsEvent, setSelectedSportsEvent] = useState<CalendarSportsEvent | null>(null);
+  const [showSportsEventList, setShowSportsEventList] = useState(false);
+  const [sportsEventListDate, setSportsEventListDate] = useState<Date | null>(null);
+  const [sportsEventListEvents, setSportsEventListEvents] = useState<CalendarSportsEvent[]>([]);
+  const [userProfile, setUserProfile] = useState<{ full_name: string | null; email: string | null } | null>(null);
+  const [coParent, setCoParent] = useState<{ full_name: string | null; email: string | null } | null>(null);
+
+  // Fetch user profile and co-parent info
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, full_name, email, co_parent_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (profile) {
+        setUserProfile({ full_name: profile.full_name, email: profile.email });
+
+        if (profile.co_parent_id) {
+          const { data: coParentData } = await supabase
+            .from("profiles")
+            .select("full_name, email")
+            .eq("id", profile.co_parent_id)
+            .maybeSingle();
+
+          if (coParentData) {
+            setCoParent(coParentData);
+          }
+        }
+      }
+    };
+
+    fetchProfiles();
+  }, [user]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -80,9 +141,11 @@ const CalendarPage = () => {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  const handleWizardComplete = (config: ScheduleConfig) => {
-    setScheduleConfig(config);
-    setShowWizard(false);
+  const handleWizardComplete = async (config: ScheduleConfig) => {
+    const success = await saveSchedule(config);
+    if (success) {
+      setShowWizard(false);
+    }
   };
 
   const handleDateClick = (date: Date) => {
@@ -90,30 +153,22 @@ const CalendarPage = () => {
     setShowChangeRequest(true);
   };
 
-  const handleScheduleChangeRequest = (
+  const handleScheduleChangeRequest = async (
     request: Omit<ScheduleChangeRequestData, "id" | "status" | "createdAt" | "fromParent">
   ) => {
-    // Create the request object
-    const fullRequest: ScheduleChangeRequestData = {
-      ...request,
-      id: Date.now().toString(),
-      status: "pending",
-      createdAt: new Date().toISOString(),
-      fromParent: "A",
-    };
-
-    // Store in localStorage for demo (would be database in production)
-    const existingRequests = JSON.parse(localStorage.getItem("scheduleRequests") || "[]");
-    localStorage.setItem("scheduleRequests", JSON.stringify([...existingRequests, fullRequest]));
-
-    setShowChangeRequest(false);
-    toast({
-      title: "Request Sent",
-      description: "Your schedule change request has been sent to your co-parent.",
+    // Store in database using the hook
+    const result = await createRequest({
+      request_type: request.type,
+      original_date: request.originalDate,
+      proposed_date: request.proposedDate,
+      reason: request.reason,
     });
 
-    // Navigate to messages with the request
-    navigate("/messages", { state: { newScheduleRequest: fullRequest } });
+    if (result) {
+      setShowChangeRequest(false);
+      // Navigate to messages to show the request
+      navigate("/messages");
+    }
   };
 
   const getPatternName = () => {
@@ -139,31 +194,82 @@ const CalendarPage = () => {
           className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
         >
           <div>
-            <h1 className="text-2xl lg:text-3xl font-display font-bold">Parenting Calendar</h1>
-            <p className="text-muted-foreground mt-1">View and manage your custody schedule</p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl lg:text-3xl font-display font-bold">Parenting Calendar</h1>
+              {permissions.isViewOnly && (
+                <ViewOnlyBadge reason={permissions.viewOnlyReason || undefined} />
+              )}
+            </div>
+            <p className="text-muted-foreground mt-1">
+              {permissions.isViewOnly 
+                ? "View the family custody schedule" 
+                : "View and manage your custody schedule"}
+            </p>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" size="sm" onClick={() => setShowChangeRequest(true)}>
-              <ArrowRightLeft className="w-4 h-4 mr-2" />
-              Request Change
-            </Button>
-            <Button variant="outline" size="sm">
-              <Printer className="w-4 h-4 mr-2" />
-              Print
-            </Button>
-            <Button variant="outline" size="sm">
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-            <Button size="sm" onClick={() => setShowWizard(true)}>
-              <Settings2 className="w-4 h-4 mr-2" />
-              {scheduleConfig ? "Edit Schedule" : "Setup Schedule"}
-            </Button>
-          </div>
+          {permissions.canEditCalendar && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button variant="outline" size="sm" onClick={() => setShowChangeRequest(true)}>
+                <ArrowRightLeft className="w-4 h-4 mr-2" />
+                Request Change
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => window.print()}>
+                <Printer className="w-4 h-4 mr-2" />
+                Print
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowExportDialog(true)}>
+                <Calendar className="w-4 h-4 mr-2" />
+                Sync Calendar
+              </Button>
+              <Button size="sm" onClick={() => setShowWizard(true)} disabled={saving}>
+                {saving ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Settings2 className="w-4 h-4 mr-2" />
+                )}
+                {scheduleConfig ? "Edit Schedule" : "Setup Schedule"}
+              </Button>
+            </div>
+          )}
         </motion.div>
 
+        {/* Read-only notice for view-only users */}
+        {permissions.isViewOnly && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="p-4 rounded-xl bg-muted/50 border border-border"
+          >
+            <div className="flex items-start gap-3">
+              <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
+                <Calendar className="w-4 h-4 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-medium">Read-Only Access</p>
+                <p className="text-sm text-muted-foreground">
+                  {isChildAccount 
+                    ? "You can view the schedule but only parents can make changes."
+                    : "As a family member, you can view the custody schedule but cannot make changes. Contact the parents if you need schedule modifications."}
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Loading State */}
+        {scheduleLoading && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center justify-center py-12"
+          >
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <span className="ml-3 text-muted-foreground">Loading schedule...</span>
+          </motion.div>
+        )}
+
         {/* Current Schedule Info */}
-        {scheduleConfig && (
+        {!scheduleLoading && scheduleConfig && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -194,29 +300,32 @@ const CalendarPage = () => {
         )}
 
         {/* View Toggle */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="flex gap-2"
-        >
-          <Button
-            variant={viewMode === "calendar" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("calendar")}
+        {!scheduleLoading && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="flex gap-2"
           >
-            Calendar View
-          </Button>
-          <Button
-            variant={viewMode === "court" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setViewMode("court")}
-          >
-            Court View
-          </Button>
-        </motion.div>
+            <Button
+              variant={viewMode === "calendar" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("calendar")}
+            >
+              Calendar View
+            </Button>
+            <Button
+              variant={viewMode === "court" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setViewMode("court")}
+            >
+              Court View
+            </Button>
+          </motion.div>
+        )}
 
         {/* Legend */}
+        {!scheduleLoading && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -231,9 +340,14 @@ const CalendarPage = () => {
             <div className="w-4 h-4 rounded bg-parent-b" />
             <span className="text-sm">Co-Parent's Time (Parent B)</span>
           </div>
+          <div className="flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-amber-500" />
+            <span className="text-sm">Sports/Activity Event</span>
+          </div>
         </motion.div>
+        )}
 
-        {viewMode === "calendar" ? (
+        {!scheduleLoading && viewMode === "calendar" ? (
           /* Calendar View */
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -281,14 +395,19 @@ const CalendarPage = () => {
 
                 const parent = getParentForDate(date, scheduleConfig);
                 const isToday = date.getTime() === today.getTime();
+                const hasSportsEvents = hasEventsOnDate(date);
+                const dateSportsEvents = getEventsForDate(date);
 
                 return (
                   <div
                     key={date.toISOString()}
-                    onClick={() => handleDateClick(date)}
+                    onClick={() => !isThirdParty && handleDateClick(date)}
                     className={cn(
-                      "aspect-square p-2 border-b border-r border-border relative transition-colors cursor-pointer group",
-                      parent === "A" ? "bg-parent-a-light hover:bg-parent-a/20" : "bg-parent-b-light hover:bg-parent-b/20"
+                      "aspect-square p-2 border-b border-r border-border relative transition-colors",
+                      parent === "A" ? "bg-parent-a-light" : "bg-parent-b-light",
+                      !isThirdParty && "cursor-pointer group hover:bg-parent-a/20 hover:bg-parent-b/20",
+                      !isThirdParty && parent === "A" && "hover:bg-parent-a/20",
+                      !isThirdParty && parent === "B" && "hover:bg-parent-b/20"
                     )}
                   >
                     <span
@@ -303,15 +422,39 @@ const CalendarPage = () => {
                       "absolute bottom-1 right-1 w-2 h-2 rounded-full",
                       parent === "A" ? "bg-parent-a" : "bg-parent-b"
                     )} />
-                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-background/60 rounded">
-                      <ArrowRightLeft className="w-4 h-4 text-muted-foreground" />
-                    </div>
+                    {/* Sports event indicator */}
+                    {hasSportsEvents && (
+                      <div 
+                        className="absolute bottom-1 left-1 flex items-center gap-0.5 cursor-pointer z-10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (dateSportsEvents.length === 1) {
+                            setSelectedSportsEvent(dateSportsEvents[0]);
+                          } else {
+                            // For multiple events, show the list popup
+                            setSportsEventListDate(date);
+                            setSportsEventListEvents(dateSportsEvents);
+                            setShowSportsEventList(true);
+                          }
+                        }}
+                      >
+                        <Trophy className="w-3 h-3 text-amber-500" />
+                        {dateSportsEvents.length > 1 && (
+                          <span className="text-[10px] font-medium text-amber-600">{dateSportsEvents.length}</span>
+                        )}
+                      </div>
+                    )}
+                    {!isThirdParty && !hasSportsEvents && (
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-background/60 rounded">
+                        <ArrowRightLeft className="w-4 h-4 text-muted-foreground" />
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </motion.div>
-        ) : (
+        ) : !scheduleLoading ? (
           /* Court View */
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -376,7 +519,7 @@ const CalendarPage = () => {
               </div>
             </div>
           </motion.div>
-        )}
+        ) : null}
       </div>
 
       {/* Calendar Wizard Modal */}
@@ -399,6 +542,58 @@ const CalendarPage = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* Calendar Export Dialog */}
+      <CalendarExportDialog
+        open={showExportDialog}
+        onOpenChange={setShowExportDialog}
+        scheduleConfig={scheduleConfig}
+        userProfile={userProfile}
+        coParent={coParent}
+      />
+
+      {/* Sports Event Detail Panel */}
+      <AnimatePresence>
+        {selectedSportsEvent && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setSelectedSportsEvent(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-background border border-border shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-2 right-2 z-10"
+                onClick={() => setSelectedSportsEvent(null)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+              <SportsEventDetail event={selectedSportsEvent} />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Sports Event List Popup for Multiple Events */}
+      <SportsEventListPopup
+        events={sportsEventListEvents}
+        date={sportsEventListDate || new Date()}
+        isOpen={showSportsEventList}
+        onClose={() => setShowSportsEventList(false)}
+        onSelectEvent={(event) => {
+          setShowSportsEventList(false);
+          setSelectedSportsEvent(event);
+        }}
+      />
     </DashboardLayout>
   );
 };

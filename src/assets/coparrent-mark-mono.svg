@@ -1,0 +1,19 @@
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Left House -->
+  <path d="M8 34L20 22L32 34V52H8V34Z" fill="currentColor"/>
+  <!-- Left Roof -->
+  <path d="M4 34L20 18L32 30L28 34L20 26L12 34H4Z" fill="currentColor"/>
+  <!-- Left Window -->
+  <rect x="14" y="38" width="8" height="8" rx="1" fill="currentColor" fill-opacity="0.3"/>
+  
+  <!-- Right House (mirrored) -->
+  <path d="M56 34L44 22L32 34V52H56V34Z" fill="currentColor"/>
+  <!-- Right Roof -->
+  <path d="M60 34L44 18L32 30L36 34L44 26L52 34H60Z" fill="currentColor"/>
+  <!-- Right Window -->
+  <rect x="42" y="38" width="8" height="8" rx="1" fill="currentColor" fill-opacity="0.3"/>
+  
+  <!-- Bridge connecting both homes -->
+  <rect x="24" y="44" width="16" height="4" rx="2" fill="currentColor"/>
+  <circle cx="32" cy="46" r="3" fill="currentColor" fill-opacity="0.3"/>
+</svg>

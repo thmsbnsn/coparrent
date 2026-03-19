@@ -1,0 +1,163 @@
+/**
+ * Shared CORS configuration for Edge Functions
+ * Implements strict origin validation with env-based allowlist
+ */
+
+// Default allowed origins for production
+const DEFAULT_ALLOWED_ORIGINS = [
+  "https://coparrent.app",
+  "https://www.coparrent.app",
+  "https://coparrent.com",
+  "https://www.coparrent.com",
+  "https://lovable.dev",
+];
+
+// Localhost patterns for development
+const LOCALHOST_PATTERNS = [
+  /^https?:\/\/localhost(:\d+)?$/,
+  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
+  /^https?:\/\/\[::1](:\d+)?$/,
+];
+
+/**
+ * Get the list of allowed origins from environment
+ */
+function getAllowedOrigins(): string[] {
+  const envOrigins = Deno.env.get("ALLOWED_ORIGINS");
+  
+  if (envOrigins) {
+    return envOrigins.split(",").map((o) => o.trim()).filter(Boolean);
+  }
+  
+  return DEFAULT_ALLOWED_ORIGINS;
+}
+
+function shouldAllowLocalhostOrigins(): boolean {
+  const flag = Deno.env.get("ALLOW_LOCALHOST_ORIGINS");
+
+  if (flag === "false") {
+    return false;
+  }
+
+  if (flag === "true") {
+    return true;
+  }
+
+  return Deno.env.get("DENO_ENV") === "development";
+}
+
+/**
+ * Validate if an origin is allowed
+ */
+export function isOriginAllowed(origin: string | null): boolean {
+  if (!origin) {
+    return false;
+  }
+
+  // Check allowed origins list
+  const allowedOrigins = getAllowedOrigins();
+  if (allowedOrigins.includes(origin)) {
+    return true;
+  }
+
+  // Allow localhost during explicit QA or local development.
+  if (shouldAllowLocalhostOrigins()) {
+    for (const pattern of LOCALHOST_PATTERNS) {
+      if (pattern.test(origin)) {
+        return true;
+      }
+    }
+  }
+
+  // Allow Lovable preview URLs (they use dynamic subdomains)
+  if (origin.includes(".lovableproject.com") || origin.includes(".lovable.app")) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Get CORS headers for a request
+ * Returns appropriate headers based on origin validation
+ */
+export function getCorsHeaders(req: Request): Record<string, string> {
+  const origin = req.headers.get("Origin");
+  
+  const corsHeaders: Record<string, string> = {
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Max-Age": "86400", // Cache preflight for 24 hours
+  };
+
+  if (isOriginAllowed(origin)) {
+    corsHeaders["Access-Control-Allow-Origin"] = origin!;
+    corsHeaders["Access-Control-Allow-Credentials"] = "true";
+  }
+
+  return corsHeaders;
+}
+
+/**
+ * Handle CORS preflight (OPTIONS) request
+ */
+export function handleCorsPreflightRequest(req: Request): Response | null {
+  if (req.method === "OPTIONS") {
+    const origin = req.headers.get("Origin");
+    
+    if (isOriginAllowed(origin)) {
+      return new Response(null, {
+        status: 204,
+        headers: getCorsHeaders(req),
+      });
+    }
+    
+    // Reject preflight for disallowed origins
+    return new Response(null, { status: 403 });
+  }
+  
+  return null;
+}
+
+/**
+ * Validate origin and return error response if blocked
+ */
+export function validateOrigin(req: Request): Response | null {
+  const origin = req.headers.get("Origin");
+  
+  // Allow requests without Origin header (e.g., server-to-server, cron jobs)
+  if (!origin) {
+    return null;
+  }
+  
+  if (!isOriginAllowed(origin)) {
+    console.warn(`Blocked request from disallowed origin: ${origin}`);
+    return new Response(
+      JSON.stringify({ 
+        error: "Origin not allowed", 
+        code: "CORS_BLOCKED" 
+      }),
+      {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      }
+    );
+  }
+  
+  return null;
+}
+
+/**
+ * Strict CORS middleware - validates origin before processing
+ * Returns null if allowed, Response if blocked
+ */
+export function strictCors(req: Request): Response | null {
+  // Handle preflight
+  const preflightResponse = handleCorsPreflightRequest(req);
+  if (preflightResponse) {
+    return preflightResponse;
+  }
+  
+  // Validate origin for actual request
+  return validateOrigin(req);
+}

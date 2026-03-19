@@ -1,44 +1,67 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Eye, EyeOff, ArrowRight, Users, Briefcase } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { cn } from "@/lib/utils";
-
-type AccountType = "parent" | "lawoffice";
+import { SocialLoginButtons } from "@/components/auth/SocialLoginButtons";
+import { PasswordStrengthIndicator } from "@/components/auth/PasswordStrengthIndicator";
+import { logger } from "@/lib/logger";
+import { safeErrorMessage } from "@/lib/safeText";
+import { ensureCurrentUserFamilyMembership } from "@/lib/familyMembership";
 
 const Signup = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { user, loading } = useAuth();
-  const [showPassword, setShowPassword] = useState(false);
+  const passwordRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [accountType, setAccountType] = useState<AccountType>(
-    searchParams.get("type") === "lawoffice" ? "lawoffice" : "parent"
-  );
   const [formData, setFormData] = useState({
     email: "",
     password: "",
     fullName: "",
-    firmName: "",
   });
 
   // Redirect if already logged in
   useEffect(() => {
     if (!loading && user) {
-      // Check for pending invite token
-      const pendingToken = localStorage.getItem("pendingInviteToken");
+      // Check for pending invite token (check both session and local storage)
+      const pendingToken = sessionStorage.getItem("pendingInviteToken") || localStorage.getItem("pendingInviteToken");
       if (pendingToken) {
         navigate(`/accept-invite?token=${pendingToken}`);
       } else {
-        navigate("/dashboard");
+        // Check if user has completed onboarding by checking if they have children
+        const checkOnboarding = async () => {
+          await ensureCurrentUserFamilyMembership(user.user_metadata?.full_name || user.email || null);
+
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("user_id", user.id)
+            .maybeSingle();
+          
+          if (profile) {
+            const { count } = await supabase
+              .from("parent_children")
+              .select("*", { count: "exact", head: true })
+              .eq("parent_id", profile.id);
+            
+            if (count && count > 0) {
+              navigate("/dashboard");
+            } else {
+              navigate("/onboarding");
+            }
+          } else {
+            navigate("/onboarding");
+          }
+        };
+        checkOnboarding();
       }
     }
   }, [user, loading, navigate]);
@@ -46,10 +69,10 @@ const Signup = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (formData.password.length < 6) {
+    if (formData.password.length < 8) {
       toast({
         title: "Password too short",
-        description: "Password must be at least 6 characters.",
+        description: "Password must be at least 8 characters.",
         variant: "destructive",
       });
       return;
@@ -66,8 +89,7 @@ const Signup = () => {
         emailRedirectTo: redirectUrl,
         data: {
           full_name: formData.fullName,
-          account_type: accountType,
-          firm_name: accountType === "lawoffice" ? formData.firmName : null,
+          account_type: "parent",
         },
       },
     });
@@ -75,8 +97,13 @@ const Signup = () => {
     setIsLoading(false);
 
     if (error) {
-      let errorMessage = error.message;
-      if (error.message.includes("already registered")) {
+      logger.warn("Signup failed", { email: formData.email });
+      // Clear password on error
+      setFormData(prev => ({ ...prev, password: "" }));
+      if (passwordRef.current) passwordRef.current.value = "";
+      
+      let errorMessage = safeErrorMessage(error, "Account creation failed. Please try again.");
+      if (error.message?.includes("already registered")) {
         errorMessage = "An account with this email already exists. Please sign in instead.";
       }
       toast({
@@ -92,13 +119,8 @@ const Signup = () => {
       description: "Let's set up your profile.",
     });
     
-    // Check for pending invite token
-    const pendingToken = localStorage.getItem("pendingInviteToken");
-    if (pendingToken) {
-      navigate(`/accept-invite?token=${pendingToken}`);
-    } else {
-      navigate("/onboarding");
-    }
+    // Navigation will be handled by the useEffect that watches the user state
+    // This ensures the user is fully authenticated before redirecting
   };
 
   if (loading) {
@@ -127,45 +149,9 @@ const Signup = () => {
               Start organizing your co-parenting journey
             </p>
 
-            {/* Account Type Selector */}
-            <div className="grid grid-cols-2 gap-3 mb-8">
-              <button
-                type="button"
-                onClick={() => setAccountType("parent")}
-                className={cn(
-                  "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-                  accountType === "parent"
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/50"
-                )}
-              >
-                <Users className={cn("w-6 h-6", accountType === "parent" ? "text-primary" : "text-muted-foreground")} />
-                <span className={cn("text-sm font-medium", accountType === "parent" ? "text-primary" : "text-muted-foreground")}>
-                  I'm a Parent
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAccountType("lawoffice")}
-                className={cn(
-                  "flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all",
-                  accountType === "lawoffice"
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/50"
-                )}
-              >
-                <Briefcase className={cn("w-6 h-6", accountType === "lawoffice" ? "text-primary" : "text-muted-foreground")} />
-                <span className={cn("text-sm font-medium", accountType === "lawoffice" ? "text-primary" : "text-muted-foreground")}>
-                  Law Office
-                </span>
-              </button>
-            </div>
-
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="fullName">
-                  {accountType === "parent" ? "Full name" : "Your name"}
-                </Label>
+                <Label htmlFor="fullName">Full name</Label>
                 <Input
                   id="fullName"
                   type="text"
@@ -175,20 +161,6 @@ const Signup = () => {
                   required
                 />
               </div>
-
-              {accountType === "lawoffice" && (
-                <div className="space-y-2">
-                  <Label htmlFor="firmName">Firm name</Label>
-                  <Input
-                    id="firmName"
-                    type="text"
-                    placeholder="Your law firm's name"
-                    value={formData.firmName}
-                    onChange={(e) => setFormData({ ...formData, firmName: e.target.value })}
-                    required
-                  />
-                </div>
-              )}
 
               <div className="space-y-2">
                 <Label htmlFor="email">Email address</Label>
@@ -204,27 +176,17 @@ const Signup = () => {
 
               <div className="space-y-2">
                 <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Create a password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                    minLength={6}
-                  />
-                  <button
-                    type="button"
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  At least 6 characters
-                </p>
+                <PasswordInput
+                  id="password"
+                  ref={passwordRef}
+                  placeholder="Create a password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                />
+                <PasswordStrengthIndicator password={formData.password} className="mt-3" />
               </div>
 
               <Button type="submit" className="w-full" disabled={isLoading}>
@@ -232,6 +194,17 @@ const Signup = () => {
                 {!isLoading && <ArrowRight className="ml-2 w-4 h-4" />}
               </Button>
             </form>
+
+            <div className="relative my-6">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">Or continue with</span>
+              </div>
+            </div>
+
+            <SocialLoginButtons />
 
             <p className="mt-6 text-xs text-center text-muted-foreground">
               By creating an account, you agree to our{" "}
@@ -250,6 +223,7 @@ const Signup = () => {
                 Sign in
               </Link>
             </p>
+
           </motion.div>
         </div>
       </div>
@@ -271,8 +245,8 @@ const Signup = () => {
             transition={{ delay: 0.3 }}
             className="text-primary-foreground/80"
           >
-            ClearNest is trusted by co-parents and family law professionals 
-            who believe in putting children first.
+            CoParrent is built for families who want clear records,
+            less friction, and tools that keep children first.
           </motion.p>
         </div>
       </div>

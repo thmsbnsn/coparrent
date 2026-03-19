@@ -11,13 +11,14 @@ import { useAuth } from "@/contexts/AuthContext";
 
 interface StepParent {
   id: string;
-  user_id: string;
+  user_id: string | null;
   primary_parent_id: string;
   other_parent_id: string | null;
   primary_parent_approved: boolean;
   other_parent_approved: boolean;
   status: string;
   created_at: string;
+  invitee_email?: string | null;
 }
 
 interface StepParentManagerProps {
@@ -77,34 +78,46 @@ export const StepParentManager = ({ subscriptionTier, isTrialActive }: StepParen
 
   const handleInviteStepParent = async () => {
     if (!profileId || !email.trim()) return;
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      toast({
+        title: "Invalid email",
+        description: "Please enter a valid email address",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setLoading(true);
 
     try {
-      // For demo, we'll create a step-parent entry
-      // In production, you'd send an email invite similar to co-parent flow
+      // Store email for invitation tracking - user_id is null until they accept
       const { error } = await supabase.from("step_parents").insert({
-        user_id: crypto.randomUUID(), // Placeholder - would be set when they accept
+        user_id: null, // Will be set when step-parent accepts the invitation
+        invitee_email: email.trim().toLowerCase(),
         primary_parent_id: profileId,
         other_parent_id: coParentId,
         primary_parent_approved: true,
-        other_parent_approved: false,
-        status: "pending_other_approval",
+        other_parent_approved: coParentId ? false : true, // Auto-approve if no co-parent
+        status: coParentId ? "pending_other_approval" : "pending_invitation",
       });
 
       if (error) throw error;
 
       toast({
-        title: "Step-parent invite sent",
+        title: "Step-parent invite created",
         description: coParentId 
           ? "Your co-parent must also approve this step-parent."
-          : "Invite sent successfully.",
+          : "Invitation created successfully.",
       });
       setEmail("");
       fetchStepParents(profileId, coParentId);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Error",
-        description: error.message,
+        description: "Failed to create invitation",
         variant: "destructive",
       });
     } finally {
@@ -263,7 +276,9 @@ export const StepParentManager = ({ subscriptionTier, isTrialActive }: StepParen
                     <UserPlus className="w-5 h-5 text-secondary-foreground" />
                   </div>
                   <div>
-                    <p className="font-medium">Step-parent</p>
+                    <p className="font-medium">
+                      {sp.invitee_email || "Step-parent"}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       Added {new Date(sp.created_at).toLocaleDateString()}
                     </p>
@@ -271,7 +286,7 @@ export const StepParentManager = ({ subscriptionTier, isTrialActive }: StepParen
                 </div>
                 <Badge variant={sp.status === "approved" ? "default" : "secondary"}>
                   {sp.status === "approved" && <Check className="w-3 h-3 mr-1" />}
-                  {sp.status === "pending_other_approval" && <Clock className="w-3 h-3 mr-1" />}
+                  {(sp.status === "pending_other_approval" || sp.status === "pending_invitation") && <Clock className="w-3 h-3 mr-1" />}
                   {sp.status === "approved" ? "Active" : "Pending"}
                 </Badge>
               </div>

@@ -8,10 +8,22 @@ import {
   Clock, 
   MapPin, 
   PartyPopper,
-  Sparkles
+  Sparkles,
+  Brain,
+  AlertTriangle,
+  Loader2,
+  ThumbsUp,
+  ThumbsDown,
+  Lightbulb
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useChildren } from "@/hooks/useChildren";
+import { toast } from "sonner";
 
 interface CalendarWizardProps {
   onComplete: (config: ScheduleConfig) => void;
@@ -33,6 +45,18 @@ export interface HolidayConfig {
   name: string;
   rule: "alternate" | "split" | "fixed-a" | "fixed-b";
   enabled: boolean;
+}
+
+interface AISuggestion {
+  id: string;
+  name: string;
+  description: string;
+  pros: string[];
+  cons: string[];
+  visual: string[];
+  holidayTips: string;
+  exchangeTips: string;
+  startingParent: "A" | "B";
 }
 
 const STEPS = [
@@ -106,6 +130,17 @@ const EXCHANGE_TIMES = [
   "12:00 PM", "3:00 PM", "4:00 PM", "5:00 PM", "6:00 PM", "7:00 PM", "8:00 PM"
 ];
 
+const US_STATES = [
+  "Alabama", "Alaska", "Arizona", "Arkansas", "California", "Colorado", "Connecticut",
+  "Delaware", "Florida", "Georgia", "Hawaii", "Idaho", "Illinois", "Indiana", "Iowa",
+  "Kansas", "Kentucky", "Louisiana", "Maine", "Maryland", "Massachusetts", "Michigan",
+  "Minnesota", "Mississippi", "Missouri", "Montana", "Nebraska", "Nevada", "New Hampshire",
+  "New Jersey", "New Mexico", "New York", "North Carolina", "North Dakota", "Ohio",
+  "Oklahoma", "Oregon", "Pennsylvania", "Rhode Island", "South Carolina", "South Dakota",
+  "Tennessee", "Texas", "Utah", "Vermont", "Virginia", "Washington", "West Virginia",
+  "Wisconsin", "Wyoming"
+];
+
 export const CalendarWizard = ({ onComplete, onCancel }: CalendarWizardProps) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [selectedPattern, setSelectedPattern] = useState<string>("alternating-weeks");
@@ -117,6 +152,16 @@ export const CalendarWizard = ({ onComplete, onCancel }: CalendarWizardProps) =>
   const [exchangeLocation, setExchangeLocation] = useState("");
   const [alternateLocation, setAlternateLocation] = useState("");
   const [holidays, setHolidays] = useState<HolidayConfig[]>(DEFAULT_HOLIDAYS);
+  
+  // AI Suggestions state
+  const [showAISuggestions, setShowAISuggestions] = useState(false);
+  const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<AISuggestion[]>([]);
+  const [isHighConflict, setIsHighConflict] = useState(false);
+  const [preferences, setPreferences] = useState("");
+  const [selectedState, setSelectedState] = useState("");
+
+  const { children } = useChildren();
 
   const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
   const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 0));
@@ -155,6 +200,87 @@ export const CalendarWizard = ({ onComplete, onCancel }: CalendarWizardProps) =>
   const getSelectedPatternVisual = () => {
     if (selectedPattern === "custom") return customPattern;
     return PATTERNS.find((p) => p.id === selectedPattern)?.visual || [];
+  };
+
+  const getChildrenAges = (): number[] => {
+    if (!children || children.length === 0) return [];
+    
+    const today = new Date();
+    return children
+      .filter(child => child.date_of_birth)
+      .map(child => {
+        const birthDate = new Date(child.date_of_birth!);
+        let age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+        return age;
+      });
+  };
+
+  const handleGetAISuggestions = async () => {
+    setIsLoadingAI(true);
+    setShowAISuggestions(true);
+    
+    try {
+      const childrenInfo = {
+        count: children?.length || 0,
+        ages: getChildrenAges(),
+      };
+
+      const { data, error } = await supabase.functions.invoke('ai-schedule-suggest', {
+        body: {
+          childrenInfo,
+          isHighConflict,
+          preferences,
+          state: selectedState,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setAiSuggestions(data.suggestions || []);
+      toast.success("AI suggestions ready!");
+    } catch (error) {
+      console.error('Error getting AI suggestions:', error);
+      toast.error("Failed to get AI suggestions. Please try again.");
+      setAiSuggestions([]);
+    } finally {
+      setIsLoadingAI(false);
+    }
+  };
+
+  const applyAISuggestion = (suggestion: AISuggestion) => {
+    // Check if it matches an existing pattern
+    const matchingPattern = PATTERNS.find(p => p.id === suggestion.id);
+    
+    if (matchingPattern) {
+      setSelectedPattern(matchingPattern.id);
+    } else {
+      // Set as custom pattern
+      setSelectedPattern("custom");
+      setCustomPattern(suggestion.visual as ("A" | "B")[]);
+    }
+    
+    setStartingParent(suggestion.startingParent);
+    
+    // Apply exchange tips if they contain a time
+    if (suggestion.exchangeTips) {
+      const timeMatch = suggestion.exchangeTips.match(/(\d{1,2}:\d{2}\s*(?:AM|PM))/i);
+      if (timeMatch && EXCHANGE_TIMES.includes(timeMatch[1])) {
+        setExchangeTime(timeMatch[1]);
+      }
+    }
+    
+    toast.success(`Applied "${suggestion.name}" pattern!`);
+    setShowAISuggestions(false);
   };
 
   return (
@@ -231,6 +357,214 @@ export const CalendarWizard = ({ onComplete, onCancel }: CalendarWizardProps) =>
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6"
               >
+                {/* AI Suggestions Section */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-[#21B0FE]/10 to-secondary/30 border border-[#21B0FE]/20">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-[#21B0FE]/20">
+                      <Brain className="w-5 h-5 text-[#21B0FE]" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-semibold text-foreground">Get AI-Powered Suggestions</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Let AI recommend the best custody patterns based on your family's unique situation.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {!showAISuggestions && (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Checkbox 
+                          id="high-conflict" 
+                          checked={isHighConflict}
+                          onCheckedChange={(checked) => setIsHighConflict(checked === true)}
+                        />
+                        <label htmlFor="high-conflict" className="text-sm font-medium cursor-pointer">
+                          High-conflict situation (minimize direct exchanges)
+                        </label>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Your State</label>
+                        <Select value={selectedState} onValueChange={setSelectedState}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select your state..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {US_STATES.map((state) => (
+                              <SelectItem key={state} value={state}>{state}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Preferences & Considerations</label>
+                        <Textarea
+                          placeholder="e.g., I work night shifts on weekends, prefer school as exchange location, want to minimize driving, child has activities on Tuesdays..."
+                          value={preferences}
+                          onChange={(e) => setPreferences(e.target.value)}
+                          className="min-h-[80px]"
+                        />
+                      </div>
+                      
+                      <Button 
+                        onClick={handleGetAISuggestions}
+                        className="w-full bg-[#21B0FE] hover:bg-[#21B0FE]/90"
+                        disabled={isLoadingAI}
+                      >
+                        {isLoadingAI ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Analyzing your situation...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            Get AI Suggestions
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                  
+                  {/* AI Suggestions Results */}
+                  {showAISuggestions && (
+                    <div className="space-y-4">
+                      {isLoadingAI ? (
+                        <div className="flex flex-col items-center justify-center py-8">
+                          <Loader2 className="w-8 h-8 animate-spin text-[#21B0FE] mb-3" />
+                          <p className="text-sm text-muted-foreground">Analyzing your family's needs...</p>
+                        </div>
+                      ) : aiSuggestions.length > 0 ? (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <h5 className="font-medium">AI Recommendations</h5>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => setShowAISuggestions(false)}
+                            >
+                              Hide
+                            </Button>
+                          </div>
+                          
+                          <div className="space-y-4">
+                            {aiSuggestions.map((suggestion, index) => (
+                              <motion.div
+                                key={suggestion.id}
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: index * 0.1 }}
+                                className="p-4 rounded-xl bg-card border border-border shadow-sm"
+                              >
+                                <div className="flex items-start justify-between gap-3 mb-3">
+                                  <div>
+                                    <h6 className="font-semibold">{suggestion.name}</h6>
+                                    <p className="text-sm text-muted-foreground mt-1">{suggestion.description}</p>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => applyAISuggestion(suggestion)}
+                                    className="shrink-0 bg-success hover:bg-success/90"
+                                  >
+                                    <Check className="w-4 h-4 mr-1" />
+                                    Apply
+                                  </Button>
+                                </div>
+                                
+                                {/* Visual Pattern */}
+                                <div className="flex gap-0.5 mb-3">
+                                  {suggestion.visual.map((day, i) => (
+                                    <div
+                                      key={i}
+                                      className={cn(
+                                        "w-4 h-6 rounded-sm text-[10px] flex items-center justify-center font-medium",
+                                        day === "A"
+                                          ? "bg-parent-a text-white"
+                                          : "bg-parent-b text-white"
+                                      )}
+                                    >
+                                      {day}
+                                    </div>
+                                  ))}
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-4 mb-3">
+                                  <div>
+                                    <div className="flex items-center gap-1 text-xs font-medium text-success mb-1">
+                                      <ThumbsUp className="w-3 h-3" />
+                                      Pros
+                                    </div>
+                                    <ul className="text-xs text-muted-foreground space-y-1">
+                                      {suggestion.pros.map((pro, i) => (
+                                        <li key={i} className="flex items-start gap-1">
+                                          <span className="text-success mt-0.5">•</span>
+                                          {pro}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-1 text-xs font-medium text-warning mb-1">
+                                      <ThumbsDown className="w-3 h-3" />
+                                      Cons
+                                    </div>
+                                    <ul className="text-xs text-muted-foreground space-y-1">
+                                      {suggestion.cons.map((con, i) => (
+                                        <li key={i} className="flex items-start gap-1">
+                                          <span className="text-warning mt-0.5">•</span>
+                                          {con}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                </div>
+                                
+                                {(suggestion.holidayTips || suggestion.exchangeTips) && (
+                                  <div className="pt-3 border-t border-border">
+                                    <div className="flex items-center gap-1 text-xs font-medium text-[#21B0FE] mb-2">
+                                      <Lightbulb className="w-3 h-3" />
+                                      Tips
+                                    </div>
+                                    <div className="text-xs text-muted-foreground space-y-1">
+                                      {suggestion.holidayTips && <p><strong>Holidays:</strong> {suggestion.holidayTips}</p>}
+                                      {suggestion.exchangeTips && <p><strong>Exchanges:</strong> {suggestion.exchangeTips}</p>}
+                                    </div>
+                                  </div>
+                                )}
+                              </motion.div>
+                            ))}
+                          </div>
+                          
+                          {/* Disclaimer */}
+                          <div className="p-3 rounded-lg bg-warning/10 border border-warning/20">
+                            <div className="flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+                              <p className="text-xs text-warning-foreground">
+                                <strong>Disclaimer:</strong> AI suggestions are for informational purposes only and do not constitute legal advice. 
+                                Always consult with a family law attorney for custody matters specific to your situation.
+                              </p>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-center py-4 text-muted-foreground">
+                          <p>No suggestions available. Please try again.</p>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="mt-2"
+                            onClick={() => setShowAISuggestions(false)}
+                          >
+                            Go Back
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <div>
                   <h3 className="text-lg font-semibold mb-4">Choose a Custody Pattern</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

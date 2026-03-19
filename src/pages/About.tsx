@@ -47,7 +47,7 @@ const About = () => {
               transition={{ delay: 0.1 }}
               className="text-lg text-muted-foreground"
             >
-              ClearNest was created to help co-parents reduce conflict, stay organized, 
+              CoParrent was created to help co-parents reduce conflict, stay organized, 
               and give their children the stable, loving environment they deserve.
             </motion.p>
           </div>
@@ -67,13 +67,13 @@ const About = () => {
                 clear communication, it's easy to feel overwhelmed.
               </p>
               <p className="mt-4">
-                We built ClearNest because we believe technology should make co-parenting 
+                We built CoParrent because we believe technology should make co-parenting 
                 easier, not harder. Our platform is designed to be calm, neutral, and focused 
                 on what matters most: your children.
               </p>
               <p className="mt-4">
                 Whether you're navigating a recent separation or looking to improve an 
-                existing arrangement, ClearNest provides the tools you need to co-parent 
+                existing arrangement, CoParrent provides the tools you need to co-parent 
                 with confidence and clarity.
               </p>
             </div>

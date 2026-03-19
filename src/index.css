@@ -1,15 +1,21 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
-
-/* CoParrent Design System - Calm, Professional, Court-Friendly */
+/* ============================================================
+   COPARRENT DESIGN SYSTEM v2.0
+   Calm Authority • Court-Ready Trust • Professional Credibility
+   ============================================================ */
 
 @layer base {
   :root {
-    /* Core Brand Colors - Calming Navy & Sage */
-    --background: 210 25% 98%;
+    /* --------------------------------------------------------
+       CORE PALETTE
+       Deep Navy for authority, Sage for calm, Slate for clarity
+       -------------------------------------------------------- */
+    --background: 210 20% 99%;
     --foreground: 222 47% 11%;
 
     --card: 0 0% 100%;
@@ -18,123 +24,262 @@
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
 
-    /* Primary - Deep Navy Blue (Trust, Professionalism) */
-    --primary: 222 47% 20%;
+    /* Primary - Deep Navy (Authority, Trust, Professionalism) */
+    --primary: 222 47% 15%;
     --primary-foreground: 210 40% 98%;
 
-    /* Secondary - Warm Sage Green (Calm, Growth) */
-    --secondary: 150 25% 92%;
-    --secondary-foreground: 150 30% 25%;
+    /* Secondary - Warm Sage (Calm, Balance, Growth) */
+    --secondary: 150 20% 94%;
+    --secondary-foreground: 150 30% 22%;
 
-    /* Muted - Soft Slate */
-    --muted: 210 20% 94%;
-    --muted-foreground: 215 16% 47%;
+    /* Muted - Cool Slate (Clarity, Structure) */
+    --muted: 215 20% 93%;
+    --muted-foreground: 215 16% 43%;
 
-    /* Accent - Soft Teal (Clarity, Balance) */
-    --accent: 174 42% 90%;
-    --accent-foreground: 174 50% 25%;
+    /* Accent - Deep Teal (Clarity, Action) */
+    --accent: 174 40% 92%;
+    --accent-foreground: 174 50% 22%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214 20% 88%;
-    --input: 214 20% 88%;
-    --ring: 222 47% 20%;
+    --border: 220 13% 87%;
+    --input: 220 13% 87%;
+    --ring: 222 47% 15%;
 
-    --radius: 0.75rem;
+    --radius: 0.625rem;
 
-    /* Semantic Colors */
-    --success: 150 50% 45%;
+    /* --------------------------------------------------------
+       SEMANTIC COLORS
+       -------------------------------------------------------- */
+    --success: 152 60% 38%;
     --success-foreground: 0 0% 100%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
-    --info: 200 80% 50%;
+    --info: 199 89% 48%;
     --info-foreground: 0 0% 100%;
 
-    /* Parent Colors */
-    --parent-a: 222 60% 55%;
-    --parent-a-light: 222 60% 95%;
-    --parent-b: 150 45% 45%;
-    --parent-b-light: 150 45% 92%;
+    /* --------------------------------------------------------
+       CHART PALETTE
+       -------------------------------------------------------- */
+    --chart-1: 222 60% 50%;
+    --chart-2: 174 50% 42%;
+    --chart-3: 38 85% 50%;
+    --chart-4: 280 60% 50%;
+    --chart-5: 340 65% 50%;
 
-    /* Gradients */
-    --gradient-hero: linear-gradient(135deg, hsl(222 47% 20%) 0%, hsl(200 60% 30%) 50%, hsl(174 42% 35%) 100%);
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 25% 98%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(174 42% 35%) 0%, hsl(150 45% 45%) 100%);
+    /* --------------------------------------------------------
+       INTERACTIVE STATES
+       -------------------------------------------------------- */
+    --primary-hover: 222 47% 12%;
+    --primary-active: 222 47% 9%;
+    --secondary-hover: 150 20% 90%;
+    --secondary-active: 150 20% 86%;
+    --accent-hover: 174 40% 88%;
+    --accent-active: 174 40% 84%;
+    --muted-hover: 215 20% 89%;
 
-    /* Shadows */
-    --shadow-sm: 0 1px 2px 0 hsl(222 47% 11% / 0.05);
-    --shadow-md: 0 4px 6px -1px hsl(222 47% 11% / 0.08), 0 2px 4px -2px hsl(222 47% 11% / 0.05);
-    --shadow-lg: 0 10px 15px -3px hsl(222 47% 11% / 0.08), 0 4px 6px -4px hsl(222 47% 11% / 0.05);
-    --shadow-xl: 0 20px 25px -5px hsl(222 47% 11% / 0.08), 0 8px 10px -6px hsl(222 47% 11% / 0.05);
-    --shadow-glow: 0 0 40px hsl(174 42% 35% / 0.15);
+    /* --------------------------------------------------------
+       PARENT ASSIGNMENT COLORS
+       -------------------------------------------------------- */
+    --parent-a: 222 60% 50%;
+    --parent-a-light: 222 60% 96%;
+    --parent-b: 152 50% 42%;
+    --parent-b-light: 152 50% 94%;
 
-    /* Sidebar */
+    /* --------------------------------------------------------
+       GRADIENTS (Authority-Driven)
+       -------------------------------------------------------- */
+    /* Hero gradient - very dark navy for maximum white text contrast */
+    --gradient-hero: linear-gradient(160deg, hsl(222 50% 6%) 0%, hsl(222 45% 10%) 50%, hsl(215 40% 12%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(220 20% 98%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(174 50% 35%) 0%, hsl(152 50% 42%) 100%);
+    --gradient-surface: linear-gradient(180deg, hsl(215 20% 97%) 0%, hsl(210 20% 99%) 100%);
+
+    /* --------------------------------------------------------
+       SHADOWS (Refined, Subtle)
+       -------------------------------------------------------- */
+    --shadow-xs: 0 1px 2px 0 hsl(222 47% 11% / 0.04);
+    --shadow-sm: 0 1px 3px 0 hsl(222 47% 11% / 0.06), 0 1px 2px -1px hsl(222 47% 11% / 0.04);
+    --shadow-md: 0 4px 6px -1px hsl(222 47% 11% / 0.06), 0 2px 4px -2px hsl(222 47% 11% / 0.04);
+    --shadow-lg: 0 10px 15px -3px hsl(222 47% 11% / 0.06), 0 4px 6px -4px hsl(222 47% 11% / 0.03);
+    --shadow-xl: 0 20px 25px -5px hsl(222 47% 11% / 0.06), 0 8px 10px -6px hsl(222 47% 11% / 0.03);
+    --shadow-2xl: 0 25px 50px -12px hsl(222 47% 11% / 0.15);
+    --shadow-inner: inset 0 2px 4px 0 hsl(222 47% 11% / 0.04);
+
+    /* --------------------------------------------------------
+       SIDEBAR
+       -------------------------------------------------------- */
     --sidebar-background: 222 47% 11%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 174 42% 50%;
+    --sidebar-primary: 174 50% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 40% 18%;
+    --sidebar-accent: 222 40% 16%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 40% 20%;
-    --sidebar-ring: 174 42% 50%;
+    --sidebar-border: 222 40% 18%;
+    --sidebar-ring: 174 50% 50%;
   }
 
+
+  /* --------------------------------------------------------
+     DARK MODE
+     -------------------------------------------------------- */
   .dark {
-    --background: 222 47% 8%;
+    --background: 222 47% 7%;
     --foreground: 210 40% 98%;
 
-    --card: 222 47% 11%;
+    --card: 222 47% 10%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222 47% 11%;
+    --popover: 222 47% 10%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 174 42% 50%;
+    --primary: 174 50% 50%;
     --primary-foreground: 222 47% 11%;
 
-    --secondary: 150 20% 18%;
+    --secondary: 150 18% 16%;
     --secondary-foreground: 150 30% 85%;
 
-    --muted: 222 40% 15%;
+    --muted: 222 35% 14%;
     --muted-foreground: 215 16% 65%;
 
-    --accent: 174 30% 18%;
-    --accent-foreground: 174 42% 70%;
+    --accent: 174 28% 16%;
+    --accent-foreground: 174 45% 70%;
 
     --destructive: 0 62% 30%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 222 40% 18%;
-    --input: 222 40% 18%;
-    --ring: 174 42% 50%;
+    --border: 222 35% 16%;
+    --input: 222 35% 16%;
+    --ring: 174 50% 50%;
 
-    --sidebar-background: 222 50% 6%;
+    /* Chart Colors - Dark mode variants */
+    --chart-1: 222 70% 60%;
+    --chart-2: 174 60% 52%;
+    --chart-3: 38 90% 58%;
+    --chart-4: 280 70% 60%;
+    --chart-5: 340 75% 60%;
+
+    /* Interactive States - Dark mode */
+    --primary-hover: 174 50% 55%;
+    --primary-active: 174 50% 60%;
+    --secondary-hover: 150 18% 20%;
+    --secondary-active: 150 18% 24%;
+    --accent-hover: 174 28% 20%;
+    --accent-active: 174 28% 24%;
+    --muted-hover: 222 35% 18%;
+
+    --sidebar-background: 222 50% 5%;
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 174 42% 50%;
+    --sidebar-primary: 174 50% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 222 45% 12%;
+    --sidebar-accent: 222 45% 11%;
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 222 45% 12%;
-    --sidebar-ring: 174 42% 50%;
+    --sidebar-border: 222 45% 11%;
+    --sidebar-ring: 174 50% 50%;
   }
 }
 
 @layer base {
   * {
     @apply border-border;
+    box-sizing: border-box;
   }
 
+  /* Prevent horizontal overflow globally */
   html {
+    overflow-x: hidden;
+  }
+
+  body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+
+  /* PWA Safe Area Support */
+  html {
+    padding-left: env(safe-area-inset-left, 0);
+    padding-right: env(safe-area-inset-right, 0);
+  }
+
+  @media all and (display-mode: standalone) {
+    body {
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+  }
+
+  /* Theme transition */
+  html {
+    transition: background-color 0.3s ease, color 0.3s ease;
     scroll-behavior: smooth;
+  }
+
+  html *,
+  html *::before,
+  html *::after {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease, fill 0.2s ease, stroke 0.2s ease, box-shadow 0.3s ease;
+  }
+
+  html.no-transitions *,
+  html.no-transitions *::before,
+  html.no-transitions *::after {
+    transition: none !important;
   }
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  /* --------------------------------------------------------
+     TYPOGRAPHY SCALE (Authority-Driven Hierarchy)
+     Desktop: Bold, commanding headings
+     Mobile: Proportionally scaled, never cramped
+     -------------------------------------------------------- */
+  h1 {
+    @apply font-display font-bold tracking-tight;
+    font-size: clamp(2.25rem, 5vw + 1rem, 4rem);
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    @apply font-display font-bold tracking-tight;
+    font-size: clamp(1.75rem, 3vw + 0.75rem, 2.75rem);
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+  }
+
+  h3 {
     @apply font-display font-semibold tracking-tight;
+    font-size: clamp(1.25rem, 2vw + 0.5rem, 1.75rem);
+    line-height: 1.25;
+  }
+
+  h4, h5, h6 {
+    @apply font-display font-semibold tracking-tight;
+  }
+
+  /* Custom scrollbar styling for sidebar */
+  .sidebar-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--sidebar-accent)) transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--sidebar-accent));
+    border-radius: 3px;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar-thumb:hover {
+    background-color: hsl(var(--sidebar-primary));
   }
 }
 
@@ -170,5 +315,56 @@
 
   .parent-b {
     @apply bg-[hsl(var(--parent-b-light))] border-[hsl(var(--parent-b))] text-[hsl(var(--parent-b))];
+  }
+
+  /* Branded Skeleton Animations */
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--accent) / 0.3) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+  }
+
+  .skeleton-wave {
+    position: relative;
+    overflow: hidden;
+    background: hsl(var(--muted));
+  }
+
+  .skeleton-wave::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsl(var(--primary) / 0.08) 50%,
+      transparent 100%
+    );
+    animation: wave 2s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  @keyframes wave {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(100%);
+    }
   }
 }

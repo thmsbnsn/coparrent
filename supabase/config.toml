@@ -1,4 +1,70 @@
-project_id = "znxiydmycxcjkflihfxn"
+project_id = "jnxtskcpwzuxyxjzqrkv"
 
 [functions.send-coparent-invite]
+verify_jwt = true
+
+[functions.send-third-party-invite]
+verify_jwt = true
+
+[functions.notify-third-party-added]
 verify_jwt = false
+
+[functions.create-checkout]
+verify_jwt = true
+
+[functions.check-subscription]
+verify_jwt = true
+
+[functions.customer-portal]
+verify_jwt = true
+
+[functions.admin-manage-users]
+verify_jwt = true
+
+[functions.send-notification]
+verify_jwt = true
+
+[functions.exchange-reminders]
+verify_jwt = false
+
+[functions.sports-event-reminders]
+verify_jwt = false
+
+[functions.ai-schedule-suggest]
+verify_jwt = true
+
+[functions.ai-message-assist]
+verify_jwt = true
+
+[functions.generate-expense-report]
+verify_jwt = true
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.login-notification]
+verify_jwt = true
+
+[functions.create-message-thread]
+verify_jwt = true
+
+[functions.health]
+verify_jwt = false
+
+[functions.nurse-nancy-chat]
+verify_jwt = true
+
+[functions.kid-activity-generator]
+verify_jwt = true
+
+[functions.export-user-data]
+verify_jwt = true
+
+[functions.manage-recovery-codes]
+verify_jwt = true
+
+[functions.redeem-access-code]
+verify_jwt = true
+
+[functions.send-push]
+verify_jwt = true

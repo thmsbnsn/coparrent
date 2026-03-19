@@ -2,22 +2,105 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover"
+    />
+
     <title>CoParrent - Modern Co-Parenting Custody Toolkit</title>
-    <meta name="description" content="CoParrent helps co-parents stay organized with smart scheduling, secure messaging, and court-ready documentation. Put your children first." />
+
+    <meta
+      name="description"
+      content="CoParrent helps co-parents stay organized with smart scheduling, secure messaging, and court-ready documentation. Put your children first."
+    />
     <meta name="author" content="CoParrent" />
-    <meta name="keywords" content="co-parenting, custody, parenting schedule, family law, child custody, coparenting app" />
-    <link rel="canonical" href="https://coparrent.com" />
+    <meta
+      name="keywords"
+      content="co-parenting, custody, parenting schedule, family law, child custody, coparenting app"
+    />
+    <link rel="canonical" href="https://coparrent.com/" />
 
+    <!-- Explicit indexing defaults (public marketing site) -->
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+    <meta name="googlebot" content="index,follow" />
+
+    <!-- Improve native UI rendering in light/dark environments -->
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- Privacy/Security nicety -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#1a2744" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="CoParrent" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta name="msapplication-TileColor" content="#1a2744" />
+    <meta name="msapplication-tap-highlight" content="no" />
+
+    <!-- iOS PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="CoParrent" />
+
+    <!-- iOS Touch Icons
+         NOTE: iOS prefers 180x180. If you don’t have it yet, keep 192 as fallback. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/pwa-512x512.png" />
+
+    <!-- iOS Splash Screens (basic fallback; ideally provide device-specific splash images) -->
+    <link rel="apple-touch-startup-image" href="/pwa-512x512.png" />
+
+    <!-- Web App Manifest -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Open Graph -->
+    <meta property="og:site_name" content="CoParrent" />
     <meta property="og:title" content="CoParrent - Co-Parenting Made Clear & Simple" />
-    <meta property="og:description" content="The modern custody toolkit for organized co-parenting. Smart calendars, secure messaging, and court-ready exports." />
+    <meta
+      property="og:description"
+      content="The modern custody toolkit for organized co-parenting. Smart calendars, secure messaging, and court-ready exports."
+    />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://coparrent.com" />
+    <meta property="og:url" content="https://coparrent.com/" />
     <meta property="og:image" content="https://coparrent.com/og-image.png" />
+    <meta property="og:image:alt" content="CoParrent - Simplify co-parenting. Strengthen your family." />
+    <meta property="og:locale" content="en_US" />
 
+    <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@CoParrent" />
+    <meta name="twitter:title" content="CoParrent - Co-Parenting Made Clear & Simple" />
+    <meta
+      name="twitter:description"
+      content="Smart calendars, secure messaging, and court-ready exports to reduce conflict and keep kids first."
+    />
     <meta name="twitter:image" content="https://coparrent.com/og-image.png" />
+    <meta name="twitter:image:alt" content="CoParrent - Simplify co-parenting. Strengthen your family." />
+
+    <!-- Structured data: helps search engines understand what CoParrent is -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "CoParrent",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "url": "https://coparrent.com/",
+        "description": "CoParrent helps co-parents coordinate schedules, communication, and documentation in a structured, court-defensible way.",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
   </head>
 
   <body>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import { CheckCircle, XCircle, Loader2, UserPlus } from "lucide-react";
@@ -8,63 +8,84 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { getInvitationViewStatus, hasInviteEmailMismatch } from "@/lib/invitations";
+
+interface InvitationData {
+  id: string;
+  inviter_id: string;
+  invitee_email: string;
+  status: string;
+  expires_at: string;
+  created_at: string;
+  inviter_name: string | null;
+  inviter_email: string | null;
+  family_id?: string | null;
+  invitation_type?: string;
+  role?: string;
+}
 
 const AcceptInvite = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
-  const [status, setStatus] = useState<"loading" | "valid" | "invalid" | "expired" | "accepted">("loading");
+  const [status, setStatus] = useState<"loading" | "valid" | "invalid" | "expired" | "accepted" | "wrong_email">("loading");
   const [inviterName, setInviterName] = useState<string>("");
+  const [inviteeEmail, setInviteeEmail] = useState<string>("");
+  const [invitationType, setInvitationType] = useState<"co_parent" | "third_party">("co_parent");
   const [isAccepting, setIsAccepting] = useState(false);
 
   const token = searchParams.get("token");
+  const typeParam = searchParams.get("type");
 
-  useEffect(() => {
-    if (token) {
-      checkInvitation();
-    } else {
-      setStatus("invalid");
-    }
-  }, [token]);
-
-  const checkInvitation = async () => {
+  const checkInvitation = useCallback(async () => {
     try {
-      const { data: invitation, error } = await supabase
-        .from("invitations")
-        .select("*, inviter:profiles!invitations_inviter_id_fkey(full_name, email)")
-        .eq("token", token)
-        .maybeSingle();
+      // Use secure RPC function instead of direct table query
+      const { data, error } = await supabase.rpc("get_invitation_by_token", {
+        _token: token,
+      });
 
-      if (error || !invitation) {
+      if (error || !data || data.length === 0) {
         setStatus("invalid");
         return;
       }
 
-      if (invitation.status === "accepted") {
-        setStatus("accepted");
+      const invitation = data[0] as InvitationData;
+      const nextStatus = getInvitationViewStatus(
+        {
+          status: invitation.status,
+          expiresAt: invitation.expires_at,
+        },
+        new Date(),
+      );
+
+      if (nextStatus !== "valid") {
+        setStatus(nextStatus);
         return;
       }
 
-      if (invitation.status === "expired" || new Date(invitation.expires_at) < new Date()) {
-        setStatus("expired");
-        return;
-      }
-
-      // Type assertion since we know the structure
-      const inviter = invitation.inviter as { full_name: string | null; email: string | null } | null;
-      setInviterName(inviter?.full_name || inviter?.email || "Your co-parent");
+      setInviterName(invitation.inviter_name || invitation.inviter_email || "A family member");
+      setInviteeEmail(invitation.invitee_email);
+      setInvitationType(typeParam === "third_party" ? "third_party" : "co_parent");
       setStatus("valid");
     } catch (error) {
       console.error("Error checking invitation:", error);
       setStatus("invalid");
     }
-  };
+  }, [token, typeParam]);
+
+  useEffect(() => {
+    if (token) {
+      void checkInvitation();
+    } else {
+      setStatus("invalid");
+    }
+  }, [checkInvitation, token]);
 
   const handleAcceptInvitation = async () => {
     if (!user) {
-      // Store token and redirect to signup
-      localStorage.setItem("pendingInviteToken", token || "");
+      // Store token in sessionStorage (more secure than localStorage, clears on tab close)
+      sessionStorage.setItem("pendingInviteToken", token || "");
       navigate("/signup");
       return;
     }
@@ -72,63 +93,106 @@ const AcceptInvite = () => {
     setIsAccepting(true);
 
     try {
-      // Get current user's profile
-      const { data: myProfile, error: profileError } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("user_id", user.id)
-        .single();
+      if (invitationType === "third_party") {
+        const { data, error } = await supabase.rpc("accept_third_party_invitation", {
+          _token: token,
+          _acceptor_user_id: user.id,
+        });
 
-      if (profileError || !myProfile) {
-        throw new Error("Could not find your profile");
+        if (error) {
+          throw new Error("Failed to accept invitation");
+        }
+
+        const result = data as { success: boolean; error?: string };
+
+        if (!result.success) {
+          if (result.error?.includes("different email")) {
+            setStatus("wrong_email");
+            toast({
+              title: "Email mismatch",
+              description: result.error,
+              variant: "destructive",
+            });
+            return;
+          }
+
+          if (result.error?.includes("Invitation family not found")) {
+            toast({
+              title: "Invitation setup incomplete",
+              description: "The inviting family needs to be refreshed before this invite can be accepted.",
+              variant: "destructive",
+            });
+            return;
+          }
+
+          throw new Error(result.error || "Failed to join family");
+        }
+
+        const { data: invitationData } = await supabase.rpc("get_invitation_by_token", {
+          _token: token,
+        });
+        const invitation = invitationData?.[0] as InvitationData | undefined;
+
+        if (invitation && hasInviteEmailMismatch(invitation.invitee_email, user.email)) {
+          setStatus("wrong_email");
+          toast({
+            title: "Email mismatch",
+            description: "This invitation was sent to a different email address",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        sessionStorage.removeItem("pendingInviteToken");
+        localStorage.removeItem("pendingInviteToken");
+
+        toast({
+          title: "Successfully joined!",
+          description: "You're now part of the family group.",
+        });
+
+        navigate("/dashboard");
+      } else {
+        // Handle co-parent invitation (existing logic)
+        const { data, error } = await supabase.rpc("accept_coparent_invitation", {
+          _token: token,
+          _acceptor_user_id: user.id,
+        });
+
+        if (error) {
+          throw new Error("Failed to accept invitation");
+        }
+
+        const result = data as { success: boolean; error?: string };
+
+        if (!result.success) {
+          if (result.error?.includes("different email")) {
+            setStatus("wrong_email");
+            toast({
+              title: "Email mismatch",
+              description: result.error,
+              variant: "destructive",
+            });
+            return;
+          }
+          throw new Error(result.error || "Failed to accept invitation");
+        }
+
+        sessionStorage.removeItem("pendingInviteToken");
+        localStorage.removeItem("pendingInviteToken");
+
+        toast({
+          title: "Successfully linked!",
+          description: "You're now connected with your co-parent. Your 7-day free trial has started!",
+        });
+
+        navigate("/dashboard");
       }
-
-      // Get invitation details
-      const { data: invitation, error: inviteError } = await supabase
-        .from("invitations")
-        .select("inviter_id")
-        .eq("token", token)
-        .single();
-
-      if (inviteError || !invitation) {
-        throw new Error("Invalid invitation");
-      }
-
-      // Link the co-parents (both directions)
-      const { error: linkError1 } = await supabase
-        .from("profiles")
-        .update({ co_parent_id: invitation.inviter_id })
-        .eq("id", myProfile.id);
-
-      if (linkError1) throw linkError1;
-
-      const { error: linkError2 } = await supabase
-        .from("profiles")
-        .update({ co_parent_id: myProfile.id })
-        .eq("id", invitation.inviter_id);
-
-      if (linkError2) throw linkError2;
-
-      // Update invitation status
-      await supabase
-        .from("invitations")
-        .update({ status: "accepted" })
-        .eq("token", token);
-
-      // Clear pending invite token
-      localStorage.removeItem("pendingInviteToken");
-
-      toast({
-        title: "Successfully linked!",
-        description: "You're now connected with your co-parent. Your 7-day free trial has started!",
-      });
-
-      navigate("/dashboard");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error accepting invitation:", error);
       toast({
         title: "Failed to accept invitation",
-        description: error.message || "Please try again.",
+        description: error instanceof Error ? error.message : "Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -169,9 +233,11 @@ const AcceptInvite = () => {
                 <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
                   <UserPlus className="w-8 h-8 text-primary" />
                 </div>
-                <CardTitle>Co-Parent Invitation</CardTitle>
+                <CardTitle>
+                  {invitationType === "third_party" ? "Family Invitation" : "Co-Parent Invitation"}
+                </CardTitle>
                 <CardDescription>
-                  {inviterName} has invited you to co-parent on ClearNest
+                  {inviterName} has invited you to {invitationType === "third_party" ? "join their family on" : "co-parent on"} CoParrent
                 </CardDescription>
               </>
             )}
@@ -211,6 +277,18 @@ const AcceptInvite = () => {
                 </CardDescription>
               </>
             )}
+
+            {status === "wrong_email" && (
+              <>
+                <div className="w-16 h-16 rounded-full bg-destructive/10 flex items-center justify-center mx-auto mb-4">
+                  <XCircle className="w-8 h-8 text-destructive" />
+                </div>
+                <CardTitle>Wrong Account</CardTitle>
+                <CardDescription>
+                  This invitation was sent to {inviteeEmail}. Please sign in with that email address to accept.
+                </CardDescription>
+              </>
+            )}
           </CardHeader>
 
           <CardContent className="space-y-4">
@@ -218,13 +296,26 @@ const AcceptInvite = () => {
               <>
                 <div className="p-4 rounded-lg bg-muted text-center">
                   <p className="text-sm text-muted-foreground mb-2">
-                    By accepting, you'll get:
+                    {invitationType === "third_party" 
+                      ? "As a family member, you'll get:"
+                      : "By accepting, you'll get:"}
                   </p>
                   <ul className="text-sm space-y-1">
-                    <li>✓ Shared custody calendar</li>
-                    <li>✓ Court-friendly messaging</li>
-                    <li>✓ Child information hub</li>
-                    <li>✓ 7-day free trial</li>
+                    {invitationType === "third_party" ? (
+                      <>
+                        <li>✓ Family messaging hub access</li>
+                        <li>✓ View children's calendar (read-only)</li>
+                        <li>✓ Private journaling</li>
+                        <li>✓ Law library & blog access</li>
+                      </>
+                    ) : (
+                      <>
+                        <li>✓ Shared custody calendar</li>
+                        <li>✓ Court-friendly messaging</li>
+                        <li>✓ Child information hub</li>
+                        <li>✓ 7-day free trial</li>
+                      </>
+                    )}
                   </ul>
                 </div>
 
@@ -236,7 +327,9 @@ const AcceptInvite = () => {
                   {isAccepting ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
                   ) : null}
-                  {user ? "Accept & Link Accounts" : "Create Account to Accept"}
+                  {user 
+                    ? (invitationType === "third_party" ? "Accept & Join Family" : "Accept & Link Accounts")
+                    : "Create Account to Accept"}
                 </Button>
 
                 {!user && (
@@ -246,7 +339,7 @@ const AcceptInvite = () => {
                       variant="link" 
                       className="p-0 h-auto"
                       onClick={() => {
-                        localStorage.setItem("pendingInviteToken", token || "");
+                        sessionStorage.setItem("pendingInviteToken", token || "");
                         navigate("/login");
                       }}
                     >
@@ -255,6 +348,18 @@ const AcceptInvite = () => {
                   </p>
                 )}
               </>
+            )}
+
+            {status === "wrong_email" && (
+              <Button 
+                onClick={() => {
+                  sessionStorage.setItem("pendingInviteToken", token || "");
+                  navigate("/login");
+                }}
+                className="w-full"
+              >
+                Sign in with different account
+              </Button>
             )}
 
             {(status === "invalid" || status === "expired" || status === "accepted") && (

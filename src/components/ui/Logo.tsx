@@ -15,62 +15,51 @@ export const Logo = ({ className, showText = true, size = "md" }: LogoProps) => 
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
-      <div className={cn("relative", sizes[size].icon)}>
-        {/* CoParrent Logo - Flow/Current waves connecting two parents */}
-        <svg viewBox="0 0 40 40" fill="none" className="w-full h-full">
-          {/* Left parent circle */}
-          <circle cx="10" cy="14" r="5" fill="url(#parentGradient1)" />
-          {/* Right parent circle */}
-          <circle cx="30" cy="14" r="5" fill="url(#parentGradient2)" />
-          {/* Flowing current wave connecting them */}
-          <path
-            d="M10 20C10 20 14 28 20 28C26 28 30 20 30 20"
-            stroke="url(#flowGradient)"
-            strokeWidth="3"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <path
-            d="M13 24C13 24 16 30 20 30C24 30 27 24 27 24"
-            stroke="url(#flowGradient)"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            fill="none"
-          />
-          <path
-            d="M16 28C16 28 18 33 20 33C22 33 24 28 24 28"
-            stroke="url(#flowGradient)"
-            strokeWidth="2"
-            strokeLinecap="round"
-            fill="none"
-          />
-          {/* Child circle at center bottom */}
-          <circle cx="20" cy="36" r="3" fill="url(#childGradient)" />
-          <defs>
-            <linearGradient id="parentGradient1" x1="5" y1="9" x2="15" y2="19" gradientUnits="userSpaceOnUse">
-              <stop stopColor="hsl(222, 60%, 50%)" />
-              <stop offset="1" stopColor="hsl(222, 47%, 35%)" />
-            </linearGradient>
-            <linearGradient id="parentGradient2" x1="25" y1="9" x2="35" y2="19" gradientUnits="userSpaceOnUse">
-              <stop stopColor="hsl(174, 50%, 45%)" />
-              <stop offset="1" stopColor="hsl(150, 45%, 40%)" />
-            </linearGradient>
-            <linearGradient id="flowGradient" x1="10" y1="20" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-              <stop stopColor="hsl(222, 60%, 50%)" />
-              <stop offset="0.5" stopColor="hsl(200, 55%, 45%)" />
-              <stop offset="1" stopColor="hsl(174, 50%, 45%)" />
-            </linearGradient>
-            <linearGradient id="childGradient" x1="17" y1="33" x2="23" y2="39" gradientUnits="userSpaceOnUse">
-              <stop stopColor="hsl(38, 92%, 50%)" />
-              <stop offset="1" stopColor="hsl(30, 85%, 50%)" />
-            </linearGradient>
-          </defs>
-        </svg>
-      </div>
+      {/* Inline SVG using the favicon/PWA icon design */}
+      <svg 
+        viewBox="0 0 64 64" 
+        fill="none" 
+        xmlns="http://www.w3.org/2000/svg"
+        className={cn(sizes[size].icon)}
+        aria-label="CoParrent Logo"
+      >
+        <defs>
+          <linearGradient id="coparrent-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#0EA5E9"/>
+            <stop offset="50%" stopColor="#14B8A6"/>
+            <stop offset="100%" stopColor="#06B6D4"/>
+          </linearGradient>
+        </defs>
+        
+        {/* Left House */}
+        <path d="M8 34L20 22L32 34V52H8V34Z" fill="url(#coparrent-gradient)"/>
+        {/* Left Roof */}
+        <path d="M4 34L20 18L32 30L28 34L20 26L12 34H4Z" fill="url(#coparrent-gradient)"/>
+        {/* Left Window */}
+        <rect x="14" y="38" width="8" height="8" rx="1" fill="white" fillOpacity="0.9"/>
+        
+        {/* Right House (mirrored) */}
+        <path d="M56 34L44 22L32 34V52H56V34Z" fill="url(#coparrent-gradient)"/>
+        {/* Right Roof */}
+        <path d="M60 34L44 18L32 30L36 34L44 26L52 34H60Z" fill="url(#coparrent-gradient)"/>
+        {/* Right Window */}
+        <rect x="42" y="38" width="8" height="8" rx="1" fill="white" fillOpacity="0.9"/>
+        
+        {/* Bridge connecting both homes */}
+        <rect x="24" y="44" width="16" height="4" rx="2" fill="url(#coparrent-gradient)"/>
+        <circle cx="32" cy="46" r="3" fill="white" fillOpacity="0.9"/>
+      </svg>
       {showText && (
-        <span className={cn("font-display font-bold tracking-tight", sizes[size].text)}>
-          <span className="text-primary">Co</span>
-          <span className="text-gradient bg-gradient-accent">Parrent</span>
+        <span 
+          className={cn(
+            "font-display font-bold tracking-tight bg-clip-text text-transparent",
+            sizes[size].text
+          )}
+          style={{
+            backgroundImage: "linear-gradient(135deg, #0EA5E9 0%, #14B8A6 50%, #06B6D4 100%)"
+          }}
+        >
+          CoParrent
         </span>
       )}
     </div>

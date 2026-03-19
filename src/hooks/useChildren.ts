@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { handleError, ERROR_MESSAGES } from "@/lib/errorMessages";
 
 export interface ChildHealth {
   blood_type: string | null;
@@ -42,8 +43,15 @@ export interface Child {
   grade: string | null;
 }
 
+interface AddChildRpcResponse {
+  ok: boolean;
+  code?: string;
+  message?: string;
+  data?: Pick<Child, "id" | "name" | "date_of_birth" | "created_at">;
+}
+
 export const useChildren = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,21 +60,37 @@ export const useChildren = () => {
   // Fetch user's profile ID
   useEffect(() => {
     const fetchProfileId = async () => {
-      if (!user) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      try {
+        const { data: profile, error } = await supabase
+          .from("profiles")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
 
-      if (profile) {
-        setUserProfileId(profile.id);
+        if (error) {
+          console.error("Error fetching profile:", error);
+        }
+
+        if (profile) {
+          setUserProfileId(profile.id);
+        } else {
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error("Error fetching profile:", error);
+        setLoading(false);
       }
     };
 
-    fetchProfileId();
-  }, [user]);
+    if (!authLoading) {
+      fetchProfileId();
+    }
+  }, [user, authLoading]);
 
   // Fetch children
   useEffect(() => {
@@ -128,18 +152,25 @@ export const useChildren = () => {
       return null;
     }
 
-    // Create the child
-    const { data: newChild, error: childError } = await supabase
-      .from("children")
-      .insert({
-        name,
-        date_of_birth: dateOfBirth || null,
-      })
-      .select()
-      .single();
+    // Validate name length on client side too
+    const trimmedName = name.trim();
+    if (trimmedName.length < 1 || trimmedName.length > 100) {
+      toast({
+        title: "Error",
+        description: "Child name must be between 1 and 100 characters",
+        variant: "destructive",
+      });
+      return null;
+    }
 
-    if (childError) {
-      console.error("Error creating child:", childError);
+    // Use RPC function with limit enforcement
+    const { data, error } = await supabase.rpc("rpc_add_child", {
+      p_name: trimmedName,
+      p_dob: dateOfBirth || null,
+    });
+
+    if (error) {
+      console.error("Error creating child:", error);
       toast({
         title: "Error",
         description: "Failed to add child",
@@ -148,43 +179,62 @@ export const useChildren = () => {
       return null;
     }
 
-    // Link child to parent
-    const { error: linkError } = await supabase.from("parent_children").insert({
-      parent_id: userProfileId,
-      child_id: newChild.id,
-    });
+    // Parse structured response
+    const result = data as AddChildRpcResponse;
 
-    if (linkError) {
-      console.error("Error linking child:", linkError);
-      toast({
-        title: "Error",
-        description: "Failed to link child to your profile",
-        variant: "destructive",
-      });
+    if (!result.ok) {
+      // Handle specific error codes
+      if (result.code === "LIMIT_REACHED") {
+        toast({
+          title: "Plan Limit Reached",
+          description: result.message || "Upgrade to Power to add more children.",
+          variant: "destructive",
+        });
+      } else if (result.code === "NOT_PARENT") {
+        toast({
+          title: "Permission Denied",
+          description: "Only parents can add children.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: result.message || "Failed to add child",
+          variant: "destructive",
+        });
+      }
       return null;
     }
 
-    // Also link to co-parent if exists
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("co_parent_id")
-      .eq("id", userProfileId)
-      .single();
-
-    if (profile?.co_parent_id) {
-      await supabase.from("parent_children").insert({
-        parent_id: profile.co_parent_id,
-        child_id: newChild.id,
+    if (result.data) {
+      const newChild: Child = {
+        id: result.data.id,
+        name: result.data.name,
+        date_of_birth: result.data.date_of_birth,
+        created_at: result.data.created_at,
+        updated_at: result.data.created_at,
+        avatar_url: null,
+        blood_type: null,
+        allergies: null,
+        medications: null,
+        medical_notes: null,
+        emergency_contact: null,
+        emergency_phone: null,
+        doctor_name: null,
+        doctor_phone: null,
+        school_name: null,
+        school_phone: null,
+        grade: null,
+      };
+      setChildren((prev) => [...prev, newChild]);
+      toast({
+        title: "Success",
+        description: `${trimmedName} has been added`,
       });
+      return newChild;
     }
 
-    setChildren((prev) => [...prev, newChild as Child]);
-    toast({
-      title: "Success",
-      description: `${name} has been added`,
-    });
-
-    return newChild as Child;
+    return null;
   };
 
   const updateChild = async (

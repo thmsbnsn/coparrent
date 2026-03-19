@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.vercel
+tester-accounts.local.md
+tester-accounts.local.yaml

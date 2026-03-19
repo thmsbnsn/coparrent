@@ -1,18 +1,41 @@
-import { useEffect, useState } from "react";
+/**
+ * @page-role Action
+ * @summary-pattern Tab-organized configuration sections
+ * @ownership User's personal settings and family connections
+ * @court-view N/A (configuration, not evidentiary)
+ * 
+ * LAW 1: Action role - focused configuration controls
+ * LAW 4: All setting sections use consistent card/form patterns
+ * LAW 7: Tab navigation adapts to mobile with preserved functionality
+ */
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { User, Bell, Shield, LogOut, Users, UserPlus } from "lucide-react";
+import { User, Bell, Shield, LogOut, Users, BellOff, Baby } from "lucide-react";
+import { useSearchParams, Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { CoParentInvite } from "@/components/settings/CoParentInvite";
 import { TrialStatus } from "@/components/settings/TrialStatus";
-import { StepParentManager } from "@/components/settings/StepParentManager";
+import { AccessCodeRedeemer } from "@/components/settings/AccessCodeRedeemer";
+import { ThirdPartyManager } from "@/components/settings/ThirdPartyManager";
+import { PreferencesSettings } from "@/components/settings/PreferencesSettings";
+import { ChildAccountControls } from "@/components/settings/ChildAccountControls";
+import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
+import { RecoveryCodes } from "@/components/auth/RecoveryCodes";
+import { SessionManager } from "@/components/auth/SessionManager";
+import { TrustedDevicesManager } from "@/components/auth/TrustedDevicesManager";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { DataExportSection } from "@/components/settings/DataExportSection";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useNotifications, NotificationPreferences } from "@/hooks/useNotifications";
+import { useSubscription } from "@/hooks/useSubscription";
 import { supabase } from "@/integrations/supabase/client";
 
 interface Profile {
@@ -43,22 +66,39 @@ interface Invitation {
 const SettingsPage = () => {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+  const { checkSubscription } = useSubscription();
+  const { 
+    preferences: notificationPrefs, 
+    permissionState, 
+    requestPermission, 
+    updatePreferences, 
+    toggleAllNotifications,
+    loading: notificationsLoading 
+  } = useNotifications();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [coParent, setCoParent] = useState<CoParentProfile | null>(null);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
   });
 
+  // Handle successful checkout redirect
   useEffect(() => {
-    if (user) {
-      fetchData();
+    if (searchParams.get("success") === "true") {
+      toast({
+        title: "Subscription activated!",
+        description: "Thank you for subscribing. Your account has been upgraded.",
+      });
+      // Refresh subscription status
+      checkSubscription();
     }
-  }, [user]);
+  }, [searchParams, toast, checkSubscription]);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -100,7 +140,13 @@ const SettingsPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      void fetchData();
+    }
+  }, [user, fetchData]);
 
   const handleSaveProfile = async () => {
     if (!profile) return;
@@ -120,10 +166,10 @@ const SettingsPage = () => {
         title: "Profile updated",
         description: "Your profile has been saved successfully.",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Failed to save",
-        description: error.message,
+        description: "Unable to save your profile. Please try again.",
         variant: "destructive",
       });
     }
@@ -133,7 +179,7 @@ const SettingsPage = () => {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <LoadingSpinner size="lg" />
         </div>
       </DashboardLayout>
     );
@@ -198,13 +244,22 @@ const SettingsPage = () => {
           />
         </motion.div>
 
-        {/* Step-Parent Section */}
+        {/* Access Code Redemption */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.11 }}
+        >
+          <AccessCodeRedeemer onRedeemed={fetchData} />
+        </motion.div>
+
+        {/* Third-Party Access Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.12 }}
         >
-          <StepParentManager
+          <ThirdPartyManager
             subscriptionTier={profile?.subscription_tier || "free"}
             isTrialActive={
               profile?.subscription_status === "trial" &&
@@ -212,6 +267,29 @@ const SettingsPage = () => {
               new Date(profile.trial_ends_at) > new Date()
             }
           />
+        </motion.div>
+
+        {/* Child Account Controls Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.13 }}
+          className="rounded-2xl border border-border bg-card p-6"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <Baby className="w-5 h-5 text-primary" />
+            <h2 className="font-display font-semibold">Child Accounts</h2>
+          </div>
+          <ChildAccountControls />
+        </motion.div>
+
+        {/* Preferences Section */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.14 }}
+        >
+          <PreferencesSettings />
         </motion.div>
 
         {/* Profile Section */}
@@ -277,29 +355,124 @@ const SettingsPage = () => {
             <h2 className="font-display font-semibold">Notifications</h2>
           </div>
 
+          {/* Browser Permission */}
+          {permissionState !== "granted" && (
+            <div className="mb-6 p-4 rounded-lg bg-muted/50 border border-border">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium">Enable Push Notifications</p>
+                  <p className="text-sm text-muted-foreground">Allow browser notifications to stay updated</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={requestPermission}>
+                  Enable
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Schedule Changes</p>
-                <p className="text-sm text-muted-foreground">Get notified when the parenting schedule is updated</p>
+            {/* Master Toggle */}
+            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30 border border-border">
+              <div className="flex items-center gap-3">
+                {notificationPrefs.enabled ? (
+                  <Bell className="w-5 h-5 text-primary" />
+                ) : (
+                  <BellOff className="w-5 h-5 text-muted-foreground" />
+                )}
+                <div>
+                  <p className="font-medium">All Notifications</p>
+                  <p className="text-sm text-muted-foreground">Turn all notifications on or off</p>
+                </div>
               </div>
-              <Switch defaultChecked />
+              <Switch 
+                checked={notificationPrefs.enabled} 
+                onCheckedChange={(checked) => toggleAllNotifications(checked)}
+              />
             </div>
+
             <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">New Messages</p>
-                <p className="text-sm text-muted-foreground">Receive alerts for new messages from your co-parent</p>
+
+            {/* Individual notification toggles */}
+            <div className={`space-y-3 ${!notificationPrefs.enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+              <div className="flex items-center space-x-3">
+                <Checkbox 
+                  id="schedule_changes"
+                  checked={notificationPrefs.schedule_changes}
+                  onCheckedChange={(checked) => updatePreferences({ schedule_changes: checked as boolean })}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <label htmlFor="schedule_changes" className="text-sm font-medium cursor-pointer">
+                    Schedule Changes
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Get notified when the parenting schedule is updated
+                  </p>
+                </div>
               </div>
-              <Switch defaultChecked />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Upcoming Exchanges</p>
-                <p className="text-sm text-muted-foreground">Reminder before each custody exchange</p>
+
+              <div className="flex items-center space-x-3">
+                <Checkbox 
+                  id="new_messages"
+                  checked={notificationPrefs.new_messages}
+                  onCheckedChange={(checked) => updatePreferences({ new_messages: checked as boolean })}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <label htmlFor="new_messages" className="text-sm font-medium cursor-pointer">
+                    New Messages
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Receive alerts for new messages from your co-parent
+                  </p>
+                </div>
               </div>
-              <Switch defaultChecked />
+
+              <div className="flex items-center space-x-3">
+                <Checkbox 
+                  id="upcoming_exchanges"
+                  checked={notificationPrefs.upcoming_exchanges}
+                  onCheckedChange={(checked) => updatePreferences({ upcoming_exchanges: checked as boolean })}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <label htmlFor="upcoming_exchanges" className="text-sm font-medium cursor-pointer">
+                    Upcoming Exchanges
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Reminder before each custody exchange
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <Checkbox 
+                  id="document_uploads"
+                  checked={notificationPrefs.document_uploads}
+                  onCheckedChange={(checked) => updatePreferences({ document_uploads: checked as boolean })}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <label htmlFor="document_uploads" className="text-sm font-medium cursor-pointer">
+                    Document Uploads
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Get notified when documents are uploaded to the vault
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <Checkbox 
+                  id="child_info_updates"
+                  checked={notificationPrefs.child_info_updates}
+                  onCheckedChange={(checked) => updatePreferences({ child_info_updates: checked as boolean })}
+                />
+                <div className="grid gap-1.5 leading-none">
+                  <label htmlFor="child_info_updates" className="text-sm font-medium cursor-pointer">
+                    Child Info Updates
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    Get notified when child information is updated
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -317,8 +490,30 @@ const SettingsPage = () => {
           </div>
 
           <div className="space-y-4">
-            <Button variant="outline">Change Password</Button>
+            <TwoFactorSetup onStatusChange={setTwoFactorEnabled} />
+            
+            <RecoveryCodes isEnabled={twoFactorEnabled} />
+            
             <Separator />
+            
+            <TrustedDevicesManager />
+            
+            <Separator />
+            
+            <SessionManager />
+            
+            <Separator />
+            
+            <Link to="/forgot-password">
+              <Button variant="outline">Change Password</Button>
+            </Link>
+            
+            <Separator />
+            
+            <DataExportSection />
+            
+            <Separator />
+            
             <div className="pt-2">
               <Button 
                 variant="destructive" 

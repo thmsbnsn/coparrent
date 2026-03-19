@@ -1,38 +1,61 @@
-import { useEffect, useState } from "react";
+/**
+ * @page-role Overview
+ * @summary-pattern Parenting time summary + messages widget + children quick access
+ * @ownership Parent A (blue) highlights current user's time; neutral for shared
+ * @court-view N/A (Dashboard is navigational, not evidentiary)
+ * 
+ * LAW 1: Overview role - summary-first, minimal direct actions
+ * LAW 2: Summary cards answer "what's happening today" before detail
+ * LAW 3: Ownership uses parent-a semantic tokens for user distinction
+ */
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Calendar, MessageSquare, Users, ArrowRight, Clock } from "lucide-react";
+import { Calendar, MessageSquare, Users, ArrowRight, Clock, BookHeart } from "lucide-react";
 import { Link } from "react-router-dom";
-import { format, differenceInYears } from "date-fns";
+import { format, differenceInYears, isToday, isTomorrow, parseISO } from "date-fns";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { ExchangeCheckin } from "@/components/exchange/ExchangeCheckin";
+import { SubscriptionBanner } from "@/components/dashboard/SubscriptionBanner";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useRealtimeChildren } from "@/hooks/useRealtimeChildren";
+import { BlogDashboardCard } from "@/components/dashboard/BlogDashboardCard";
+import { resolveSenderName } from "@/lib/displayResolver";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Profile = Tables<"profiles">;
-type Message = Tables<"messages">;
-type Child = Tables<"children">;
+type CustodySchedule = Tables<"custody_schedules">;
 
-interface ChildWithAge extends Child {
-  age: number | null;
+interface RecentMessage {
+  id: string;
+  content: string;
+  created_at: string;
+  sender_id: string;
+  sender?: Profile;
 }
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { children: realtimeChildren, loading: childrenLoading } = useRealtimeChildren();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [coParent, setCoParent] = useState<Profile | null>(null);
-  const [messages, setMessages] = useState<(Message & { sender?: Profile })[]>([]);
-  const [children, setChildren] = useState<ChildWithAge[]>([]);
+  const [messages, setMessages] = useState<RecentMessage[]>([]);
+  const [schedule, setSchedule] = useState<CustodySchedule | null>(null);
   const [loading, setLoading] = useState(true);
+  const [journalCount, setJournalCount] = useState(0);
 
-  useEffect(() => {
-    if (user) {
-      fetchDashboardData();
-    }
-  }, [user]);
+  // Map children with age
+  const children = realtimeChildren.map(child => ({
+    ...child,
+    age: child.date_of_birth 
+      ? differenceInYears(new Date(), new Date(child.date_of_birth))
+      : null
+  }));
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     if (!user) return;
 
     try {
@@ -55,58 +78,98 @@ const Dashboard = () => {
         setCoParent(coParentData);
       }
 
-      // Fetch recent messages if profile exists
+      // Fetch recent thread messages if profile exists
       if (profileData) {
-        const { data: messagesData } = await supabase
-          .from("messages")
-          .select("*")
-          .or(`sender_id.eq.${profileData.id},recipient_id.eq.${profileData.id}`)
-          .order("created_at", { ascending: false })
-          .limit(3);
+        // Get threads where user is a participant
+        const { data: threads } = await supabase
+          .from("message_threads")
+          .select("id")
+          .or(`participant_a_id.eq.${profileData.id},participant_b_id.eq.${profileData.id},thread_type.eq.family_channel`);
 
-        if (messagesData && messagesData.length > 0) {
-          // Get sender profiles for messages
-          const senderIds = [...new Set(messagesData.map(m => m.sender_id))];
-          const { data: senderProfiles } = await supabase
-            .from("profiles")
+        if (threads && threads.length > 0) {
+          const threadIds = threads.map(t => t.id);
+          const { data: messagesData } = await supabase
+            .from("thread_messages")
             .select("*")
-            .in("id", senderIds);
+            .in("thread_id", threadIds)
+            .order("created_at", { ascending: false })
+            .limit(3);
 
-          const messagesWithSenders = messagesData.map(msg => ({
-            ...msg,
-            sender: senderProfiles?.find(p => p.id === msg.sender_id)
-          }));
-          setMessages(messagesWithSenders);
-        }
+          if (messagesData && messagesData.length > 0) {
+            const senderIds = [...new Set(messagesData.map(m => m.sender_id))];
+            const { data: senderProfiles } = await supabase
+              .from("profiles")
+              .select("*")
+              .in("id", senderIds);
 
-        // Fetch children linked to this parent
-        const { data: parentChildren } = await supabase
-          .from("parent_children")
-          .select("child_id")
-          .eq("parent_id", profileData.id);
-
-        if (parentChildren && parentChildren.length > 0) {
-          const childIds = parentChildren.map(pc => pc.child_id);
-          const { data: childrenData } = await supabase
-            .from("children")
-            .select("*")
-            .in("id", childIds);
-
-          if (childrenData) {
-            const childrenWithAge = childrenData.map(child => ({
-              ...child,
-              age: child.date_of_birth 
-                ? differenceInYears(new Date(), new Date(child.date_of_birth))
-                : null
+            const messagesWithSenders: RecentMessage[] = messagesData.map(msg => ({
+              id: msg.id,
+              content: msg.content,
+              created_at: msg.created_at,
+              sender_id: msg.sender_id,
+              sender: senderProfiles?.find(p => p.id === msg.sender_id)
             }));
-            setChildren(childrenWithAge);
+            setMessages(messagesWithSenders);
           }
         }
+      }
+
+      // Fetch custody schedule if profile exists
+      if (profileData) {
+        const { data: scheduleData } = await supabase
+          .from("custody_schedules")
+          .select("*")
+          .or(`parent_a_id.eq.${profileData.id},parent_b_id.eq.${profileData.id}`)
+          .maybeSingle();
+        setSchedule(scheduleData);
+
+        // Fetch journal entry count for this month
+        const startOfMonth = new Date();
+        startOfMonth.setDate(1);
+        startOfMonth.setHours(0, 0, 0, 0);
+        
+        const { count } = await supabase
+          .from("journal_entries")
+          .select("*", { count: 'exact', head: true })
+          .eq("user_id", user.id)
+          .gte("created_at", startOfMonth.toISOString());
+        
+        setJournalCount(count || 0);
       }
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
       setLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
+      void fetchDashboardData();
+    }
+  }, [user, fetchDashboardData]);
+
+  // Check if today is an exchange day based on schedule pattern
+  const isExchangeDay = () => {
+    if (!schedule) return false;
+    const today = new Date();
+    const startDate = parseISO(schedule.start_date);
+    const daysSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    
+    // Simple exchange detection based on pattern
+    switch (schedule.pattern) {
+      case "weekly":
+        return daysSinceStart % 7 === 0;
+      case "biweekly":
+        return daysSinceStart % 14 === 0;
+      case "2-2-3":
+        return [0, 2, 4].includes(daysSinceStart % 7);
+      case "3-4-4-3":
+        return [0, 3].includes(daysSinceStart % 7);
+      case "5-2":
+        return daysSinceStart % 7 === 0 || daysSinceStart % 7 === 5;
+      default:
+        return daysSinceStart % 7 === 0;
     }
   };
 
@@ -139,7 +202,7 @@ const Dashboard = () => {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <LoadingSpinner size="lg" />
         </div>
       </DashboardLayout>
     );
@@ -148,6 +211,9 @@ const Dashboard = () => {
   return (
     <DashboardLayout>
       <div className="space-y-6">
+        {/* Subscription Status Banner */}
+        <SubscriptionBanner />
+
         {/* Welcome Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -211,6 +277,22 @@ const Dashboard = () => {
           </div>
         </motion.div>
 
+        {/* Exchange Check-in (only show if it's an exchange day and schedule exists) */}
+        {schedule && isExchangeDay() && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+          >
+            <ExchangeCheckin 
+              exchangeDate={new Date()} 
+              scheduleId={schedule.id}
+            />
+          </motion.div>
+        )}
+
+        {/* Quick Stats Grid */}
+
         {/* Quick Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Upcoming Exchanges */}
@@ -263,7 +345,7 @@ const Dashboard = () => {
                   >
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-sm font-medium">
-                        {msg.sender?.full_name || msg.sender?.email || "Unknown"}
+                        {resolveSenderName(msg.sender?.full_name, msg.sender?.email)}
                       </p>
                       <span className="text-xs text-muted-foreground">
                         {formatMessageTime(msg.created_at)}
@@ -328,6 +410,34 @@ const Dashboard = () => {
               <Link to="/dashboard/children">Manage Child Info</Link>
             </Button>
           </motion.div>
+
+          {/* Journal Quick Access */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.45 }}
+            className="rounded-2xl border border-border bg-card p-5"
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display font-semibold">Private Journal</h3>
+              <BookHeart className="w-5 h-5 text-[#21B0FE]" />
+            </div>
+            <div className="text-center py-3">
+              <p className="text-2xl font-bold text-[#21B0FE]">{journalCount}</p>
+              <p className="text-sm text-muted-foreground">entries this month</p>
+              <p className="text-xs text-muted-foreground mt-2">
+                {journalCount > 0 
+                  ? "Great job staying grounded! 🌟" 
+                  : "Try journaling after exchanges"}
+              </p>
+            </div>
+            <Button variant="ghost" className="w-full mt-3" asChild>
+              <Link to="/dashboard/journal">Open Journal</Link>
+            </Button>
+          </motion.div>
+
+          {/* Blog Card */}
+          <BlogDashboardCard />
         </div>
       </div>
     </DashboardLayout>

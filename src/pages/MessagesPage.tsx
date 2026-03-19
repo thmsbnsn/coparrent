@@ -1,15 +1,31 @@
+/**
+ * @page-role Action
+ * @summary-pattern Thread conversation with schedule change request handling
+ * @ownership Sender attribution via neutral display names
+ * @court-view PDF export for message history documentation
+ * 
+ * LAW 1: Action role - focused on message composition and sending
+ * LAW 3: Uses resolvePersonName for neutral sender/recipient attribution
+ * LAW 6: exportMessagesToPDF provides court-ready message history
+ * LAW 7: Mobile-first conversation view preserves all functionality
+ */
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Download, Info, FileText, Calendar, Check, X, Clock, ArrowRightLeft, UserPlus } from "lucide-react";
+import { Send, Download, Info, FileText, Calendar, Check, X, Clock, ArrowRightLeft, UserPlus, Sparkles, Loader2 } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
+import { Textarea } from "@/components/ui/textarea";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { cn } from "@/lib/utils";
-import { ScheduleChangeRequestData } from "@/components/calendar/ScheduleChangeRequest";
 import { useMessages } from "@/hooks/useMessages";
+import { useScheduleRequests } from "@/hooks/useScheduleRequests";
+import { MessageToneAssistant } from "@/components/messages/MessageToneAssistant";
 import { Link } from "react-router-dom";
+import { exportMessagesToPDF } from "@/lib/pdfExport";
+import { toast } from "sonner";
+import { getScheduleRequestLabel } from "@/lib/displayLabels";
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
@@ -34,48 +50,39 @@ const formatTimestamp = (dateString: string) => {
 };
 
 const getRequestTypeLabel = (type: string) => {
-  switch (type) {
-    case "swap":
-      return "Day Swap Request";
-    case "transfer":
-      return "Day Transfer Request";
-    case "modification":
-      return "Time Modification Request";
-    default:
-      return "Schedule Request";
-  }
+  return getScheduleRequestLabel(type);
 };
 
 const MessagesPage = () => {
   const location = useLocation();
-  const { toast } = useToast();
   const { messages, coParent, userProfile, loading, sendMessage } = useMessages();
-  const [pendingRequests, setPendingRequests] = useState<ScheduleChangeRequestData[]>([]);
+  const { pendingRequests, respondToRequest } = useScheduleRequests();
   const [newMessage, setNewMessage] = useState("");
   const [viewMode, setViewMode] = useState<"chat" | "court">("chat");
   const [sending, setSending] = useState(false);
+  const [useExpandedInput, setUseExpandedInput] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
-  // Load pending requests from localStorage (for schedule requests)
-  useEffect(() => {
-    const stored = localStorage.getItem("scheduleRequests");
-    if (stored) {
-      setPendingRequests(JSON.parse(stored).filter((r: ScheduleChangeRequestData) => r.status === "pending"));
+  const handleExportPDF = async () => {
+    setIsExporting(true);
+    try {
+      exportMessagesToPDF(messages, userProfile, coParent);
+      toast.success("Messages exported to PDF!");
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Failed to export. Please try again.");
+    } finally {
+      setIsExporting(false);
     }
-  }, []);
+  };
 
-  // Handle new schedule request from navigation
+  // Handle new schedule request from navigation (legacy support)
   useEffect(() => {
     if (location.state?.newScheduleRequest) {
-      const request = location.state.newScheduleRequest as ScheduleChangeRequestData;
-      
-      // Send as a message
-      const messageContent = `[Schedule Request] ${getRequestTypeLabel(request.type)}: ${formatDate(request.originalDate)}${request.proposedDate ? ` → ${formatDate(request.proposedDate)}` : ""}. Reason: ${request.reason}`;
-      sendMessage(messageContent);
-      
-      // Clear the navigation state
+      // Clear the navigation state - request is now stored in DB
       window.history.replaceState({}, document.title);
     }
-  }, [location.state, sendMessage]);
+  }, [location.state]);
 
   const handleSend = async () => {
     if (newMessage.trim() && !sending) {
@@ -88,31 +95,16 @@ const MessagesPage = () => {
     }
   };
 
-  const handleRequestResponse = (requestId: string, response: "accepted" | "declined") => {
-    // Update local storage
-    const stored = JSON.parse(localStorage.getItem("scheduleRequests") || "[]");
-    const updated = stored.map((r: ScheduleChangeRequestData) =>
-      r.id === requestId ? { ...r, status: response } : r
-    );
-    localStorage.setItem("scheduleRequests", JSON.stringify(updated));
-
-    // Update pending requests
-    setPendingRequests((prev) => prev.filter((r) => r.id !== requestId));
-
-    toast({
-      title: response === "accepted" ? "Request Accepted" : "Request Declined",
-      description:
-        response === "accepted"
-          ? "The schedule change has been approved."
-          : "The schedule change has been declined.",
-    });
+  const handleRequestResponse = async (requestId: string, response: "accepted" | "declined") => {
+    await respondToRequest(requestId, response);
   };
+
 
   if (loading) {
     return (
       <DashboardLayout>
         <div className="h-[calc(100vh-7rem)] flex items-center justify-center">
-          <div className="animate-pulse text-muted-foreground">Loading messages...</div>
+          <LoadingSpinner size="lg" message="Loading messages..." />
         </div>
       </DashboardLayout>
     );
@@ -221,9 +213,9 @@ const MessagesPage = () => {
                   <p className="text-xs text-muted-foreground">Co-Parent</p>
                 </div>
               </div>
-              <Button variant="outline" size="sm">
-                <Download className="w-4 h-4 mr-2" />
-                Export
+              <Button variant="outline" size="sm" onClick={handleExportPDF} disabled={isExporting || messages.length === 0}>
+                {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+                Export PDF
               </Button>
             </div>
 
@@ -265,21 +257,58 @@ const MessagesPage = () => {
               )}
             </div>
 
+            {/* Tone Assistant */}
+            <MessageToneAssistant 
+              message={newMessage} 
+              onRephrase={setNewMessage}
+              className="px-4 pt-4"
+            />
+
             {/* Input */}
-            <div className="p-4 border-t border-border">
-              <div className="flex gap-3">
-                <Input
-                  placeholder="Type a message..."
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                  className="flex-1"
-                  disabled={sending}
-                />
-                <Button onClick={handleSend} disabled={!newMessage.trim() || sending}>
-                  <Send className="w-4 h-4" />
+            <div className="p-4 border-t border-border space-y-3">
+              <div className="flex items-center justify-between">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setUseExpandedInput(!useExpandedInput)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  {useExpandedInput ? "Simple Input" : "Expand for AI Assist"}
                 </Button>
               </div>
+              
+              {useExpandedInput ? (
+                <div className="space-y-2">
+                  <Textarea
+                    placeholder="Type your message... AI will help ensure it's professional and child-focused."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    className="min-h-[100px] resize-none"
+                    disabled={sending}
+                  />
+                  <div className="flex justify-end">
+                    <Button onClick={handleSend} disabled={!newMessage.trim() || sending}>
+                      <Send className="w-4 h-4 mr-2" />
+                      Send Message
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <Input
+                    placeholder="Type a message..."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
+                    className="flex-1"
+                    disabled={sending}
+                  />
+                  <Button onClick={handleSend} disabled={!newMessage.trim() || sending}>
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           </motion.div>
         ) : (
@@ -298,8 +327,8 @@ const MessagesPage = () => {
               </div>
 
               <div className="flex justify-end mb-6">
-                <Button variant="outline">
-                  <Download className="w-4 h-4 mr-2" />
+                <Button variant="outline" onClick={handleExportPDF} disabled={isExporting || messages.length === 0}>
+                  {isExporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
                   Export as PDF
                 </Button>
               </div>

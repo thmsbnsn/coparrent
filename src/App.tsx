@@ -1,55 +1,188 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { FamilyProvider } from "@/contexts/FamilyContext";
+import { ThemeProvider } from "@/components/ThemeProvider";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import Index from "./pages/Index";
-import Pricing from "./pages/Pricing";
-import About from "./pages/About";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import Onboarding from "./pages/Onboarding";
-import Dashboard from "./pages/Dashboard";
-import CalendarPage from "./pages/CalendarPage";
-import ChildrenPage from "./pages/ChildrenPage";
-import MessagesPage from "./pages/MessagesPage";
-import DocumentsPage from "./pages/DocumentsPage";
-import SettingsPage from "./pages/SettingsPage";
-import AcceptInvite from "./pages/AcceptInvite";
-import NotFound from "./pages/NotFound";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { RouteErrorBoundary } from "@/components/ui/RouteErrorBoundary";
+import { OfflineIndicator } from "@/components/pwa/OfflineIndicator";
+import { PWAInstallPrompt } from "@/components/pwa/PWAInstallPrompt";
+import { PWAUpdatePrompt } from "@/components/pwa/PWAUpdatePrompt";
+import { BetaBanner } from "@/components/BetaBanner";
+import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
+import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+
+const Index = lazy(() => import("./pages/Index"));
+const Pricing = lazy(() => import("./pages/Pricing"));
+const About = lazy(() => import("./pages/About"));
+const FeaturesPage = lazy(() => import("./pages/FeaturesPage"));
+const HelpCenter = lazy(() => import("./pages/HelpCenter"));
+const HelpGettingStarted = lazy(() => import("./pages/help/HelpGettingStarted"));
+const HelpScheduling = lazy(() => import("./pages/help/HelpScheduling"));
+const HelpMessaging = lazy(() => import("./pages/help/HelpMessaging"));
+const HelpDocuments = lazy(() => import("./pages/help/HelpDocuments"));
+const HelpExpenses = lazy(() => import("./pages/help/HelpExpenses"));
+const HelpAccount = lazy(() => import("./pages/help/HelpAccount"));
+const HelpPrivacy = lazy(() => import("./pages/help/HelpPrivacy"));
+const HelpTrialEnding = lazy(() => import("./pages/help/HelpTrialEnding"));
+const HelpScheduleChangeRequests = lazy(() => import("./pages/help/HelpScheduleChangeRequests"));
+const HelpInvitations = lazy(() => import("./pages/help/HelpInvitations"));
+const HelpDocumentExports = lazy(() => import("./pages/help/HelpDocumentExports"));
+const HelpSchedulePatterns = lazy(() => import("./pages/help/HelpSchedulePatterns"));
+const HelpContact = lazy(() => import("./pages/help/HelpContact"));
+const HelpSecurity = lazy(() => import("./pages/help/HelpSecurity"));
+const CourtRecordsPage = lazy(() => import("./pages/CourtRecordsPage"));
+const TermsPage = lazy(() => import("./pages/TermsPage"));
+const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
+const Login = lazy(() => import("./pages/Login"));
+const Signup = lazy(() => import("./pages/Signup"));
+const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const CalendarPage = lazy(() => import("./pages/CalendarPage"));
+const ChildrenPage = lazy(() => import("./pages/ChildrenPage"));
+const MessagesPage = lazy(() => import("./pages/MessagesPage"));
+const MessagingHubPage = lazy(() => import("./pages/MessagingHubPage"));
+const DocumentsPage = lazy(() => import("./pages/DocumentsPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const AcceptInvite = lazy(() => import("./pages/AcceptInvite"));
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
+const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
+const BlogPage = lazy(() => import("./pages/BlogPage"));
+const BlogPostPage = lazy(() => import("./pages/BlogPostPage"));
+const UnifiedLawLibraryPage = lazy(() => import("./pages/UnifiedLawLibraryPage"));
+const LawArticleDetailPage = lazy(() => import("./pages/LawArticleDetailPage"));
+const JournalPage = lazy(() => import("./pages/JournalPage"));
+const ExpensesPage = lazy(() => import("./pages/ExpensesPage"));
+const SportsPage = lazy(() => import("./pages/SportsPage"));
+const GiftsPage = lazy(() => import("./pages/GiftsPage"));
+const AuditLogPage = lazy(() => import("./pages/AuditLogPage"));
+const KidsDashboard = lazy(() => import("./pages/KidsDashboard"));
+const KidCenterPage = lazy(() => import("./pages/KidCenterPage"));
+const KidsHubPage = lazy(() => import("./pages/KidsHubPage"));
+const NurseNancyPage = lazy(() => import("./pages/NurseNancyPage"));
+const ColoringPagesPage = lazy(() => import("./pages/ColoringPagesPage"));
+const ChoreChartPage = lazy(() => import("./pages/ChoreChartPage"));
+const ActivitiesPage = lazy(() => import("./pages/ActivitiesPage"));
+const CreationsLibraryPage = lazy(() => import("./pages/CreationsLibraryPage"));
+const OfflinePage = lazy(() => import("./pages/OfflinePage"));
+const PWADiagnosticsPage = lazy(() => import("./pages/PWADiagnosticsPage"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const PaymentSuccess = lazy(() => import("./pages/PaymentSuccess"));
 
 const queryClient = new QueryClient();
+const routeFallback = <LoadingSpinner fullScreen message="Loading page..." />;
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/pricing" element={<Pricing />} />
-            <Route path="/about" element={<About />} />
-            <Route path="/features" element={<About />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/accept-invite" element={<AcceptInvite />} />
-            <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
-            <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-            <Route path="/dashboard/calendar" element={<ProtectedRoute><CalendarPage /></ProtectedRoute>} />
-            <Route path="/dashboard/children" element={<ProtectedRoute><ChildrenPage /></ProtectedRoute>} />
-            <Route path="/dashboard/messages" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
-            <Route path="/dashboard/documents" element={<ProtectedRoute><DocumentsPage /></ProtectedRoute>} />
-            <Route path="/dashboard/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <TooltipProvider>
+          <AuthProvider>
+            <FamilyProvider>
+            <Toaster />
+            <Sonner />
+            <OfflineIndicator />
+            <PWAInstallPrompt />
+            <PWAUpdatePrompt />
+            <BrowserRouter>
+            <BetaBanner />
+            <CookieConsentBanner />
+            <Suspense fallback={routeFallback}>
+              <Routes>
+                {/* Public Routes */}
+                <Route path="/" element={<RouteErrorBoundary routeName="Home"><Index /></RouteErrorBoundary>} />
+                <Route path="/pricing" element={<RouteErrorBoundary routeName="Pricing"><Pricing /></RouteErrorBoundary>} />
+                <Route path="/about" element={<RouteErrorBoundary routeName="About"><About /></RouteErrorBoundary>} />
+                <Route path="/features" element={<RouteErrorBoundary routeName="Features"><FeaturesPage /></RouteErrorBoundary>} />
+                <Route path="/help" element={<RouteErrorBoundary routeName="Help"><HelpCenter /></RouteErrorBoundary>} />
+                <Route path="/help/getting-started" element={<RouteErrorBoundary routeName="Help - Getting Started"><HelpGettingStarted /></RouteErrorBoundary>} />
+                <Route path="/help/getting-started/invitations" element={<RouteErrorBoundary routeName="Help - Invitations"><HelpInvitations /></RouteErrorBoundary>} />
+                <Route path="/help/scheduling" element={<RouteErrorBoundary routeName="Help - Scheduling"><HelpScheduling /></RouteErrorBoundary>} />
+                <Route path="/help/scheduling/change-requests" element={<RouteErrorBoundary routeName="Help - Change Requests"><HelpScheduleChangeRequests /></RouteErrorBoundary>} />
+                <Route path="/help/scheduling/patterns" element={<RouteErrorBoundary routeName="Help - Patterns"><HelpSchedulePatterns /></RouteErrorBoundary>} />
+                <Route path="/help/messaging" element={<RouteErrorBoundary routeName="Help - Messaging"><HelpMessaging /></RouteErrorBoundary>} />
+                <Route path="/help/documents" element={<RouteErrorBoundary routeName="Help - Documents"><HelpDocuments /></RouteErrorBoundary>} />
+                <Route path="/help/documents/exports" element={<RouteErrorBoundary routeName="Help - Exports"><HelpDocumentExports /></RouteErrorBoundary>} />
+                <Route path="/help/expenses" element={<RouteErrorBoundary routeName="Help - Expenses"><HelpExpenses /></RouteErrorBoundary>} />
+                <Route path="/help/account" element={<RouteErrorBoundary routeName="Help - Account"><HelpAccount /></RouteErrorBoundary>} />
+                <Route path="/help/account/trial-ending" element={<RouteErrorBoundary routeName="Help - Trial Ending"><HelpTrialEnding /></RouteErrorBoundary>} />
+                <Route path="/help/privacy" element={<RouteErrorBoundary routeName="Help - Privacy"><HelpPrivacy /></RouteErrorBoundary>} />
+                <Route path="/help/security" element={<RouteErrorBoundary routeName="Help - Security"><HelpSecurity /></RouteErrorBoundary>} />
+                <Route path="/help/contact" element={<RouteErrorBoundary routeName="Help - Contact"><HelpContact /></RouteErrorBoundary>} />
+                <Route path="/court-records" element={<RouteErrorBoundary routeName="Court Records"><CourtRecordsPage /></RouteErrorBoundary>} />
+                <Route path="/terms" element={<RouteErrorBoundary routeName="Terms"><TermsPage /></RouteErrorBoundary>} />
+                <Route path="/privacy" element={<RouteErrorBoundary routeName="Privacy"><PrivacyPage /></RouteErrorBoundary>} />
+                <Route path="/blog" element={<RouteErrorBoundary routeName="Blog"><BlogPage /></RouteErrorBoundary>} />
+                <Route path="/blog/:slug" element={<RouteErrorBoundary routeName="Blog Post"><BlogPostPage /></RouteErrorBoundary>} />
+                
+                {/* Auth Routes */}
+                <Route path="/login" element={<RouteErrorBoundary routeName="Login"><Login /></RouteErrorBoundary>} />
+                <Route path="/signup" element={<RouteErrorBoundary routeName="Signup"><Signup /></RouteErrorBoundary>} />
+                <Route path="/forgot-password" element={<RouteErrorBoundary routeName="Forgot Password"><ForgotPassword /></RouteErrorBoundary>} />
+                <Route path="/reset-password" element={<RouteErrorBoundary routeName="Reset Password"><ResetPassword /></RouteErrorBoundary>} />
+                <Route path="/payment-success" element={<RouteErrorBoundary routeName="Payment Success"><PaymentSuccess /></RouteErrorBoundary>} />
+                <Route path="/accept-invite" element={<RouteErrorBoundary routeName="Accept Invite"><AcceptInvite /></RouteErrorBoundary>} />
+                
+                {/* Law Office Portal Routes paused until the core product is stable */}
+                <Route path="/law-office/login" element={<Navigate to="/login" replace />} />
+                <Route path="/law-office/signup" element={<Navigate to="/signup" replace />} />
+                
+                {/* Child Account Dashboard (Kids only) */}
+                <Route path="/kids" element={<ProtectedRoute><RouteErrorBoundary routeName="Kids Dashboard"><KidsDashboard /></RouteErrorBoundary></ProtectedRoute>} />
+                
+                {/* Protected Routes (Parent/Guardian) */}
+                <Route path="/onboarding" element={<ProtectedRoute><RouteErrorBoundary routeName="Onboarding"><Onboarding /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard" element={<ProtectedRoute><RouteErrorBoundary routeName="Dashboard"><Dashboard /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/calendar" element={<ProtectedRoute><RouteErrorBoundary routeName="Calendar"><CalendarPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/children" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Children"><ChildrenPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/messages" element={<ProtectedRoute><RouteErrorBoundary routeName="Messages"><MessagingHubPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/messages-legacy" element={<ProtectedRoute><RouteErrorBoundary routeName="Messages Legacy"><MessagesPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/documents" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Documents"><DocumentsPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/settings" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Settings"><SettingsPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/notifications" element={<ProtectedRoute><RouteErrorBoundary routeName="Notifications"><NotificationsPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/law-library" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Law Library"><UnifiedLawLibraryPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/law-library/resources" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Law Library"><UnifiedLawLibraryPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/law-library/:slug" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Law Article"><LawArticleDetailPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/journal" element={<ProtectedRoute><RouteErrorBoundary routeName="Journal"><JournalPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/expenses" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Expenses"><ExpensesPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/sports" element={<ProtectedRoute><RouteErrorBoundary routeName="Sports"><SportsPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/gifts" element={<ProtectedRoute><RouteErrorBoundary routeName="Gifts"><GiftsPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/kid-center" element={<ProtectedRoute><RouteErrorBoundary routeName="Kid Center"><KidCenterPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/kids-hub" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Kids Hub"><KidsHubPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/kids-hub/nurse-nancy" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Nurse Nancy"><NurseNancyPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/kids-hub/coloring-pages" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Coloring Pages"><ColoringPagesPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/kids-hub/chore-chart" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Chore Chart"><ChoreChartPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/kids-hub/activities" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Activities"><ActivitiesPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/kids-hub/creations" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Creations Library"><CreationsLibraryPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/kids-hub/*" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Kids Hub"><KidsHubPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/audit" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Audit Log"><AuditLogPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/blog" element={<ProtectedRoute><RouteErrorBoundary routeName="Blog"><BlogPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/blog/:slug" element={<ProtectedRoute><RouteErrorBoundary routeName="Blog Post"><BlogPostPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/admin" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Admin"><AdminDashboard /></RouteErrorBoundary></ProtectedRoute>} />
+                {/* Offline Route */}
+                <Route path="/offline" element={<RouteErrorBoundary routeName="Offline"><OfflinePage /></RouteErrorBoundary>} />
+                
+                {/* PWA Diagnostics (Internal QA) */}
+                <Route path="/pwa-diagnostics" element={<RouteErrorBoundary routeName="PWA Diagnostics"><PWADiagnosticsPage /></RouteErrorBoundary>} />
+                
+                {/* 404 */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </Suspense>
+            </BrowserRouter>
+            </FamilyProvider>
+          </AuthProvider>
+        </TooltipProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;

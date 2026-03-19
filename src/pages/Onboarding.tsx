@@ -1,12 +1,16 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, ArrowLeft, Users, Baby, Mail, Check } from "lucide-react";
+import { ArrowRight, ArrowLeft, Users, Baby, Mail, Check, Loader2 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { ensureCurrentUserFamilyMembership } from "@/lib/familyMembership";
 
 const steps = [
   { id: 1, title: "Your Role", icon: Users },
@@ -19,12 +23,83 @@ const roles = ["Father", "Mother", "Guardian", "Other"];
 
 const Onboarding = () => {
   const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
+  const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(1);
   const [role, setRole] = useState("");
   const [children, setChildren] = useState([{ name: "", dob: "" }]);
   const [coParentEmail, setCoParentEmail] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string>("");
 
-  const nextStep = () => setCurrentStep((s) => Math.min(s + 1, 4));
+  // Redirect if not logged in
+  useEffect(() => {
+    if (!authLoading && !user) {
+      navigate("/signup");
+    }
+  }, [user, authLoading, navigate]);
+
+  // Get user profile
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (!user) return;
+      
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("id, full_name")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      
+      if (profile) {
+        setProfileId(profile.id);
+        setUserName(profile.full_name || user.email || "");
+      }
+    };
+    
+    fetchProfile();
+  }, [user]);
+
+  const nextStep = async () => {
+    if (currentStep === 1 && profileId && role) {
+      const accountRole = role === "Guardian" ? "guardian" : "parent";
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ account_role: accountRole })
+        .eq("id", profileId);
+
+      if (profileError) {
+        toast({
+          title: "Unable to save role",
+          description: "Please try again before continuing.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      try {
+        await ensureCurrentUserFamilyMembership(userName || user?.email || null);
+      } catch (familyError) {
+        console.error("Error ensuring family membership during onboarding:", familyError);
+        toast({
+          title: "Unable to prepare your family",
+          description: "Please try again before continuing.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Save children data when moving from step 2 to 3
+    if (currentStep === 2) {
+      await saveChildrenToDatabase();
+    }
+    // Send co-parent invite when moving from step 3 to 4
+    if (currentStep === 3 && coParentEmail.trim()) {
+      await sendCoParentInvite();
+    }
+    setCurrentStep((s) => Math.min(s + 1, 4));
+  };
   const prevStep = () => setCurrentStep((s) => Math.max(s - 1, 1));
 
   const addChild = () => {
@@ -36,6 +111,147 @@ const Onboarding = () => {
     updated[index][field] = value;
     setChildren(updated);
   };
+
+  const sendCoParentInvite = async () => {
+    if (!profileId || !coParentEmail.trim()) return;
+
+    setSaving(true);
+    try {
+      const ensuredFamily = await ensureCurrentUserFamilyMembership(userName || user?.email || null);
+      if (!ensuredFamily.familyId) {
+        throw new Error("Could not determine your family for this invitation.");
+      }
+
+      // Create invitation in database
+      const { data: invitation, error: insertError } = await supabase
+        .from("invitations")
+        .insert({
+          inviter_id: profileId,
+          family_id: ensuredFamily.familyId,
+          invitee_email: coParentEmail.toLowerCase().trim(),
+          invitation_type: "co_parent",
+          role: "parent",
+        })
+        .select()
+        .single();
+
+      if (insertError) {
+        if (insertError.code === "23505") {
+          toast({
+            title: "Invitation already sent",
+            description: "You've already invited this email address.",
+          });
+        } else {
+          throw insertError;
+        }
+        return;
+      }
+
+      // Send email via edge function
+      const { error: emailError } = await supabase.functions.invoke("send-coparent-invite", {
+        body: {
+          inviteeEmail: coParentEmail.toLowerCase().trim(),
+          inviterName: userName || "Your co-parent",
+          token: invitation.token,
+        },
+      });
+
+      if (emailError) {
+        console.error("Email error:", emailError);
+        toast({
+          title: "Invitation created",
+          description: "The invitation was created. Share the link with your co-parent.",
+        });
+      } else {
+        toast({
+          title: "Invitation sent!",
+          description: `An invitation has been sent to ${coParentEmail}.`,
+        });
+      }
+    } catch (error: unknown) {
+      console.error("Error sending invitation:", error);
+      toast({
+        title: "Failed to send invitation",
+        description: error instanceof Error ? error.message : "Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const saveChildrenToDatabase = async () => {
+    if (!user) {
+      toast({
+        title: "Error",
+        description: "You must be logged in to save children",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(true);
+    let successCount = 0;
+    let limitReached = false;
+    
+    try {
+      // Save each child using the secure RPC function that enforces plan limits
+      for (const child of children) {
+        if (child.name.trim()) {
+          const { data, error } = await supabase.rpc("rpc_add_child", {
+            p_name: child.name.trim(),
+            p_dob: child.dob || null,
+          });
+
+          if (error) {
+            console.error("Error creating child:", error);
+            continue;
+          }
+
+          const result = data as { ok: boolean; code?: string; message?: string };
+          if (!result.ok) {
+            if (result.code === "LIMIT_REACHED") {
+              limitReached = true;
+              break; // Stop trying to add more if limit reached
+            }
+            console.error("Failed to create child:", result.message);
+          } else {
+            successCount++;
+          }
+        }
+      }
+
+      if (limitReached) {
+        toast({
+          title: "Plan Limit Reached",
+          description: `Added ${successCount} child${successCount !== 1 ? "ren" : ""}. Upgrade to Power for more.`,
+          variant: "destructive",
+        });
+      } else if (successCount > 0) {
+        toast({
+          title: "Success",
+          description: `${successCount} child${successCount !== 1 ? "ren" : ""} saved successfully`,
+        });
+      }
+    } catch (error) {
+      console.error("Error saving children:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save children",
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -163,9 +379,9 @@ const Onboarding = () => {
                     <ArrowLeft className="mr-2 w-4 h-4" />
                     Back
                   </Button>
-                  <Button className="flex-1" onClick={nextStep} disabled={!children[0].name}>
-                    Continue
-                    <ArrowRight className="ml-2 w-4 h-4" />
+                  <Button className="flex-1" onClick={nextStep} disabled={!children[0].name || saving}>
+                    {saving ? "Saving..." : "Continue"}
+                    {!saving && <ArrowRight className="ml-2 w-4 h-4" />}
                   </Button>
                 </div>
               </motion.div>
@@ -182,7 +398,7 @@ const Onboarding = () => {
                 <div className="text-center">
                   <h1 className="text-2xl font-display font-bold mb-2">Invite your co-parent</h1>
                   <p className="text-muted-foreground">
-                    They'll receive an invitation to join ClearNest
+                    They'll receive an invitation to join CoParrent
                   </p>
                 </div>
 

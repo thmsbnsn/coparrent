@@ -58,6 +58,30 @@ const ChartContainer = React.forwardRef<
 });
 ChartContainer.displayName = "Chart";
 
+// Sanitize CSS color values to prevent CSS injection
+const sanitizeColor = (color: string): string | null => {
+  if (!color) return null;
+  
+  // Allow hex colors (3, 4, 6, or 8 characters)
+  if (/^#[0-9A-Fa-f]{3,8}$/.test(color)) return color;
+  
+  // Allow rgb/rgba with numeric values only
+  if (/^rgba?\(\s*\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}\s*(,\s*[\d.]+)?\s*\)$/.test(color)) return color;
+  
+  // Allow hsl/hsla with numeric values only
+  if (/^hsla?\(\s*[\d.]+\s*,\s*[\d.]+%?\s*,\s*[\d.]+%?\s*(,\s*[\d.]+)?\s*\)$/.test(color)) return color;
+  
+  // Allow CSS variables
+  if (/^var\(--[\w-]+\)$/.test(color)) return color;
+  
+  // Allow common color keywords (basic sanitization)
+  const safeKeywords = ['transparent', 'currentColor', 'inherit'];
+  if (safeKeywords.includes(color)) return color;
+  
+  // Reject anything else to prevent CSS injection
+  return null;
+};
+
 const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
   const colorConfig = Object.entries(config).filter(([_, config]) => config.theme || config.color);
 
@@ -65,18 +89,25 @@ const ChartStyle = ({ id, config }: { id: string; config: ChartConfig }) => {
     return null;
   }
 
+  // Escape the id for use in CSS selector
+  const escapedId = CSS.escape(id);
+
   return (
     <style
       dangerouslySetInnerHTML={{
         __html: Object.entries(THEMES)
           .map(
             ([theme, prefix]) => `
-${prefix} [data-chart=${id}] {
+${prefix} [data-chart=${escapedId}] {
 ${colorConfig
   .map(([key, itemConfig]) => {
-    const color = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
-    return color ? `  --color-${key}: ${color};` : null;
+    const rawColor = itemConfig.theme?.[theme as keyof typeof itemConfig.theme] || itemConfig.color;
+    const color = rawColor ? sanitizeColor(rawColor) : null;
+    // Also escape the key for CSS variable name
+    const safeKey = key.replace(/[^a-zA-Z0-9-_]/g, '');
+    return color ? `  --color-${safeKey}: ${color};` : null;
   })
+  .filter(Boolean)
   .join("\n")}
 }
 `,
