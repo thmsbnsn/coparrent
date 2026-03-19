@@ -25,7 +25,7 @@ Client-side checks are considered **advisory only**.
 - Parent and guardian accounts now bootstrap an active family membership before family-scoped gates run.
 - New co-parent and third-party invitations are expected to carry a concrete `family_id` so invited users join an existing family instead of creating a new one during onboarding.
 - Complimentary Power granted by access code is treated the same as paid Power for feature gating.
-- Lovable-backed AI features remain operationally high-risk until `LOVABLE_API_KEY` is restored or replaced in production.
+- All AI edge functions are intended to run through OpenRouter; production risk is now runtime verification, not provider ambiguity.
 
 ---
 

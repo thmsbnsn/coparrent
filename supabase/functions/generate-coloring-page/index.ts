@@ -214,17 +214,19 @@ Style requirements:
 - Centered composition with good margins
 - Professional coloring book quality`;
 
-    // Call Lovable AI Gateway for image generation
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    // Call OpenRouter for image generation
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    if (!OPENROUTER_API_KEY) {
       throw new Error("AI service is not configured");
     }
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://coparrent.app",
+        "X-Title": "CoParrent Coloring Pages",
       },
       body: JSON.stringify({
         model: "google/gemini-2.5-flash-image-preview",
@@ -249,12 +251,13 @@ Style requirements:
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      console.error(`[COLORING-PAGE] AI error status=${response.status}`);
+      console.error(`[COLORING-PAGE] OpenRouter error status=${response.status}`);
       throw new Error("AI service temporarily unavailable");
     }
 
     const data = await response.json();
-    const imageUrl = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+    const firstImage = data.choices?.[0]?.message?.images?.[0];
+    const imageUrl = firstImage?.image_url?.url ?? firstImage?.imageUrl?.url;
 
     if (!imageUrl) {
       console.error("[COLORING-PAGE] No image in response");

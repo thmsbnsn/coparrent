@@ -12,14 +12,14 @@ Owner: User-assisted
 - Confirm they do not create duplicate family records during onboarding
 - Confirm family-scoped gates work immediately after acceptance
 
-## 2. Restore or replace Lovable-backed AI configuration
+## 2. Verify OpenRouter-backed AI flows end-to-end
 
 Owner: User-assisted
 
-- Restore or confirm `LOVABLE_API_KEY` for `nurse-nancy-chat`, `generate-coloring-page`, and `kid-activity-generator`
-- Decide whether those functions should stay on Lovable or move to another provider
-- Confirm any image-generation secrets required by `generate-coloring-page`
-- Re-test all Lovable-backed AI flows after restoration
+- Deploy the OpenRouter-only AI changes for `nurse-nancy-chat`, `generate-coloring-page`, and `kid-activity-generator`
+- Re-test Nurse Nancy, activity generation, and coloring-page generation against the real target environment
+- Confirm `OPENROUTER_API_KEY` is the only AI secret required in the deployment target
+- Verify image responses from `generate-coloring-page` persist correctly after deployment
 
 ## 3. Run a full billing verification path
 

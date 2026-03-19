@@ -170,7 +170,7 @@ For security architecture, see **`docs/SECURITY_MODEL.md`**.
 - `KidsDashboard` now has smoke coverage for loading, child rendering, and parent/signed-out redirects, and the signed-out redirect now happens in an effect instead of during render.
 - The access-code beta flow has been verified end to end in production for two tester accounts.
 - The production frontend is still behind this local repo and should not be promoted without a preview review.
-- `LOVABLE_API_KEY` was not found in production Edge Function secrets on March 13, 2026, so Lovable-backed AI features remain high-risk until restored or replaced.
+- The repo now standardizes all AI edge functions on OpenRouter; runtime verification for Nurse Nancy, activity generation, and coloring-page generation is still required after deployment.
 - Auth captcha was temporarily disabled in Supabase for controlled QA and should be re-enabled after testing.
 
 For the current operational snapshot, see **`docs/CURRENT_STATUS.md`**.
@@ -288,14 +288,14 @@ No Lovable-specific runtime dependencies exist in the application code.
 ### Current Focus
 
 - Verify invite acceptance and onboarding against the family-membership bootstrap rules
-- Restore or replace missing Lovable-backed AI secrets and test every AI tool end to end
+- Verify the OpenRouter-backed AI tools end to end after deployment
 - Run a live Stripe checkout, webhook, and customer-portal verification pass
 - Validate push delivery on iOS, Android, and desktop with current production config
 - Re-enable auth captcha after controlled QA is complete
 
 ### Known Blocking Issues
 
-- `LOVABLE_API_KEY` is still missing from production Edge Function secrets, so Nurse Nancy, coloring-page generation, and kid-activity generation may fail at runtime.
+- Nurse Nancy, coloring-page generation, and kid-activity generation now target OpenRouter in the repo and still need runtime verification after deployment.
 - The full co-parent and third-party invite-acceptance path still needs a fresh end-to-end regression pass after the new family bootstrap was applied.
 - The current local repo is ahead of the live Vercel frontend, so there is still deployment drift.
 - Auth captcha is temporarily disabled for QA and should be treated as a temporary security exception.
@@ -569,22 +569,19 @@ These non-goals may be revisited post-beta.
 | **Supabase Auth Captcha** | Bot protection on auth flows                              | ⚠️ Temporarily disabled for QA |
 | **Google OAuth**          | Social login                                              | ✅ Active |
 | **Apple OAuth**           | Social login                                              | ✅ Active |
-| **OpenRouter**            | AI message assist + schedule suggestions                  | ✅ Active |
-| **Lovable AI Gateway**    | Nurse Nancy + kid creation tools                          | ⚠️ Secret missing in production |
+| **OpenRouter**            | All AI edge functions                                     | ✅ Active in repo |
 
 ### Environment Variables (Secrets)
 
 - `VITE_SUPABASE_URL` / `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `STRIPE_SECRET_KEY`
 - `RESEND_API_KEY`
-- `LOVABLE_API_KEY` (AI Gateway)
 - `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`
 - `HCAPTCHA_SECRET_KEY`
 - `OPENROUTER_API_KEY` (AI edge functions)
 
 Operational note:
 - `OPENROUTER_API_KEY` is confirmed present in production Edge Function secrets.
-- `LOVABLE_API_KEY` was not present in production Edge Function secrets on March 13, 2026.
 
 ---
 
@@ -606,9 +603,8 @@ CoParrent integrates AI-powered features to help co-parents communicate professi
 
 ### AI Provider Status
 
-- `ai-message-assist` and `ai-schedule-suggest` currently use OpenRouter-backed models.
-- `nurse-nancy-chat`, `kid-activity-generator`, and `generate-coloring-page` currently depend on `LOVABLE_API_KEY`.
-- As of March 13, 2026, the Lovable-backed functions should be treated as unverified in production until that secret is restored or the implementation is changed.
+- All AI edge functions in the repo now use OpenRouter-backed models.
+- The remaining work is deployment-time verification, especially for `nurse-nancy-chat`, `kid-activity-generator`, and `generate-coloring-page`.
 
 Current repo model mapping:
 - `ai-message-assist` -> `google/gemini-2.0-flash-exp:free`
@@ -1482,7 +1478,7 @@ The `.env` file is auto-configured by Lovable Cloud with:
 ### High Priority
 
 - [ ] **Invite Acceptance Regression**: Verify fresh co-parent and third-party invites land users inside the existing family after acceptance
-- [ ] **AI Secret Recovery**: Restore or replace `LOVABLE_API_KEY` and verify Nurse Nancy, activity generation, and coloring-page generation
+- [ ] **AI Runtime Verification**: Verify the OpenRouter-backed Nurse Nancy, activity generation, and coloring-page generation flows in the target environment
 - [ ] **Billing Verification**: Run a live end-to-end Power checkout, webhook, and customer portal test
 - [ ] **Push Device Validation**: Verify production push delivery on iOS, Android, and desktop
 - [ ] **PWA Device Testing**: Run PWA Test Checklist on physical iOS/Android devices

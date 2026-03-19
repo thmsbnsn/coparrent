@@ -79,15 +79,13 @@ This document is the current operational snapshot for the repo and live services
 - OpenRouter-backed functions:
   - `ai-message-assist`
   - `ai-schedule-suggest`
-- Lovable-backed functions:
   - `nurse-nancy-chat`
   - `kid-activity-generator`
   - `generate-coloring-page`
 - `OPENROUTER_API_KEY` is present in production Edge Function secrets.
-- `LOVABLE_API_KEY` was not present in production Edge Function secrets when checked on March 13, 2026.
 - Result:
-  - OpenRouter-backed AI is configured
-  - Lovable-backed AI should still be treated as high-risk or unverified until the secret is restored or the implementation changes
+  - The repo now routes all AI edge functions through OpenRouter only
+  - The remaining AI risk is live runtime verification of Nurse Nancy, activity generation, and coloring-page generation after deployment
 
 ### Current Model Mapping
 
@@ -109,7 +107,7 @@ These are still temporary settings and should be reviewed before promoting new p
 ## Highest-Priority Next Steps
 
 1. Verify co-parent and third-party invite acceptance end to end.
-2. Restore or replace `LOVABLE_API_KEY`, then test all AI tools.
+2. Verify all OpenRouter-backed AI tools end to end after deployment.
 3. Run a real live Stripe checkout and webhook verification.
 4. Validate push notifications and PWA behavior on real devices.
 5. No remaining release-blocking Codex-only local tasks are currently identified; the remaining blockers are live-system verification and product decisions.

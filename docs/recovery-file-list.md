@@ -122,8 +122,8 @@ The workspace now compiles, but some recovered areas are pragmatic reconstructio
   - full co-parent and third-party acceptance regression testing is still pending
 - Remaining backend gap:
   - CLI secret inspection is still blocked, but dashboard inspection on March 13, 2026 confirmed these production Edge Function secrets exist: `RESEND_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_POWER_PRODUCT_ID`, `STRIPE_POWER_PRICE_ID`, `STRIPE_ALLOWED_PRICE_IDS`, `OPENROUTER_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `SUPPORT_EMAIL`, `ALLOWED_ORIGINS`, and `ALLOW_LOCALHOST_ORIGINS`
-  - `LOVABLE_API_KEY` was not present on the production Edge Function secrets page when searched directly
-  - because `nurse-nancy-chat`, `generate-coloring-page`, and `kid-activity-generator` all require `LOVABLE_API_KEY`, those AI features should be treated as high-risk or currently broken until runtime-tested or the secret is restored
+  - historical note: `LOVABLE_API_KEY` was not present on the production Edge Function secrets page when searched directly on March 13, 2026
+  - current repo state no longer depends on `LOVABLE_API_KEY`; all AI edge functions now target OpenRouter and still need runtime verification after deployment
   - the root repo `.env` file still contains malformed content for direct Supabase CLI deploys, so deployments currently need either a clean temp workdir or an env-file cleanup
   - Supabase auth captcha was disabled temporarily for QA and should be re-enabled after testing
 
@@ -131,9 +131,9 @@ The workspace now compiles, but some recovered areas are pragmatic reconstructio
 
 - `ai-message-assist` uses OpenRouter with model `google/gemini-2.0-flash-exp:free`
 - `ai-schedule-suggest` uses OpenRouter with model `google/gemini-2.0-flash-exp:free`
-- `nurse-nancy-chat` uses Lovable AI Gateway with model `google/gemini-3-flash-preview`
+- `nurse-nancy-chat` uses OpenRouter with model `google/gemini-3-flash-preview`
 - `generate-coloring-page` uses `google/gemini-2.5-flash-image-preview`
-- `kid-activity-generator` uses `google/gemini-3-flash-preview`
+- `kid-activity-generator` uses OpenRouter with model `google/gemini-3-flash-preview`
 - `README.md` AI model notes are partly stale because they do not reflect the current multi-model setup across all AI functions
 
 ## Notes

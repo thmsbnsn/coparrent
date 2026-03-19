@@ -31,7 +31,7 @@ Remaining Codex-only backlog:
 ## Tasks That Need User Assistance
 
 1. End-to-end invite acceptance testing with real inboxes and clean accounts.
-2. Restore or replace `LOVABLE_API_KEY` and confirm the long-term provider decision for Lovable-backed AI tools.
+2. Run production verification for the OpenRouter-backed AI tools after deployment.
 3. Run live Stripe checkout, webhook, and customer-portal verification.
 4. Validate push notifications and PWA install behavior on physical iOS, Android, and desktop devices.
 5. Decide whether to re-enable auth captcha and turn off localhost-origin exceptions after QA.

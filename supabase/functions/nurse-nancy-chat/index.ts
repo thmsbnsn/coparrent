@@ -435,9 +435,9 @@ serve(async (req) => {
       { role: "user", content: message }
     ];
 
-    // Call Lovable AI Gateway
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
+    // Call OpenRouter
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY");
+    if (!OPENROUTER_API_KEY) {
       throw new Error("AI service is not configured");
     }
 
@@ -446,11 +446,13 @@ serve(async (req) => {
 
     const planLimits = getPlanLimits(userContext);
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
+        "HTTP-Referer": "https://coparrent.app",
+        "X-Title": "CoParrent Nurse Nancy",
       },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
@@ -471,7 +473,7 @@ serve(async (req) => {
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      console.error(`[NURSE-NANCY] AI error status=${response.status}`);
+      console.error(`[NURSE-NANCY] OpenRouter error status=${response.status}`);
       throw new Error("AI service temporarily unavailable");
     }
 
