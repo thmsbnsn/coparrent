@@ -19,10 +19,11 @@ Completed in this pass:
 9. Burned down the local lint backlog to zero warnings, including typed cleanup across frontend hooks/pages and edge functions plus a targeted Fast Refresh allowlist for intentional companion exports.
 10. Added `ProtectedRoute` integration coverage so auth loading, redirects, parent-only enforcement, and child/third-party routing decisions are exercised through the component, not just pure helpers.
 11. Added `AcceptInvite` component coverage so invalid/expired tokens, pending invite redirects, co-parent acceptance, third-party acceptance, and email-mismatch handling are exercised through the page, not just pure invitation helpers.
+12. Added shared auth-redirect coverage for `Login` and `Signup` so pending invite handoff plus onboarding-versus-dashboard routing is exercised through the real pages after authentication.
 
 Remaining Codex-only backlog:
 
-1. Expand the current regression suite into broader onboarding, family-switching, and post-login smoke coverage after the live-system dependencies are settled.
+1. Expand the current regression suite into broader family-switching, premium-gating, and cross-route post-login smoke coverage after the live-system dependencies are settled.
 
 ## Tasks That Need User Assistance
 

@@ -156,7 +156,7 @@ For security architecture, see **`docs/SECURITY_MODEL.md`**.
 
 - Local `npm run build` succeeds.
 - Local `npm run lint` succeeds with zero warnings.
-- Local `npm run test` succeeds with 38 targeted regression tests.
+- Local `npm run test` succeeds with 44 targeted regression tests.
 - Local `npm run verify` now provides a single lint + test + build verification path.
 - The family-scoped authorization refactor now has a live bootstrap path: parent and guardian accounts create and activate a family membership before family-gated features run.
 - New co-parent invitations are now stamped with `family_id`, so invited users have an existing family to join instead of creating a duplicate family during onboarding.
@@ -164,6 +164,7 @@ For security architecture, see **`docs/SECURITY_MODEL.md`**.
 - Reminder helper logic is now shared and regression-tested, including midnight-safe leave-by calculations and pickup/drop-off responsibility assignment.
 - `ProtectedRoute` now has direct integration coverage for auth loading, redirects, and role/child gating behavior.
 - `AcceptInvite` now has direct component coverage for invalid and expired tokens, pending invite redirects, and both co-parent and third-party acceptance branches.
+- `Login` and `Signup` now have shared redirect coverage for pending invite handoff and onboarding-versus-dashboard routing after family bootstrap.
 - The access-code beta flow has been verified end to end in production for two tester accounts.
 - The production frontend is still behind this local repo and should not be promoted without a preview review.
 - `LOVABLE_API_KEY` was not found in production Edge Function secrets on March 13, 2026, so Lovable-backed AI features remain high-risk until restored or replaced.
@@ -287,7 +288,7 @@ No Lovable-specific runtime dependencies exist in the application code.
 - Restore or replace missing Lovable-backed AI secrets and test every AI tool end to end
 - Run a live Stripe checkout, webhook, and customer-portal verification pass
 - Validate push delivery on iOS, Android, and desktop with current production config
-- Broaden component and smoke coverage around onboarding, family switching, and family-scoped access
+- Broaden component and smoke coverage around family switching, premium gating, and cross-route post-login access
 - Re-enable auth captcha after controlled QA is complete
 
 ### Known Blocking Issues
@@ -1497,7 +1498,7 @@ The `.env` file is auto-configured by Lovable Cloud with:
 
 ### Low Priority / Nice to Have
 
-- [ ] **UI Smoke Coverage**: Extend the current regression suite into broader onboarding, family switching, and post-login smoke checks
+- [ ] **UI Smoke Coverage**: Extend the current regression suite into broader family switching, premium gating, and post-login smoke checks
 - [ ] **Multiple Children Calendars**: Per-child schedule overrides for split custody
 - [ ] **Mileage Tracking**: Exchange location distance tracking and reimbursement
 - [ ] **Integration with Family Law Portals**: Direct court filing integration
