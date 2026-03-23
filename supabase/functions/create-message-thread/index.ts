@@ -28,7 +28,10 @@ serve(async (req) => {
   );
 
   try {
-    logStep("Function started");
+    logStep("Function started", {
+      origin: req.headers.get("Origin"),
+      method: req.method,
+    });
 
     // Authenticate user
     const authHeader = req.headers.get("Authorization");

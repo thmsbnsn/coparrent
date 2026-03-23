@@ -12,6 +12,12 @@ const DEFAULT_ALLOWED_ORIGINS = [
   "https://lovable.dev",
 ];
 
+// Optional wildcard origin patterns for preview environments
+const DEFAULT_ALLOWED_ORIGIN_PATTERNS = [
+  "https://*.lovableproject.com",
+  "https://*.lovable.app",
+];
+
 // Localhost patterns for development
 const LOCALHOST_PATTERNS = [
   /^https?:\/\/localhost(:\d+)?$/,
@@ -24,12 +30,26 @@ const LOCALHOST_PATTERNS = [
  */
 function getAllowedOrigins(): string[] {
   const envOrigins = Deno.env.get("ALLOWED_ORIGINS");
-  
-  if (envOrigins) {
-    return envOrigins.split(",").map((o) => o.trim()).filter(Boolean);
+
+  const configuredOrigins = envOrigins
+    ? envOrigins.split(",").map((origin) => normalizeOrigin(origin)).filter(isNonEmptyString)
+    : [];
+
+  if (configuredOrigins.length > 0) {
+    return configuredOrigins;
   }
-  
-  return DEFAULT_ALLOWED_ORIGINS;
+
+  return DEFAULT_ALLOWED_ORIGINS.map(normalizeOrigin).filter(isNonEmptyString);
+}
+
+function getAllowedOriginPatterns(): string[] {
+  const envPatterns = Deno.env.get("ALLOWED_ORIGIN_PATTERNS");
+
+  const configuredPatterns = envPatterns
+    ? envPatterns.split(",").map((pattern) => pattern.trim()).filter(Boolean)
+    : [];
+
+  return [...DEFAULT_ALLOWED_ORIGIN_PATTERNS, ...configuredPatterns];
 }
 
 function shouldAllowLocalhostOrigins(): boolean {
@@ -46,32 +66,62 @@ function shouldAllowLocalhostOrigins(): boolean {
   return Deno.env.get("DENO_ENV") === "development";
 }
 
+function isNonEmptyString(value: string | null): value is string {
+  return Boolean(value);
+}
+
+function normalizeOrigin(origin: string | null): string | null {
+  if (!origin) {
+    return null;
+  }
+
+  try {
+    return new URL(origin).origin.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function wildcardPatternToRegex(pattern: string): RegExp {
+  return new RegExp(`^${escapeRegex(pattern).replace(/\\\*/g, ".*")}$`, "i");
+}
+
+function isOriginAllowedByPattern(origin: string, pattern: string): boolean {
+  return wildcardPatternToRegex(pattern).test(origin);
+}
+
 /**
  * Validate if an origin is allowed
  */
 export function isOriginAllowed(origin: string | null): boolean {
-  if (!origin) {
+  const normalizedOrigin = normalizeOrigin(origin);
+
+  if (!normalizedOrigin) {
     return false;
   }
 
   // Check allowed origins list
   const allowedOrigins = getAllowedOrigins();
-  if (allowedOrigins.includes(origin)) {
+  if (allowedOrigins.includes(normalizedOrigin)) {
+    return true;
+  }
+
+  const allowedOriginPatterns = getAllowedOriginPatterns();
+  if (allowedOriginPatterns.some((pattern) => isOriginAllowedByPattern(normalizedOrigin, pattern))) {
     return true;
   }
 
   // Allow localhost during explicit QA or local development.
   if (shouldAllowLocalhostOrigins()) {
     for (const pattern of LOCALHOST_PATTERNS) {
-      if (pattern.test(origin)) {
+      if (pattern.test(normalizedOrigin)) {
         return true;
       }
     }
-  }
-
-  // Allow Lovable preview URLs (they use dynamic subdomains)
-  if (origin.includes(".lovableproject.com") || origin.includes(".lovable.app")) {
-    return true;
   }
 
   return false;
