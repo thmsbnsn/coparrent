@@ -1,0 +1,27 @@
+# Default repository owner
+* @thmsbnsn
+
+# Frontend application
+/src/ @thmsbnsn
+/public/ @thmsbnsn
+
+# Backend, database, and platform configuration
+/supabase/ @thmsbnsn
+/.github/ @thmsbnsn
+/vercel.json @thmsbnsn
+
+# Project governance and documentation
+/docs/ @thmsbnsn
+/README.md @thmsbnsn
+/SECURITY.md @thmsbnsn
+
+# Core project configuration
+/package.json @thmsbnsn
+/package-lock.json @thmsbnsn
+/vite.config.ts @thmsbnsn
+/vitest.config.ts @thmsbnsn
+/eslint.config.js @thmsbnsn
+/tsconfig.json @thmsbnsn
+/tsconfig.app.json @thmsbnsn
+/tsconfig.node.json @thmsbnsn
+/tailwind.config.ts @thmsbnsn
