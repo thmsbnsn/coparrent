@@ -8,8 +8,8 @@
 
 import { getBrowserEnvironment } from "@/lib/environment";
 
-export const APP_VERSION = "0.9.0-beta";
-export const BUILD_DATE = "2026-03-19";
+export const APP_VERSION = "0.9.0";
+export const BUILD_DATE = "2026-03-25";
 
 /**
  * Get environment name

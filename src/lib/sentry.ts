@@ -16,7 +16,7 @@ import * as Sentry from "@sentry/react";
 import { getBrowserEnvironment } from "@/lib/environment";
 
 // App version - static for now, can be derived from build metadata later
-export const APP_VERSION = "0.9.0-beta";
+export const APP_VERSION = "0.9.0";
 
 /**
  * Initialize Sentry error monitoring

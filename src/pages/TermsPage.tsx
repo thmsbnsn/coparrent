@@ -1,11 +1,10 @@
 import { motion } from "framer-motion";
-import { FileText, AlertTriangle } from "lucide-react";
+import { FileText } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const TermsPage = () => {
-  const lastUpdated = "January 16, 2026";
+  const lastUpdated = "March 25, 2026";
 
   return (
     <div className="min-h-screen bg-background">
@@ -28,16 +27,6 @@ const TermsPage = () => {
               Last updated: {lastUpdated}
             </p>
           </motion.div>
-
-          {/* Beta Notice */}
-          <Alert className="mb-8 border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800">
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-800 dark:text-amber-200">
-              <strong>Beta Program Notice:</strong> CoParrent is currently in controlled beta. 
-              Some features may be incomplete or change without notice. By using this service, 
-              you acknowledge you are participating in a beta testing program.
-            </AlertDescription>
-          </Alert>
 
           {/* Content */}
           <motion.div
@@ -152,18 +141,17 @@ const TermsPage = () => {
             </section>
 
             <section className="mb-8">
-              <h2 className="text-xl font-display font-semibold mb-4">9. Beta Features</h2>
+              <h2 className="text-xl font-display font-semibold mb-4">9. Service Availability and Updates</h2>
               <p className="text-muted-foreground">
-                During the beta period, certain features may be:
+                We may update, improve, suspend, or retire parts of the Service over time. This may include:
               </p>
               <ul className="list-disc pl-6 text-muted-foreground space-y-2 mt-4">
-                <li>Incomplete or under active development</li>
-                <li>Subject to change without prior notice</li>
+                <li>Feature updates and workflow improvements</li>
+                <li>Reasonable maintenance windows or service interruptions</li>
                 <li>Temporarily unavailable for maintenance</li>
               </ul>
               <p className="text-muted-foreground mt-4">
-                Beta participants are encouraged to report bugs and provide feedback to help 
-                improve the Service.
+                We will use reasonable efforts to communicate material service changes when appropriate.
               </p>
             </section>
 

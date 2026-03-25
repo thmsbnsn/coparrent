@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 // App version - keep in sync with frontend
-const APP_VERSION = "0.9.0-beta";
+const APP_VERSION = "0.9.0";
 
 Deno.serve(async (req) => {
   // Handle CORS preflight

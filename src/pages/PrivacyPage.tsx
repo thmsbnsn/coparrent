@@ -1,11 +1,10 @@
 import { motion } from "framer-motion";
-import { Shield, AlertTriangle } from "lucide-react";
+import { Shield } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const PrivacyPage = () => {
-  const lastUpdated = "January 16, 2026";
+  const lastUpdated = "March 25, 2026";
 
   return (
     <div className="min-h-screen bg-background">
@@ -28,16 +27,6 @@ const PrivacyPage = () => {
               Last updated: {lastUpdated}
             </p>
           </motion.div>
-
-          {/* Beta Notice */}
-          <Alert className="mb-8 border-amber-200 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800">
-            <AlertTriangle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-800 dark:text-amber-200">
-              <strong>Beta Program Notice:</strong> During beta, we may collect additional 
-              diagnostic data to improve the service. This data is anonymized and used solely 
-              for product improvement.
-            </AlertDescription>
-          </Alert>
 
           {/* Content */}
           <motion.div

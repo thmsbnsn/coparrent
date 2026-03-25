@@ -10,10 +10,8 @@ import {
   Trophy,
   CheckCircle,
   ArrowRight,
-  FlaskConical,
   Crown,
   Shield,
-  Clock,
   Zap
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -52,7 +50,6 @@ type FeatureTier = "free" | "premium";
 interface Feature {
   text: string;
   tier?: FeatureTier;
-  beta?: boolean;
 }
 
 interface FeatureGroup {
@@ -64,7 +61,6 @@ interface FeatureGroup {
   features: Feature[];
   image: string;
   tier: FeatureTier;
-  beta?: boolean;
 }
 
 // Organized by USER INTENT
@@ -97,11 +93,10 @@ const featureGroups: FeatureGroup[] = [
       { text: "Coach contact information" },
       { text: "Equipment checklists" },
       { text: "Pickup/dropoff coordination" },
-      { text: "Event reminders", beta: true },
+      { text: "Event reminders" },
     ],
     image: professionalFeature,
     tier: "premium",
-    beta: true,
   },
   // COMMUNICATE CLEARLY
   {
@@ -114,7 +109,7 @@ const featureGroups: FeatureGroup[] = [
       { text: "Timestamped messages with delivery confirmation" },
       { text: "Read receipts for accountability" },
       { text: "Complete, searchable conversation history" },
-      { text: "AI tone assistance for constructive dialogue", tier: "premium", beta: true },
+      { text: "AI tone assistance for constructive dialogue", tier: "premium" },
       { text: "Court-ready message exports", tier: "premium" },
     ],
     image: messagingFeature,
@@ -206,16 +201,7 @@ const featureGroups: FeatureGroup[] = [
 // Group features by category
 const categories = [...new Set(featureGroups.map(f => f.category))];
 
-const TierBadge = ({ tier, beta }: { tier: FeatureTier; beta?: boolean }) => {
-  if (beta) {
-    return (
-      <Badge variant="outline" className="text-xs bg-warning/10 text-warning border-warning/20">
-        <FlaskConical className="w-3 h-3 mr-1" />
-        Beta
-      </Badge>
-    );
-  }
-  
+const TierBadge = ({ tier }: { tier: FeatureTier }) => {
   if (tier === "premium") {
     return (
       <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
@@ -290,10 +276,6 @@ export default function FeaturesPage() {
                 <TierBadge tier="premium" />
                 <span>Power plan</span>
               </span>
-              <span className="flex items-center gap-2">
-                <TierBadge tier="free" beta />
-                <span>In development</span>
-              </span>
             </motion.div>
           </div>
         </div>
@@ -339,7 +321,7 @@ export default function FeaturesPage() {
                           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10">
                             <feature.icon className="w-6 h-6 text-primary" />
                           </div>
-                          <TierBadge tier={feature.tier} beta={feature.beta} />
+                          <TierBadge tier={feature.tier} />
                         </div>
                         
                         <h2 className="text-2xl sm:text-3xl font-display font-bold mb-3">
@@ -359,11 +341,6 @@ export default function FeaturesPage() {
                                 {item.tier === "premium" && (
                                   <Badge variant="outline" className="text-xs bg-primary/5 text-primary/80 border-primary/15">
                                     Power
-                                  </Badge>
-                                )}
-                                {item.beta && (
-                                  <Badge variant="outline" className="text-xs bg-warning/5 text-warning/80 border-warning/15">
-                                    Beta
                                   </Badge>
                                 )}
                               </span>

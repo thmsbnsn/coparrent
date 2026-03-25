@@ -1,12 +1,12 @@
 import { cn } from "@/lib/utils";
-import { FlaskConical, Sparkles, CheckCircle, Clock } from "lucide-react";
+import { Sparkles, CheckCircle, Clock } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 
-export type FeatureStatus = "stable" | "beta" | "coming_soon" | "new";
+export type FeatureStatus = "stable" | "coming_soon" | "new";
 
 interface FeatureStatusBadgeProps {
   status: FeatureStatus;
@@ -18,7 +18,7 @@ const statusConfig: Record<
   FeatureStatus,
   {
     label: string;
-    icon: typeof FlaskConical;
+    icon: typeof CheckCircle;
     className: string;
     tooltip: string;
   }
@@ -28,12 +28,6 @@ const statusConfig: Record<
     icon: CheckCircle,
     className: "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20",
     tooltip: "This feature is fully tested and production-ready.",
-  },
-  beta: {
-    label: "Beta",
-    icon: FlaskConical,
-    className: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
-    tooltip: "This feature is under active development. Expect occasional changes.",
   },
   coming_soon: {
     label: "Coming Soon",
@@ -93,12 +87,12 @@ export const FEATURE_STATUS: Record<string, FeatureStatus> = {
   documents: "stable",
   expenses: "stable",
   
-  // Beta features
-  sports: "beta",
-  gifts: "beta",
-  kid_center: "beta",
-  ai_message_assist: "beta",
-  ai_schedule_suggest: "beta",
+  // Recent additions
+  sports: "new",
+  gifts: "new",
+  kid_center: "new",
+  ai_message_assist: "new",
+  ai_schedule_suggest: "new",
   journal: "stable",
   
   // Coming soon

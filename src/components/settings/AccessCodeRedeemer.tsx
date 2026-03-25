@@ -129,7 +129,7 @@ export function AccessCodeRedeemer({ onRedeemed }: AccessCodeRedeemerProps) {
           Redeem Access Code
         </CardTitle>
         <CardDescription>
-          Enter a beta or promotional code to unlock complimentary Power access on this account.
+          Enter a promotional or complimentary code to unlock Power access on this account.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

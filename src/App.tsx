@@ -13,7 +13,6 @@ import { RouteErrorBoundary } from "@/components/ui/RouteErrorBoundary";
 import { OfflineIndicator } from "@/components/pwa/OfflineIndicator";
 import { PWAInstallPrompt } from "@/components/pwa/PWAInstallPrompt";
 import { PWAUpdatePrompt } from "@/components/pwa/PWAUpdatePrompt";
-import { BetaBanner } from "@/components/BetaBanner";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
@@ -92,7 +91,6 @@ const App = () => (
             <PWAInstallPrompt />
             <PWAUpdatePrompt />
             <BrowserRouter>
-            <BetaBanner />
             <CookieConsentBanner />
             <Suspense fallback={routeFallback}>
               <Routes>
