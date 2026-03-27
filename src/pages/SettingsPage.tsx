@@ -10,9 +10,12 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { User, Bell, Shield, LogOut, Users, BellOff, Baby } from "lucide-react";
+import { User, Bell, Shield, LogOut, Users, BellOff, Baby, Bug } from "lucide-react";
 import { useSearchParams, Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
+import { MotionPermissionPrompt } from "@/components/feedback/MotionPermissionPrompt";
+import { ProblemReportButton } from "@/components/feedback/ProblemReportButton";
+import { useProblemReport } from "@/components/feedback/useProblemReport";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,6 +68,12 @@ interface Invitation {
 
 const SettingsPage = () => {
   const { user, signOut } = useAuth();
+  const {
+    disableShakeReporting,
+    enableShakeReporting,
+    motionSupport,
+    preferences: problemReportPreferences,
+  } = useProblemReport();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const { checkSubscription } = useSubscription();
@@ -482,6 +491,42 @@ const SettingsPage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25 }}
+          className="rounded-2xl border border-border bg-card p-6"
+        >
+          <div className="flex items-center gap-3 mb-6">
+            <Bug className="w-5 h-5 text-primary" />
+            <h2 className="font-display font-semibold">Support & Feedback</h2>
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Report bugs, confusing flows, or feature requests without leaving the app.
+            </p>
+
+            <MotionPermissionPrompt
+              enabled={problemReportPreferences.shakeEnabled}
+              likelyMobile={motionSupport.likelyMobile}
+              motionPermissionState={problemReportPreferences.motionPermissionState}
+              onDisable={disableShakeReporting}
+              onEnable={enableShakeReporting}
+              permissionRequired={motionSupport.permissionRequired}
+              secure={motionSupport.secure}
+              supported={motionSupport.supported}
+            />
+
+            <div className="flex flex-wrap gap-3">
+              <ProblemReportButton>Open report form</ProblemReportButton>
+              <Button asChild variant="ghost">
+                <Link to="/help/contact">More support options</Link>
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.28 }}
           className="rounded-2xl border border-border bg-card p-6"
         >
           <div className="flex items-center gap-3 mb-6">

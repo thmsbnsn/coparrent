@@ -27,6 +27,7 @@ import {
   Scale,
   Rocket,
 } from "lucide-react";
+import { ProblemReportButton } from "@/components/feedback/ProblemReportButton";
 import { HelpBanner, HelpCard, HelpGrid, HelpNotice, HelpPageLayout, HelpStep } from "@/components/help/HelpPage";
 
 const CheckItem = ({ children }: { children: React.ReactNode }) => (
@@ -1027,6 +1028,17 @@ export const HelpContact = () => (
             </a>
           </div>
         </div>
+      </div>
+    </section>
+
+    <section>
+      <div className="rounded-2xl border border-border bg-card p-6">
+        <h2 className="text-xl font-display font-semibold mb-2">Report a problem inside the app</h2>
+        <p className="text-muted-foreground mb-4">
+          If you are already signed in, you can send a structured report with the current page,
+          app version, and device details attached automatically.
+        </p>
+        <ProblemReportButton>Open report form</ProblemReportButton>
       </div>
     </section>
 

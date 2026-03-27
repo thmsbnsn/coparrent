@@ -15,6 +15,7 @@ import { PWAInstallPrompt } from "@/components/pwa/PWAInstallPrompt";
 import { PWAUpdatePrompt } from "@/components/pwa/PWAUpdatePrompt";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { ProblemReportProvider } from "@/components/feedback/ProblemReportContext";
 
 const Index = lazy(() => import("./pages/Index"));
 const Pricing = lazy(() => import("./pages/Pricing"));
@@ -91,6 +92,7 @@ const App = () => (
             <PWAInstallPrompt />
             <PWAUpdatePrompt />
             <BrowserRouter>
+            <ProblemReportProvider>
             <CookieConsentBanner />
             <Suspense fallback={routeFallback}>
               <Routes>
@@ -174,6 +176,7 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
+            </ProblemReportProvider>
             </BrowserRouter>
             </FamilyProvider>
           </AuthProvider>
