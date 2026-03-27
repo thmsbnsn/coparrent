@@ -539,6 +539,213 @@ export type Database = {
           },
         ]
       }
+      call_events: {
+        Row: {
+          actor_display_name: string | null
+          actor_profile_id: string | null
+          actor_role_snapshot: Database["public"]["Enums"]["member_role"] | null
+          call_session_id: string
+          created_at: string
+          event_type: Database["public"]["Enums"]["call_event_type"]
+          id: string
+          payload: Json
+        }
+        Insert: {
+          actor_display_name?: string | null
+          actor_profile_id?: string | null
+          actor_role_snapshot?: Database["public"]["Enums"]["member_role"] | null
+          call_session_id: string
+          created_at?: string
+          event_type: Database["public"]["Enums"]["call_event_type"]
+          id?: string
+          payload?: Json
+        }
+        Update: {
+          actor_display_name?: string | null
+          actor_profile_id?: string | null
+          actor_role_snapshot?: Database["public"]["Enums"]["member_role"] | null
+          call_session_id?: string
+          created_at?: string
+          event_type?: Database["public"]["Enums"]["call_event_type"]
+          id?: string
+          payload?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_events_actor_profile_id_fkey"
+            columns: ["actor_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_events_call_session_id_fkey"
+            columns: ["call_session_id"]
+            isOneToOne: false
+            referencedRelation: "call_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_participants: {
+        Row: {
+          call_session_id: string
+          created_at: string
+          display_name_snapshot: string | null
+          id: string
+          joined_at: string | null
+          left_at: string | null
+          member_role_snapshot: Database["public"]["Enums"]["member_role"]
+          profile_id: string
+        }
+        Insert: {
+          call_session_id: string
+          created_at?: string
+          display_name_snapshot?: string | null
+          id?: string
+          joined_at?: string | null
+          left_at?: string | null
+          member_role_snapshot: Database["public"]["Enums"]["member_role"]
+          profile_id: string
+        }
+        Update: {
+          call_session_id?: string
+          created_at?: string
+          display_name_snapshot?: string | null
+          id?: string
+          joined_at?: string | null
+          left_at?: string | null
+          member_role_snapshot?: Database["public"]["Enums"]["member_role"]
+          profile_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_participants_call_session_id_fkey"
+            columns: ["call_session_id"]
+            isOneToOne: false
+            referencedRelation: "call_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_participants_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_sessions: {
+        Row: {
+          answered_at: string | null
+          callee_display_name: string | null
+          callee_profile_id: string
+          callee_role_snapshot: Database["public"]["Enums"]["member_role"]
+          call_type: Database["public"]["Enums"]["call_type"]
+          created_at: string
+          daily_room_name: string
+          daily_room_url: string
+          ended_at: string | null
+          ended_by_profile_id: string | null
+          failed_reason: string | null
+          family_id: string
+          id: string
+          initiator_display_name: string | null
+          initiator_profile_id: string
+          initiator_role_snapshot: Database["public"]["Enums"]["member_role"]
+          room_expires_at: string | null
+          source: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["call_status"]
+          thread_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          answered_at?: string | null
+          callee_display_name?: string | null
+          callee_profile_id: string
+          callee_role_snapshot: Database["public"]["Enums"]["member_role"]
+          call_type: Database["public"]["Enums"]["call_type"]
+          created_at?: string
+          daily_room_name: string
+          daily_room_url: string
+          ended_at?: string | null
+          ended_by_profile_id?: string | null
+          failed_reason?: string | null
+          family_id: string
+          id?: string
+          initiator_display_name?: string | null
+          initiator_profile_id: string
+          initiator_role_snapshot: Database["public"]["Enums"]["member_role"]
+          room_expires_at?: string | null
+          source?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["call_status"]
+          thread_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          answered_at?: string | null
+          callee_display_name?: string | null
+          callee_profile_id?: string
+          callee_role_snapshot?: Database["public"]["Enums"]["member_role"]
+          call_type?: Database["public"]["Enums"]["call_type"]
+          created_at?: string
+          daily_room_name?: string
+          daily_room_url?: string
+          ended_at?: string | null
+          ended_by_profile_id?: string | null
+          failed_reason?: string | null
+          family_id?: string
+          id?: string
+          initiator_display_name?: string | null
+          initiator_profile_id?: string
+          initiator_role_snapshot?: Database["public"]["Enums"]["member_role"]
+          room_expires_at?: string | null
+          source?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["call_status"]
+          thread_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_sessions_callee_profile_id_fkey"
+            columns: ["callee_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_sessions_ended_by_profile_id_fkey"
+            columns: ["ended_by_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_sessions_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "families"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_sessions_initiator_profile_id_fkey"
+            columns: ["initiator_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_sessions_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "message_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       child_activities: {
         Row: {
           child_id: string
@@ -3152,6 +3359,10 @@ export type Database = {
         Args: { _document_id: string; _user_id: string }
         Returns: boolean
       }
+      can_access_call_session: {
+        Args: { _call_session_id: string; _user_id: string }
+        Returns: boolean
+      }
       can_access_thread: {
         Args: { _thread_id: string; _user_id: string }
         Returns: boolean
@@ -3290,6 +3501,26 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "moderator" | "user"
+      call_event_type:
+        | "created"
+        | "ringing"
+        | "accepted"
+        | "declined"
+        | "missed"
+        | "cancelled"
+        | "joined"
+        | "left"
+        | "ended"
+        | "failed"
+      call_status:
+        | "ringing"
+        | "accepted"
+        | "declined"
+        | "missed"
+        | "cancelled"
+        | "ended"
+        | "failed"
+      call_type: "audio" | "video"
       creation_type: "activity" | "coloring_page"
       member_role: "parent" | "guardian" | "third_party" | "child"
       thread_type: "family_channel" | "direct_message" | "group_chat"
@@ -3421,6 +3652,28 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "moderator", "user"],
+      call_event_type: [
+        "created",
+        "ringing",
+        "accepted",
+        "declined",
+        "missed",
+        "cancelled",
+        "joined",
+        "left",
+        "ended",
+        "failed",
+      ],
+      call_status: [
+        "ringing",
+        "accepted",
+        "declined",
+        "missed",
+        "cancelled",
+        "ended",
+        "failed",
+      ],
+      call_type: ["audio", "video"],
       creation_type: ["activity", "coloring_page"],
       member_role: ["parent", "guardian", "third_party", "child"],
       thread_type: ["family_channel", "direct_message", "group_chat"],

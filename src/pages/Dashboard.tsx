@@ -8,20 +8,23 @@
  * LAW 2: Summary cards answer "what's happening today" before detail
  * LAW 3: Ownership uses parent-a semantic tokens for user distinction
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Calendar, MessageSquare, Users, ArrowRight, Clock, BookHeart } from "lucide-react";
+import { Calendar, MessageSquare, Users, ArrowRight, Clock, BookHeart, DollarSign } from "lucide-react";
 import { Link } from "react-router-dom";
-import { format, differenceInYears, isToday, isTomorrow, parseISO } from "date-fns";
+import { format, differenceInYears, parseISO } from "date-fns";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { ExchangeCheckin } from "@/components/exchange/ExchangeCheckin";
 import { SubscriptionBanner } from "@/components/dashboard/SubscriptionBanner";
-import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useCallSessions } from "@/hooks/useCallSessions";
+import { useCallableFamilyMembers, type CallableFamilyMember } from "@/hooks/useCallableFamilyMembers";
+import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { useRealtimeChildren } from "@/hooks/useRealtimeChildren";
+import { DashboardCallWidget } from "@/components/calls/DashboardCallWidget";
 import { BlogDashboardCard } from "@/components/dashboard/BlogDashboardCard";
 import { resolveSenderName } from "@/lib/displayResolver";
 import type { Tables } from "@/integrations/supabase/types";
@@ -31,6 +34,7 @@ type CustodySchedule = Tables<"custody_schedules">;
 
 interface RecentMessage {
   id: string;
+  thread_id: string;
   content: string;
   created_at: string;
   sender_id: string;
@@ -39,7 +43,15 @@ interface RecentMessage {
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { isParent, profileId: activeProfileId } = useFamilyRole();
   const { children: realtimeChildren, loading: childrenLoading } = useRealtimeChildren();
+  const { loading: callableMembersLoading, members: callableMembers } = useCallableFamilyMembers();
+  const {
+    activeSession,
+    createCall,
+    incomingSession,
+    sessions,
+  } = useCallSessions(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [coParent, setCoParent] = useState<Profile | null>(null);
   const [messages, setMessages] = useState<RecentMessage[]>([]);
@@ -104,6 +116,7 @@ const Dashboard = () => {
 
             const messagesWithSenders: RecentMessage[] = messagesData.map(msg => ({
               id: msg.id,
+              thread_id: msg.thread_id,
               content: msg.content,
               created_at: msg.created_at,
               sender_id: msg.sender_id,
@@ -184,7 +197,7 @@ const Dashboard = () => {
     if (profile?.full_name) {
       return profile.full_name.split(" ")[0];
     }
-    return "there";
+    return "";
   };
 
   const formatMessageTime = (timestamp: string) => {
@@ -198,6 +211,32 @@ const Dashboard = () => {
     return format(date, "MMM d");
   };
 
+  const dashboardOutgoingSession = useMemo(() => {
+    if (!activeProfileId) {
+      return null;
+    }
+
+    return (
+      sessions.find(
+        (session) =>
+          session.status === "ringing" &&
+          session.initiator_profile_id === activeProfileId &&
+          session.source === "dashboard",
+      ) ?? null
+    );
+  }, [activeProfileId, sessions]);
+
+  const handleStartDashboardCall = useCallback(
+    async (contact: CallableFamilyMember, callType: "audio" | "video") => {
+      await createCall({
+        callType,
+        calleeProfileId: contact.profileId,
+        source: "dashboard",
+      });
+    },
+    [createCall],
+  );
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -207,6 +246,59 @@ const Dashboard = () => {
       </DashboardLayout>
     );
   }
+
+  const quickLinks = [
+    {
+      label: "Calendar",
+      description: schedule ? "Review the current schedule" : "Set up parenting time",
+      href: "/dashboard/calendar",
+      icon: Calendar,
+    },
+    {
+      label: "Messages",
+      description: messages.length > 0 ? "See the latest thread activity" : "Start a clean written record",
+      href: "/dashboard/messages",
+      icon: MessageSquare,
+    },
+    {
+      label: "Children",
+      description: children.length > 0 ? "Open profiles and health info" : "Add your child details",
+      href: "/dashboard/children",
+      icon: Users,
+    },
+    {
+      label: "Expenses",
+      description: "Track reimbursements and shared costs",
+      href: "/dashboard/expenses",
+      icon: DollarSign,
+    },
+  ];
+
+  const heroTitle = getFirstName() ? `${getGreeting()}, ${getFirstName()}` : "Your co-parenting dashboard";
+  const heroEyebrow = coParent ? "Family connected" : "Finish setup";
+  const heroDescription = coParent
+    ? "Check the plan, review recent communication, and jump into the next task without digging through the full app."
+    : "You have the workspace ready. Link your co-parent, add the schedule, and keep the important records in one place.";
+  const statusCards = [
+    {
+      label: "Children",
+      value: children.length.toString(),
+      detail: children.length > 0 ? "profiles ready" : "add your first child",
+      icon: Users,
+    },
+    {
+      label: isExchangeDay() ? "Today" : "Schedule",
+      value: schedule ? (isExchangeDay() ? "Exchange day" : "Active") : "Not set",
+      detail: schedule ? "calendar is available" : "build your parenting plan",
+      icon: Calendar,
+    },
+    {
+      label: "Journal",
+      value: journalCount.toString(),
+      detail: journalCount > 0 ? "entries this month" : "good place for exchange notes",
+      icon: BookHeart,
+    },
+  ];
 
   return (
     <DashboardLayout>
@@ -218,23 +310,70 @@ const Dashboard = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+          className="rounded-3xl border border-border bg-gradient-to-br from-primary/10 via-background to-accent/10 p-5 sm:p-6"
         >
-          <div>
-            <h1 className="text-2xl lg:text-3xl font-display font-bold">
-              {getGreeting()}, {getFirstName()}
-            </h1>
-            <p className="text-muted-foreground mt-1">
-              Here's what's happening with your co-parenting schedule
-            </p>
+          <div className="flex flex-col gap-5">
+            <div className="space-y-3">
+              <div className="inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                {heroEyebrow}
+              </div>
+              <div className="space-y-2">
+                <h1 className="text-2xl font-display font-bold tracking-tight sm:text-3xl">
+                  {heroTitle}
+                </h1>
+                <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
+                  {heroDescription}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {statusCards.map(({ label, value, detail, icon: Icon }) => (
+                <div key={label} className="rounded-2xl border bg-card/80 p-4">
+                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <Icon className="h-4 w-4 text-primary" />
+                    {label}
+                  </div>
+                  <p className="mt-3 text-xl font-semibold text-foreground">{value}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              {quickLinks.map(({ label, description, href, icon: Icon }) => (
+                <Button
+                  key={href}
+                  variant="outline"
+                  className="h-auto justify-between rounded-2xl px-4 py-3 text-left"
+                  asChild
+                >
+                  <Link to={href}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">{label}</p>
+                        <p className="text-xs text-muted-foreground">{description}</p>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  </Link>
+                </Button>
+              ))}
+            </div>
           </div>
-          <Button asChild>
-            <Link to="/dashboard/calendar">
-              View Full Calendar
-              <ArrowRight className="ml-2 w-4 h-4" />
-            </Link>
-          </Button>
         </motion.div>
+
+        {isParent && (
+          <DashboardCallWidget
+            contacts={callableMembers}
+            disabled={Boolean(incomingSession || dashboardOutgoingSession || activeSession)}
+            loading={callableMembersLoading}
+            onStartCall={handleStartDashboardCall}
+          />
+        )}
 
         {/* Today's Schedule Card */}
         <motion.div
@@ -255,17 +394,26 @@ const Dashboard = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 rounded-xl bg-parent-a-light border border-parent-a">
-              <p className="text-sm font-medium text-parent-a mb-1">Your parenting time</p>
+              <p className="text-sm font-medium text-parent-a mb-1">
+                {schedule ? "Status today" : "Your parenting time"}
+              </p>
               <p className="text-2xl font-display font-bold text-parent-a">
-                {coParent ? "View calendar for details" : "Set up your schedule"}
+                {schedule ? (isExchangeDay() ? "Exchange day" : "Schedule active") : "Set up your schedule"}
               </p>
               <p className="text-sm text-parent-a/70 mt-2">
-                {coParent ? `Co-parent: ${coParent.full_name || coParent.email}` : "Link with your co-parent to get started"}
+                {coParent
+                  ? `Co-parent: ${coParent.full_name || coParent.email}`
+                  : "Link with your co-parent to get started"}
               </p>
             </div>
             <div className="p-4 rounded-xl bg-muted border border-border">
-              <p className="text-sm font-medium text-muted-foreground mb-1">Quick actions</p>
-              <div className="flex gap-2 mt-2">
+              <p className="text-sm font-medium text-muted-foreground mb-1">Next best move</p>
+              <p className="text-sm text-muted-foreground">
+                {schedule
+                  ? "Open the calendar for timing details or send a written update without leaving the dashboard."
+                  : "Build the schedule first, then use messages and journal entries to document changes cleanly."}
+              </p>
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                 <Button variant="outline" size="sm" asChild>
                   <Link to="/dashboard/calendar">View Schedule</Link>
                 </Button>
@@ -340,7 +488,7 @@ const Dashboard = () => {
                 messages.map((msg) => (
                   <Link
                     key={msg.id}
-                    to="/dashboard/messages"
+                    to={`/dashboard/messages?thread=${msg.thread_id}`}
                     className="block p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
                   >
                     <div className="flex items-center justify-between mb-1">

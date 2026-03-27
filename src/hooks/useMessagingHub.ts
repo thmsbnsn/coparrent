@@ -21,7 +21,7 @@
  * @see useUnreadMessages for unread count tracking
  * @see useTypingIndicator for typing status
  */
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFamilyRole } from "./useFamilyRole";
@@ -37,6 +37,7 @@ import {
 import { ERROR_MESSAGES } from "@/lib/errorMessages";
 
 type ThreadType = Database["public"]["Enums"]["thread_type"];
+type ThreadMessageRow = Database["public"]["Tables"]["thread_messages"]["Row"];
 
 export interface ThreadMessage {
   id: string;
@@ -101,6 +102,7 @@ interface RelatedProfile {
 interface FamilyMemberRow {
   id: string;
   profile_id: string;
+  relationship_label: string | null;
   role: string;
   profiles: RelatedProfile | null;
 }
@@ -117,8 +119,38 @@ interface ReadReceiptRow {
   profiles: Pick<RelatedProfile, "full_name" | "email"> | null;
 }
 
+const formatRelationshipLabel = (relationshipLabel: string | null, role: string) => {
+  const cleaned = relationshipLabel?.trim();
+  if (cleaned) {
+    return cleaned
+      .split(/[_\-\s]+/)
+      .filter(Boolean)
+      .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+      .join(" ");
+  }
+
+  switch (role) {
+    case "guardian":
+      return "Guardian";
+    case "third_party":
+      return "Third-Party Member";
+    default:
+      return "Parent";
+  }
+};
+
 type MessageReadReceiptRealtimeRow =
   Database["public"]["Tables"]["message_read_receipts"]["Row"];
+
+const getThreadActivityTimestamp = (thread: MessageThread) =>
+  thread.last_message?.created_at ?? thread.created_at;
+
+const sortThreadsByActivity = (threadList: MessageThread[]) =>
+  [...threadList].sort(
+    (a, b) =>
+      new Date(getThreadActivityTimestamp(b)).getTime() -
+      new Date(getThreadActivityTimestamp(a)).getTime(),
+  );
 
 export const useMessagingHub = () => {
   const { user } = useAuth();
@@ -132,10 +164,107 @@ export const useMessagingHub = () => {
   const [activeThread, setActiveThread] = useState<MessageThread | null>(null);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [setupError, setSetupError] = useState<string | null>(null);
+
+  const findExistingFamilyChannel = useCallback(async () => {
+    if (!primaryParentId) return null;
+
+    const { data, error } = await supabase
+      .from("message_threads")
+      .select("*")
+      .eq("primary_parent_id", primaryParentId)
+      .eq("thread_type", "family_channel")
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }, [primaryParentId]);
+
+  const findExistingDirectMessage = useCallback(async (otherProfileId: string) => {
+    if (!primaryParentId || !profileId) return null;
+
+    const [participantA, participantB] =
+      profileId < otherProfileId
+        ? [profileId, otherProfileId]
+        : [otherProfileId, profileId];
+
+    const { data, error } = await supabase
+      .from("message_threads")
+      .select("*")
+      .eq("primary_parent_id", primaryParentId)
+      .eq("thread_type", "direct_message")
+      .eq("participant_a_id", participantA)
+      .eq("participant_b_id", participantB)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }, [primaryParentId, profileId]);
+
+  const fallbackEnsureFamilyChannel = useCallback(async () => {
+    if (!primaryParentId) return null;
+
+    const existingChannel = await findExistingFamilyChannel();
+    if (existingChannel) return existingChannel;
+
+    const { data, error } = await supabase
+      .from("message_threads")
+      .insert({
+        primary_parent_id: primaryParentId,
+        thread_type: "family_channel",
+        name: "Family Chat",
+      })
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === "23505") {
+        return await findExistingFamilyChannel();
+      }
+      throw error;
+    }
+
+    return data;
+  }, [findExistingFamilyChannel, primaryParentId]);
+
+  const fallbackGetOrCreateDMThread = useCallback(async (otherProfileId: string) => {
+    if (!primaryParentId || !profileId) return null;
+
+    const existingThread = await findExistingDirectMessage(otherProfileId);
+    if (existingThread) return existingThread;
+
+    const [participantA, participantB] =
+      profileId < otherProfileId
+        ? [profileId, otherProfileId]
+        : [otherProfileId, profileId];
+
+    const { data, error } = await supabase
+      .from("message_threads")
+      .insert({
+        primary_parent_id: primaryParentId,
+        thread_type: "direct_message",
+        participant_a_id: participantA,
+        participant_b_id: participantB,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === "23505") {
+        return await findExistingDirectMessage(otherProfileId);
+      }
+      throw error;
+    }
+
+    return data;
+  }, [findExistingDirectMessage, primaryParentId, profileId]);
 
   // Fetch family members
   const fetchFamilyMembers = useCallback(async () => {
-    if (!primaryParentId || !profileId) return;
+    if (!primaryParentId || !profileId) {
+      setFamilyMembers([]);
+      return [] as FamilyMember[];
+    }
 
     try {
       // Get parents (primary parent and co-parent)
@@ -184,6 +313,7 @@ export const useMessagingHub = () => {
         .select(`
           id,
           profile_id,
+          relationship_label,
           role,
           profiles!family_members_profile_id_fkey (
             id,
@@ -197,27 +327,90 @@ export const useMessagingHub = () => {
 
       if (thirdParties) {
         (thirdParties as FamilyMemberRow[]).forEach((tp) => {
-          if (tp.profiles) {
-            members.push({
-              id: tp.id,
-              profile_id: tp.profile_id,
-              full_name: tp.profiles.full_name,
-              email: tp.profiles.email,
-              role: tp.role,
-              avatar_url: tp.profiles.avatar_url,
-            });
+          if (members.some((member) => member.profile_id === tp.profile_id)) {
+            return;
           }
+
+          members.push({
+            id: tp.id,
+            profile_id: tp.profile_id,
+            full_name: tp.profiles?.full_name ?? formatRelationshipLabel(tp.relationship_label, tp.role),
+            email: tp.profiles?.email ?? null,
+            role: tp.role,
+            avatar_url: tp.profiles?.avatar_url ?? null,
+          });
         });
       }
 
       setFamilyMembers(members);
+      return members;
     } catch (error) {
       console.error("Error fetching family members:", error);
+      setFamilyMembers([]);
+      return [] as FamilyMember[];
     }
   }, [primaryParentId, profileId]);
 
+  const buildLastMessageMap = useCallback(async (threadIds: string[]) => {
+    const uniqueThreadIds = [...new Set(threadIds)];
+    const lastMessageMap = new Map<string, ThreadMessage>();
+
+    if (uniqueThreadIds.length === 0) {
+      return lastMessageMap;
+    }
+
+    const { data: recentMessages, error: recentMessagesError } = await supabase
+      .from("thread_messages")
+      .select("id, thread_id, sender_id, sender_role, content, created_at")
+      .in("thread_id", uniqueThreadIds)
+      .order("created_at", { ascending: false });
+
+    if (recentMessagesError) {
+      throw recentMessagesError;
+    }
+
+    const latestByThread = new Map<string, ThreadMessageRow>();
+    for (const message of recentMessages || []) {
+      if (!latestByThread.has(message.thread_id)) {
+        latestByThread.set(message.thread_id, message);
+      }
+    }
+
+    const senderIds = [...new Set(Array.from(latestByThread.values()).map((message) => message.sender_id))];
+    const senderNames = new Map<string, string>();
+
+    if (senderIds.length > 0) {
+      const { data: senderProfiles, error: senderProfilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", senderIds);
+
+      if (senderProfilesError) {
+        throw senderProfilesError;
+      }
+
+      for (const profile of senderProfiles || []) {
+        senderNames.set(
+          profile.id,
+          resolveDisplayName({ primary: profile.full_name, fallback: "Family member" }),
+        );
+      }
+    }
+
+    latestByThread.forEach((message, threadId) => {
+      lastMessageMap.set(threadId, {
+        ...message,
+        sender_name: senderNames.get(message.sender_id) || "Family member",
+        is_from_me: message.sender_id === profileId,
+        read_by: [],
+      });
+    });
+
+    return lastMessageMap;
+  }, [profileId]);
+
   // Fetch threads
-  const fetchThreads = useCallback(async () => {
+  const fetchThreads = useCallback(async (visibleFamilyMembers: FamilyMember[] = familyMembers) => {
     if (!primaryParentId || !profileId) return;
 
     try {
@@ -273,28 +466,122 @@ export const useMessagingHub = () => {
                 : thread.participant_a_id;
 
             if (otherParticipantId) {
+              const knownMember = visibleFamilyMembers.find(
+                (member) => member.profile_id === otherParticipantId,
+              );
+
+              if (knownMember) {
+                dmThreads.push({
+                  ...thread,
+                  other_participant: {
+                    id: knownMember.profile_id,
+                    full_name: knownMember.full_name,
+                    email: knownMember.email,
+                    role: knownMember.role,
+                  },
+                });
+                continue;
+              }
+
               const { data: otherProfile } = await supabase
                 .from("profiles")
                 .select("id, full_name, email")
                 .eq("id", otherParticipantId)
-                .single();
+                .maybeSingle();
 
-              dmThreads.push({
-                ...thread,
-                other_participant: otherProfile || undefined,
-              });
+              if (otherProfile) {
+                dmThreads.push({
+                  ...thread,
+                  other_participant: otherProfile || undefined,
+                });
+              }
             }
           }
         }
       }
 
-      setFamilyChannel(channel);
-      setThreads(dmThreads);
-      setGroupChats(groupThreads);
+      const allKnownThreads = channel
+        ? [...dmThreads, ...groupThreads, channel]
+        : [...dmThreads, ...groupThreads];
+      const lastMessageMap = await buildLastMessageMap(allKnownThreads.map((thread) => thread.id));
+      const hydrateThread = (thread: MessageThread) => ({
+        ...thread,
+        last_message: lastMessageMap.get(thread.id),
+      });
+
+      const hydratedFamilyChannel = channel ? hydrateThread(channel) : null;
+      const hydratedThreads = sortThreadsByActivity(dmThreads.map(hydrateThread));
+      const hydratedGroupChats = sortThreadsByActivity(groupThreads.map(hydrateThread));
+
+      setFamilyChannel(hydratedFamilyChannel);
+      setThreads(hydratedThreads);
+      setGroupChats(hydratedGroupChats);
+      if (hydratedFamilyChannel) {
+        setSetupError(null);
+      }
     } catch (error) {
       console.error("Error fetching threads:", error);
     }
-  }, [primaryParentId, profileId]);
+  }, [buildLastMessageMap, familyMembers, primaryParentId, profileId]);
+
+  const applyThreadPreviewUpdate = useCallback(
+    (threadId: string, lastMessage: ThreadMessage) => {
+      const isKnownThread =
+        familyChannel?.id === threadId ||
+        threads.some((thread) => thread.id === threadId) ||
+        groupChats.some((thread) => thread.id === threadId);
+
+      if (!isKnownThread) {
+        void fetchThreads();
+        return;
+      }
+
+      setFamilyChannel((current) =>
+        current?.id === threadId
+          ? {
+              ...current,
+              last_message: lastMessage,
+            }
+          : current,
+      );
+
+      setThreads((current) =>
+        sortThreadsByActivity(
+          current.map((thread) =>
+            thread.id === threadId
+              ? {
+                  ...thread,
+                  last_message: lastMessage,
+                }
+              : thread,
+          ),
+        ),
+      );
+
+      setGroupChats((current) =>
+        sortThreadsByActivity(
+          current.map((thread) =>
+            thread.id === threadId
+              ? {
+                  ...thread,
+                  last_message: lastMessage,
+                }
+              : thread,
+          ),
+        ),
+      );
+
+      setActiveThread((current) =>
+        current?.id === threadId
+          ? {
+              ...current,
+              last_message: lastMessage,
+            }
+          : current,
+      );
+    },
+    [familyChannel?.id, fetchThreads, groupChats, threads],
+  );
 
   // Fetch messages for active thread with read receipts
   const fetchMessages = useCallback(async (threadId: string) => {
@@ -417,6 +704,31 @@ export const useMessagingHub = () => {
 
   // Create or get DM thread via edge function
   const getOrCreateDMThread = async (otherProfileId: string) => {
+    const fallbackToClient = async () => {
+      try {
+        logger.warn("Falling back to client-side direct message thread creation", {
+          profileId,
+          otherProfileId,
+        });
+        const fallbackThread = await fallbackGetOrCreateDMThread(otherProfileId);
+        if (!fallbackThread) return null;
+        await fetchThreads();
+        setSetupError(null);
+        return fallbackThread;
+      } catch (fallbackError) {
+        logger.error("Direct message fallback failed", fallbackError, {
+          profileId,
+          otherProfileId,
+        });
+        toast({
+          title: "Error",
+          description: "Failed to start conversation",
+          variant: "destructive",
+        });
+        return null;
+      }
+    };
+
     try {
       const { data, error } = await supabase.functions.invoke("create-message-thread", {
         body: {
@@ -426,35 +738,31 @@ export const useMessagingHub = () => {
       });
 
       if (error) {
-        console.error("Error creating DM thread:", error);
-        toast({
-          title: "Error",
-          description: "Failed to start conversation",
-          variant: "destructive",
+        logger.warn("Edge function direct message creation failed; trying fallback", error, {
+          profileId,
+          otherProfileId,
         });
-        return null;
+        return await fallbackToClient();
       }
 
       if (!data?.success) {
-        console.error("Failed to create DM thread:", data?.error);
-        toast({
-          title: "Error",
-          description: data?.error || "Failed to start conversation",
-          variant: "destructive",
+        logger.warn("Edge function direct message creation returned unsuccessful response", {
+          profileId,
+          otherProfileId,
+          error: data?.error,
         });
-        return null;
+        return await fallbackToClient();
       }
 
       await fetchThreads();
+      setSetupError(null);
       return data.thread;
     } catch (error) {
-      console.error("Error creating DM thread:", error);
-      toast({
-        title: "Error",
-        description: "Failed to start conversation",
-        variant: "destructive",
+      logger.warn("Direct message creation threw before completion; trying fallback", error, {
+        profileId,
+        otherProfileId,
       });
-      return null;
+      return await fallbackToClient();
     }
   };
 
@@ -505,6 +813,31 @@ export const useMessagingHub = () => {
   // Create family channel via edge function
   const ensureFamilyChannel = async () => {
     if (familyChannel) return familyChannel;
+    if (!primaryParentId) return null;
+
+    const fallbackToClient = async () => {
+      try {
+        logger.warn("Falling back to client-side family channel creation", {
+          profileId,
+          primaryParentId,
+        });
+        const fallbackThread = await fallbackEnsureFamilyChannel();
+        if (!fallbackThread) {
+          setSetupError("Messaging setup could not finish. Try refreshing the conversation list.");
+          return null;
+        }
+        setFamilyChannel(fallbackThread);
+        setSetupError(null);
+        return fallbackThread;
+      } catch (fallbackError) {
+        logger.error("Family channel fallback failed", fallbackError, {
+          profileId,
+          primaryParentId,
+        });
+        setSetupError("Messaging setup could not finish. Try refreshing the conversation list.");
+        return null;
+      }
+    };
 
     try {
       const { data, error } = await supabase.functions.invoke("create-message-thread", {
@@ -514,20 +847,31 @@ export const useMessagingHub = () => {
       });
 
       if (error) {
-        console.error("Error creating family channel:", error);
-        return null;
+        logger.warn("Edge function family channel creation failed; trying fallback", error, {
+          profileId,
+          primaryParentId,
+        });
+        return await fallbackToClient();
       }
 
       if (!data?.success) {
-        console.error("Failed to create family channel:", data?.error);
-        return null;
+        logger.warn("Edge function family channel creation returned unsuccessful response", {
+          profileId,
+          primaryParentId,
+          error: data?.error,
+        });
+        return await fallbackToClient();
       }
 
       setFamilyChannel(data.thread);
+      setSetupError(null);
       return data.thread;
     } catch (error) {
-      console.error("Error creating family channel:", error);
-      return null;
+      logger.warn("Family channel creation threw before completion; trying fallback", error, {
+        profileId,
+        primaryParentId,
+      });
+      return await fallbackToClient();
     }
   };
 
@@ -537,7 +881,8 @@ export const useMessagingHub = () => {
       if (roleLoading || !primaryParentId) return;
       
       setLoading(true);
-      await Promise.all([fetchFamilyMembers(), fetchThreads()]);
+      const members = await fetchFamilyMembers();
+      await fetchThreads(members);
       setLoading(false);
     };
 
@@ -550,6 +895,98 @@ export const useMessagingHub = () => {
       fetchMessages(activeThread.id);
     }
   }, [activeThread, fetchMessages]);
+
+  useEffect(() => {
+    if (!primaryParentId || !profileId) return;
+
+    const channel = supabase
+      .channel(`message-thread-metadata-${primaryParentId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "message_threads",
+          filter: `primary_parent_id=eq.${primaryParentId}`,
+        },
+        () => {
+          void fetchThreads();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "group_chat_participants",
+        },
+        () => {
+          void fetchThreads();
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchThreads, primaryParentId, profileId]);
+
+  useEffect(() => {
+    if (!primaryParentId || !profileId) return;
+
+    const channel = supabase
+      .channel(`message-thread-previews-${primaryParentId}-${profileId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "thread_messages",
+        },
+        async (payload) => {
+          const newMessage = payload.new as ThreadMessageRow;
+          const knownThreadIds = new Set([
+            ...(familyChannel ? [familyChannel.id] : []),
+            ...threads.map((thread) => thread.id),
+            ...groupChats.map((thread) => thread.id),
+          ]);
+
+          if (!knownThreadIds.has(newMessage.thread_id)) {
+            const { data: threadRecord } = await supabase
+              .from("message_threads")
+              .select("primary_parent_id")
+              .eq("id", newMessage.thread_id)
+              .maybeSingle();
+
+            if (threadRecord?.primary_parent_id === primaryParentId) {
+              await fetchThreads();
+            }
+            return;
+          }
+
+          const { data: senderProfile } = await supabase
+            .from("profiles")
+            .select("full_name, email")
+            .eq("id", newMessage.sender_id)
+            .maybeSingle();
+
+          applyThreadPreviewUpdate(newMessage.thread_id, {
+            ...newMessage,
+            sender_name: resolveDisplayName({
+              primary: senderProfile?.full_name,
+              fallback: "Family member",
+            }),
+            is_from_me: newMessage.sender_id === profileId,
+            read_by: [],
+          });
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [applyThreadPreviewUpdate, familyChannel, fetchThreads, groupChats, primaryParentId, profileId, threads]);
 
   // Subscribe to realtime updates for messages
   useEffect(() => {
@@ -683,5 +1120,6 @@ export const useMessagingHub = () => {
     createGroupChat,
     ensureFamilyChannel,
     fetchThreads,
+    setupError,
   };
 };

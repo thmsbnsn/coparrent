@@ -3,6 +3,7 @@ import { Loader2, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { MessageToneAssistant } from "@/components/messages/MessageToneAssistant";
 
 interface DeliberateComposerProps {
   onSend: (message: string) => Promise<void> | void;
@@ -69,6 +70,12 @@ export const DeliberateComposer = ({
           rows={4}
           maxLength={4000}
           className="min-h-[110px] resize-none border-0 px-0 shadow-none focus-visible:ring-0"
+        />
+
+        <MessageToneAssistant
+          message={value}
+          onRephrase={setValue}
+          className="mt-3"
         />
 
         <div className="mt-3 flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">

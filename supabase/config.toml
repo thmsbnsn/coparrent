@@ -48,6 +48,30 @@ verify_jwt = true
 [functions.create-message-thread]
 verify_jwt = true
 
+[functions.create-call-session]
+verify_jwt = true
+
+[functions.join-call-session]
+verify_jwt = true
+
+[functions.respond-to-call]
+verify_jwt = true
+
+[functions.end-call-session]
+verify_jwt = true
+
+[functions.daily-webhook]
+verify_jwt = false
+
+[functions.apply-daily-calling-schema]
+verify_jwt = false
+
+[functions.accept-invite]
+verify_jwt = true
+
+[functions.repair-invitations-schema]
+verify_jwt = false
+
 [functions.health]
 verify_jwt = false
 
@@ -55,6 +79,9 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.kid-activity-generator]
+verify_jwt = true
+
+[functions.generate-coloring-page]
 verify_jwt = true
 
 [functions.export-user-data]
@@ -67,4 +94,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.send-push]
+verify_jwt = true
+
+[functions.sync-push-subscription]
 verify_jwt = true

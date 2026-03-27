@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { Suspense, lazy, useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -30,6 +30,10 @@ import { TrialBadge } from "@/components/dashboard/TrialBadge";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { FamilySwitcher } from "@/components/family/FamilySwitcher";
+
+const GlobalCallManager = lazy(() =>
+  import("@/components/calls/GlobalCallManager").then((module) => ({ default: module.GlobalCallManager })),
+);
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -250,6 +254,9 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
 
       {/* Onboarding Tooltips */}
       <OnboardingOverlay />
+      <Suspense fallback={null}>
+        <GlobalCallManager />
+      </Suspense>
     </div>
   );
 };

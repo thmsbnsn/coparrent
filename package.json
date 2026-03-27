@@ -12,9 +12,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify:messaging-hub": "node --experimental-strip-types scripts/verify-messaging-hub.ts",
+    "verify:invites": "node --experimental-strip-types scripts/verify-invites.ts",
+    "verify:stripe": "node --experimental-strip-types scripts/verify-stripe.ts",
+    "verify:ai-runtime": "node --experimental-strip-types scripts/verify-ai-runtime.ts",
+    "verify:daily-calls": "node --experimental-strip-types scripts/verify-daily-calls.ts",
+    "verify:push-pwa": "node --experimental-strip-types scripts/verify-push-pwa.ts",
     "verify": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {
+    "@daily-co/daily-js": "^0.89.1",
     "@hookform/resolvers": "^3.10.0",
     "@playwright/test": "^1.57.0",
     "@radix-ui/react-accordion": "^1.2.11",

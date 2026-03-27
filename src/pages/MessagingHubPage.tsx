@@ -3,7 +3,7 @@
  * 
  * @page-role Evidence + Action hybrid
  * 
- * DESIGN SYSTEM ENFORCEMENT (docs/DESIGN_CONSTITUTION.md):
+ * DESIGN SYSTEM ENFORCEMENT:
  * - This is NOT a chat app. This is a recorded communication system under stress.
  * - Messages may be read by attorneys, mediators, and judges.
  * - UI must de-escalate by structure, not by tone alone.
@@ -24,11 +24,10 @@
  * - Collapsed attribution ❌
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { 
   MessageSquare, 
-  Users, 
   Plus,
   Hash,
   FileText,
@@ -62,7 +61,9 @@ import { DeliberateComposer } from "@/components/messages/DeliberateComposer";
 import { ThreadSummaryBar } from "@/components/messages/ThreadSummaryBar";
 import { CourtViewToggle } from "@/components/messages/CourtViewToggle";
 import { PullToRefreshIndicator } from "@/components/messages/PullToRefreshIndicator";
+import { CallActionButtons } from "@/components/calls/CallActionButtons";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useCallSessions } from "@/hooks/useCallSessions";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import jsPDF from "jspdf";
@@ -70,6 +71,7 @@ import autoTable from "jspdf-autotable";
 import { toast } from "sonner";
 import { Check } from "lucide-react";
 import { resolveSenderName } from "@/lib/displayResolver";
+import { useSearchParams } from "react-router-dom";
 
 /**
  * Role labels for attribution - RULE: No reliance on color alone
@@ -99,6 +101,25 @@ const getInitials = (name: string | null | undefined, email: string | null | und
   return email?.substring(0, 2).toUpperCase() || "?";
 };
 
+const formatThreadPreviewTime = (timestamp?: string) => {
+  if (!timestamp) return "";
+
+  const date = new Date(timestamp);
+  const now = new Date();
+  return date.toDateString() === now.toDateString() ? format(date, "h:mm a") : format(date, "MMM d");
+};
+
+const getThreadPreviewText = (thread: MessageThread, fallback: string) => {
+  const content = thread.last_message?.content?.trim();
+  if (!content) return fallback;
+
+  if (thread.thread_type === "direct_message") {
+    return content;
+  }
+
+  return `${resolveSenderName(thread.last_message?.sender_name)}: ${content}`;
+};
+
 const MessagingHubPage = () => {
   const {
     threads,
@@ -116,9 +137,17 @@ const MessagingHubPage = () => {
     createGroupChat,
     ensureFamilyChannel,
     fetchThreads,
+    setupError,
   } = useMessagingHub();
+  const [searchParams] = useSearchParams();
+  const appliedThreadParamRef = useRef<string | null>(null);
+
+  const {
+    createCall,
+    currentThreadCall,
+    incomingSession,
+  } = useCallSessions(activeThread?.id ?? null);
   
-  const { isThirdParty } = useFamilyRole();
   const { typingText, setTyping, clearTyping } = useTypingIndicator(activeThread?.id || null);
   const { 
     totalUnread, 
@@ -136,6 +165,7 @@ const MessagingHubPage = () => {
   const [showGroupConfirm, setShowGroupConfirm] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [creatingGroup, setCreatingGroup] = useState(false);
+  const [startingCallType, setStartingCallType] = useState<"audio" | "video" | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   
@@ -147,9 +177,12 @@ const MessagingHubPage = () => {
 
   // Pull-to-refresh for mobile
   const handleRefresh = useCallback(async () => {
-    await fetchThreads();
-    await refreshUnread();
-  }, [fetchThreads, refreshUnread]);
+    await Promise.all([
+      ensureFamilyChannel(),
+      fetchThreads(),
+      refreshUnread(),
+    ]);
+  }, [ensureFamilyChannel, fetchThreads, refreshUnread]);
 
   const { 
     isRefreshing, 
@@ -162,10 +195,10 @@ const MessagingHubPage = () => {
 
   // Initialize family channel
   useEffect(() => {
-    if (!loading && !familyChannel) {
+    if (!loading && !familyChannel && !setupError) {
       ensureFamilyChannel();
     }
-  }, [loading, familyChannel, ensureFamilyChannel]);
+  }, [loading, familyChannel, ensureFamilyChannel, setupError]);
 
   // Set family channel as default active thread
   useEffect(() => {
@@ -173,6 +206,32 @@ const MessagingHubPage = () => {
       setActiveThread(familyChannel);
     }
   }, [familyChannel, activeThread, setActiveThread]);
+
+  useEffect(() => {
+    const targetThreadId = searchParams.get("thread");
+    if (!targetThreadId || appliedThreadParamRef.current === targetThreadId) {
+      return;
+    }
+
+    const matchingThread =
+      threads.find((thread) => thread.id === targetThreadId) ??
+      groupChats.find((thread) => thread.id === targetThreadId) ??
+      (familyChannel?.id === targetThreadId ? familyChannel : null);
+
+    if (!matchingThread) {
+      return;
+    }
+
+    setActiveThread(matchingThread);
+    setActiveTab(
+      matchingThread.thread_type === "group_chat"
+        ? "groups"
+        : matchingThread.thread_type === "direct_message"
+          ? "direct"
+          : "family",
+    );
+    appliedThreadParamRef.current = targetThreadId;
+  }, [familyChannel, groupChats, searchParams, setActiveThread, threads]);
 
   /**
    * Handle message send - deliberate action
@@ -182,6 +241,51 @@ const MessagingHubPage = () => {
     clearTyping();
     await sendMessage(message);
   }, [clearTyping, sendMessage]);
+
+  useEffect(() => {
+    if (!incomingSession?.thread_id || activeThread?.id === incomingSession.thread_id) {
+      return;
+    }
+
+    const matchingThread =
+      threads.find((thread) => thread.id === incomingSession.thread_id) ??
+      groupChats.find((thread) => thread.id === incomingSession.thread_id) ??
+      (familyChannel?.id === incomingSession.thread_id ? familyChannel : null);
+
+    if (matchingThread) {
+      setActiveThread(matchingThread);
+      setActiveTab(
+        matchingThread.thread_type === "group_chat"
+          ? "groups"
+          : matchingThread.thread_type === "direct_message"
+            ? "direct"
+            : "family",
+      );
+    }
+  }, [activeThread?.id, familyChannel, groupChats, incomingSession?.thread_id, setActiveThread, threads]);
+
+  const handleStartCall = useCallback(
+    async (callType: "audio" | "video") => {
+      if (!activeThread || activeThread.thread_type !== "direct_message" || !activeThread.other_participant?.id) {
+        toast.error("Open a direct message thread before starting a call.");
+        return;
+      }
+
+      setStartingCallType(callType);
+
+      try {
+        await createCall({
+          callType,
+          calleeProfileId: activeThread.other_participant.id,
+          source: "messaging_hub",
+          threadId: activeThread.id,
+        });
+      } finally {
+        setStartingCallType(null);
+      }
+    },
+    [activeThread, createCall],
+  );
 
   /**
    * Export to PDF - Court-ready document
@@ -347,8 +451,20 @@ const MessagingHubPage = () => {
 
   const handleSelectThread = (thread: MessageThread) => {
     setActiveThread(thread);
+    setActiveTab(
+      thread.thread_type === "group_chat"
+        ? "groups"
+        : thread.thread_type === "direct_message"
+          ? "direct"
+          : "family",
+    );
     if (isMobile) setShowSidebar(false);
   };
+
+  const currentThreadTitle = activeThread ? getThreadDisplayName(activeThread) : "Open a conversation";
+  const currentThreadDescription = activeThread
+    ? `${messages.length} message${messages.length === 1 ? "" : "s"} in the current record.`
+    : "Start in the family channel or pick a direct or group thread.";
 
   // Sidebar content - thread navigation
   const SidebarContent = () => {
@@ -375,9 +491,19 @@ const MessagingHubPage = () => {
                   <Hash className="w-5 h-5 text-muted-foreground" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium text-sm">Family Channel</p>
-                  <p className="text-xs text-muted-foreground">
-                    {familyMembers.length} members • Official record
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-sm">Family Channel</p>
+                    {familyChannel.last_message?.created_at && (
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {formatThreadPreviewTime(familyChannel.last_message.created_at)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {getThreadPreviewText(
+                      familyChannel,
+                      `${familyMembers.length} members • Official record`,
+                    )}
                   </p>
                 </div>
                 {showIndicator && getUnreadForThread(familyChannel.id) > 0 && (
@@ -438,11 +564,18 @@ const MessagingHubPage = () => {
                   <UsersRound className="w-5 h-5 text-muted-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">
-                    {thread.name || "Group"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {thread.participants?.length || 0} members
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-sm truncate">
+                      {thread.name || "Group"}
+                    </p>
+                    {thread.last_message?.created_at && (
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {formatThreadPreviewTime(thread.last_message.created_at)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {getThreadPreviewText(thread, `${thread.participants?.length || 0} members`)}
                   </p>
                 </div>
                 {showIndicator && getUnreadForThread(thread.id) > 0 && (
@@ -490,16 +623,24 @@ const MessagingHubPage = () => {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm truncate">
-                    {thread.other_participant?.full_name || 
-                     thread.other_participant?.email || 
-                     "Unknown"}
-                  </p>
-                  {thread.other_participant?.role && (
-                    <div className="mt-0.5">
-                      {getRoleBadge(thread.other_participant.role)}
-                    </div>
-                  )}
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-sm truncate">
+                      {thread.other_participant?.full_name || 
+                       thread.other_participant?.email || 
+                       "Unknown"}
+                    </p>
+                    {thread.last_message?.created_at && (
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {formatThreadPreviewTime(thread.last_message.created_at)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-2">
+                    {thread.other_participant?.role && getRoleBadge(thread.other_participant.role)}
+                    <p className="min-w-0 truncate text-xs text-muted-foreground">
+                      {getThreadPreviewText(thread, "No messages yet")}
+                    </p>
+                  </div>
                 </div>
                 {showIndicator && getUnreadForThread(thread.id) > 0 && (
                   <UnreadBadge count={getUnreadForThread(thread.id)} />
@@ -519,24 +660,29 @@ const MessagingHubPage = () => {
 
     return (
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)} className="flex flex-col h-full">
-        <TabsList className="grid w-full grid-cols-3 mx-2 mb-0" style={{ width: "calc(100% - 16px)" }}>
+        <div className="border-b border-border bg-muted/20 px-3 py-3">
+          <p className="text-xs text-muted-foreground">
+            Family channel is the permanent shared record. Use groups or direct messages for narrower coordination.
+          </p>
+        </div>
+        <TabsList className="grid w-full grid-cols-3 mx-2 mb-0 mt-2" style={{ width: "calc(100% - 16px)" }}>
           <TabsTrigger value="family" className="gap-1 text-xs relative">
             <Hash className="w-3 h-3" />
-            <span className="hidden sm:inline">Family</span>
+            <span>Family</span>
             {familyUnread > 0 && (
               <UnreadBadge count={familyUnread} className="absolute -top-1 -right-1" />
             )}
           </TabsTrigger>
           <TabsTrigger value="groups" className="gap-1 text-xs relative">
             <UsersRound className="w-3 h-3" />
-            <span className="hidden sm:inline">Groups</span>
+            <span>Groups</span>
             {groupsUnread > 0 && (
               <UnreadBadge count={groupsUnread} className="absolute -top-1 -right-1" />
             )}
           </TabsTrigger>
           <TabsTrigger value="direct" className="gap-1 text-xs relative">
             <MessageSquare className="w-3 h-3" />
-            <span className="hidden sm:inline">Direct</span>
+            <span>Direct</span>
             {directUnread > 0 && (
               <UnreadBadge count={directUnread} className="absolute -top-1 -right-1" />
             )}
@@ -598,93 +744,108 @@ const MessagingHubPage = () => {
             animate={{ opacity: 1, y: 0 }}
             className="mb-3 no-print"
           >
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 min-w-0">
-                {isMobile && (
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    className="flex-shrink-0 relative"
-                    onClick={() => setShowSidebar(true)}
-                  >
-                    <Menu className="w-5 h-5" />
-                    {showIndicator && totalUnread > 0 && (
-                      <UnreadBadge 
-                        count={totalUnread} 
-                        className="absolute -top-1 -right-1"
-                        size="sm"
-                      />
-                    )}
-                  </Button>
-                )}
-                <div className="min-w-0">
-                  <h1 className="text-lg md:text-xl font-semibold truncate">
-                    {isMobile && activeThread 
-                      ? getThreadDisplayName(activeThread) 
-                      : "Messages"}
-                  </h1>
-                  {!isMobile && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Recorded communication • All messages are permanent
-                    </p>
+            <div className="rounded-2xl border border-border bg-card p-4">
+              <div className="flex flex-col gap-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 space-y-2">
+                    <div className="inline-flex rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
+                      {courtView ? "Court view active" : "Recorded family communication"}
+                    </div>
+                    <div className="min-w-0">
+                      <h1 className="text-xl font-semibold md:text-2xl">Messaging Hub</h1>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {currentThreadTitle}. {currentThreadDescription}
+                      </p>
+                    </div>
+                  </div>
+                  {showIndicator && totalUnread > 0 && (
+                    <UnreadBadge count={totalUnread} size="md" />
                   )}
                 </div>
-              </div>
-              
-              {/* Action buttons - Court View prominently placed */}
-              <div className="flex gap-1.5 flex-shrink-0">
-                {isMobile && (
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
+
+                {setupError && (
+                  <div className="rounded-xl border border-warning/40 bg-warning/10 p-3">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Messaging setup needs attention</p>
+                        <p className="text-sm text-muted-foreground">{setupError}</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={() => void ensureFamilyChannel()}>
+                        Retry setup
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  {isMobile && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="relative"
+                      onClick={() => setShowSidebar(true)}
+                    >
+                      <Menu className="mr-2 h-4 w-4" />
+                      Conversations
+                      {showIndicator && totalUnread > 0 && (
+                        <UnreadBadge
+                          count={totalUnread}
+                          className="absolute -top-1 -right-1"
+                          size="sm"
+                        />
+                      )}
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={handleRefresh}
                     disabled={isRefreshing}
                   >
-                    <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
+                    <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
+                    Refresh
                   </Button>
-                )}
-                
-                <Button 
-                  variant="ghost" 
-                  size="icon"
-                  onClick={() => setShowSearch(true)}
-                  aria-label="Search messages"
-                >
-                  <Search className="w-4 h-4" />
-                </Button>
 
-                {/* 
-                  Court View Toggle - FIRST-CLASS, NOT SECONDARY
-                  RULE: Must be discoverable and intentional
-                */}
-                <CourtViewToggle
-                  enabled={courtView}
-                  onToggle={() => setCourtView(!courtView)}
-                  compact={isMobile}
-                />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowSearch(true)}
+                    aria-label="Search messages"
+                  >
+                    <Search className="mr-2 h-4 w-4" />
+                    Search
+                  </Button>
 
-                {activeThread && messages.length > 0 && (
-                  <>
-                    {courtView && (
-                      <Button 
-                        variant="outline" 
-                        size="icon"
-                        onClick={handlePrint}
-                        aria-label="Print messages"
+                  <CourtViewToggle
+                    enabled={courtView}
+                    onToggle={() => setCourtView(!courtView)}
+                  />
+
+                  {activeThread && messages.length > 0 && (
+                    <>
+                      {courtView && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handlePrint}
+                          aria-label="Print messages"
+                        >
+                          <Printer className="mr-2 h-4 w-4" />
+                          Print
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExportPDF}
                       >
-                        <Printer className="w-4 h-4" />
+                        <FileText className="mr-2 h-4 w-4" />
+                        Export
                       </Button>
-                    )}
-                    <Button 
-                      variant="outline" 
-                      size={isMobile ? "icon" : "sm"}
-                      onClick={handleExportPDF}
-                    >
-                      <FileText className="w-4 h-4" />
-                      {!isMobile && <span className="ml-2">Export</span>}
-                    </Button>
-                  </>
-                )}
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </motion.div>
@@ -716,6 +877,9 @@ const MessagingHubPage = () => {
                     <UnreadBadge count={totalUnread} size="md" />
                   )}
                 </SheetTitle>
+                <p className="text-sm text-muted-foreground">
+                  Use the family channel for the shared record, then branch into groups or direct messages only when the discussion is narrower.
+                </p>
               </SheetHeader>
               <div className="h-[calc(100%-60px)]">
                 <SidebarContent />
@@ -745,99 +909,125 @@ const MessagingHubPage = () => {
               animate={{ opacity: 1 }}
               className="flex-1 rounded-xl border border-border bg-card overflow-hidden flex flex-col min-w-0"
             >
-              {/* Thread Header - Context for attribution */}
-              {activeThread && (
-                <div className={cn(
-                  "px-4 py-3 border-b border-border flex items-center gap-3",
-                  courtView && "bg-muted/30"
-                )}>
-                  {activeThread.thread_type === "family_channel" ? (
-                    <>
-                      <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                        <Hash className="w-4 h-4 text-muted-foreground" />
-                      </div>
-                      <div className="min-w-0">
-                        <h2 className="font-semibold text-sm">Family Channel</h2>
-                        <p className="text-[11px] text-muted-foreground">
-                          Official family communication record
-                        </p>
-                      </div>
-                    </>
-                  ) : activeThread.thread_type === "group_chat" ? (
-                    <>
-                      <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
-                        <UsersRound className="w-4 h-4 text-muted-foreground" />
-                      </div>
-                      <div className="min-w-0">
-                        <h2 className="font-semibold text-sm truncate">
-                          {activeThread.name || "Group"}
-                        </h2>
-                        <p className="text-[11px] text-muted-foreground truncate">
-                          {activeThread.participants?.map(p => p.full_name || p.email).join(", ")}
-                        </p>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <Avatar className="w-9 h-9 flex-shrink-0">
-                        <AvatarFallback className="text-sm">
-                          {getInitials(
-                            activeThread.other_participant?.full_name,
-                            activeThread.other_participant?.email
+              {activeThread ? (
+                <>
+                  {/* Thread Header - Context for attribution */}
+                  <div className={cn(
+                    "px-4 py-3 border-b border-border flex items-center gap-3",
+                    courtView && "bg-muted/30"
+                  )}>
+                    {activeThread.thread_type === "family_channel" ? (
+                      <>
+                        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                          <Hash className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <h2 className="font-semibold text-sm">Family Channel</h2>
+                          <p className="text-[11px] text-muted-foreground">
+                            Official family communication record
+                          </p>
+                        </div>
+                      </>
+                    ) : activeThread.thread_type === "group_chat" ? (
+                      <>
+                        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                          <UsersRound className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                        <div className="min-w-0">
+                          <h2 className="font-semibold text-sm truncate">
+                            {activeThread.name || "Group"}
+                          </h2>
+                          <p className="text-[11px] text-muted-foreground truncate">
+                            {activeThread.participants?.map(p => p.full_name || p.email).join(", ")}
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Avatar className="w-9 h-9 flex-shrink-0">
+                          <AvatarFallback className="text-sm">
+                            {getInitials(
+                              activeThread.other_participant?.full_name,
+                              activeThread.other_participant?.email
+                            )}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <h2 className="font-semibold text-sm truncate">
+                            {activeThread.other_participant?.full_name ||
+                             activeThread.other_participant?.email ||
+                             "Unknown"}
+                          </h2>
+                          {activeThread.other_participant?.role && (
+                            getRoleBadge(activeThread.other_participant.role)
                           )}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
-                        <h2 className="font-semibold text-sm truncate">
-                          {activeThread.other_participant?.full_name || 
-                           activeThread.other_participant?.email || 
-                           "Unknown"}
-                        </h2>
-                        {activeThread.other_participant?.role && (
-                          getRoleBadge(activeThread.other_participant.role)
-                        )}
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
+                        </div>
+                        <CallActionButtons
+                          disabled={Boolean(currentThreadCall)}
+                          loading={Boolean(startingCallType)}
+                          onStartAudio={() => void handleStartCall("audio")}
+                          onStartVideo={() => void handleStartCall("video")}
+                        />
+                      </>
+                    )}
+                  </div>
 
-              {/* 
-                Thread Summary Bar
-                RULE: Summary Before Scroll - users never scroll to understand urgency
-              */}
-              {activeThread && (
-                <ThreadSummaryBar
-                  unreadCount={showIndicator ? getUnreadForThread(activeThread.id) : 0}
-                  totalMessages={messages.length}
-                  threadType={activeThread.thread_type as "family_channel" | "group_chat" | "direct_message"}
-                  courtView={courtView}
-                  className="no-print"
-                />
-              )}
-
-              {/* 
-                EVIDENCE SECTION - Message History
-                RULE: Evidence and Action must be visually separated
-              */}
-              <EvidencePanel
-                messages={messages}
-                courtView={courtView}
-                className="flex-1"
-              />
-
-              {/* 
-                ACTION SECTION - Deliberate Composer
-                RULE: Feel deliberate, not impulsive
-                RULE: Visually separate drafting from history
-              */}
-              {activeThread && (
-                <div className="no-print">
-                  <DeliberateComposer
-                    onSend={handleSend}
-                    onTyping={setTyping}
-                    placeholder="Compose your message..."
+                  {/* 
+                    Thread Summary Bar
+                    RULE: Summary Before Scroll - users never scroll to understand urgency
+                  */}
+                  <ThreadSummaryBar
+                    unreadCount={showIndicator ? getUnreadForThread(activeThread.id) : 0}
+                    totalMessages={messages.length}
+                    threadType={activeThread.thread_type as "family_channel" | "group_chat" | "direct_message"}
+                    courtView={courtView}
+                    className="no-print"
                   />
+
+                  {/* 
+                    EVIDENCE SECTION - Message History
+                    RULE: Evidence and Action must be visually separated
+                  */}
+                  <EvidencePanel
+                    messages={messages}
+                    courtView={courtView}
+                    className="flex-1"
+                  />
+
+                  {/* 
+                    ACTION SECTION - Deliberate Composer
+                    RULE: Feel deliberate, not impulsive
+                    RULE: Visually separate drafting from history
+                  */}
+                  <div className="no-print">
+                    <DeliberateComposer
+                      onSend={handleSend}
+                      onTyping={setTyping}
+                      placeholder="Compose your message..."
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-1 items-center justify-center p-6">
+                  <div className="w-full max-w-md rounded-2xl border border-dashed border-border bg-muted/20 p-6 text-center">
+                    <MessageSquare className="mx-auto h-10 w-10 text-muted-foreground" />
+                    <h2 className="mt-4 text-lg font-semibold">No conversation loaded yet</h2>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {setupError
+                        ? "Messaging setup is currently blocked for this account in the connected backend. Retry setup or open the conversation list if a thread already exists."
+                        : "Open the conversation list to choose the family channel, a group, or a direct message."}
+                    </p>
+                    <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:justify-center">
+                      {isMobile && (
+                        <Button variant="outline" onClick={() => setShowSidebar(true)}>
+                          Conversations
+                        </Button>
+                      )}
+                      <Button variant="outline" onClick={() => void ensureFamilyChannel()}>
+                        Retry setup
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               )}
             </motion.div>
