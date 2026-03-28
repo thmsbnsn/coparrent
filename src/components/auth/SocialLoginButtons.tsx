@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getOAuthCallbackUrl } from "@/lib/authRedirects";
 
 export const SocialLoginButtons = () => {
   const { toast } = useToast();
@@ -14,7 +15,7 @@ export const SocialLoginButtons = () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/`,
+        redirectTo: getOAuthCallbackUrl(),
       },
     });
 

@@ -8,12 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getPasswordResetRedirectUrl, resolveAuthBaseUrl } from "@/lib/authRedirects";
 
 const ForgotPassword = () => {
   const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const resetHost = new URL(resolveAuthBaseUrl()).host;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,7 +32,7 @@ const ForgotPassword = () => {
     setIsLoading(true);
 
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: getPasswordResetRedirectUrl(),
     });
 
     setIsLoading(false);
@@ -77,6 +79,11 @@ const ForgotPassword = () => {
               <p className="text-sm text-muted-foreground">
                 Didn't receive the email? Check your spam folder or try again.
               </p>
+              <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-left text-sm text-muted-foreground">
+                The reset button should bring you back to <strong>{resetHost}</strong>. Some
+                inboxes scan or rewrite links before redirecting you there, so a security-check
+                hostname can appear first even when the final destination is correct.
+              </div>
               <Button 
                 variant="outline" 
                 className="w-full"
@@ -108,6 +115,10 @@ const ForgotPassword = () => {
                   placeholder="you@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   required
                 />
               </div>

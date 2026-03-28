@@ -14,7 +14,8 @@ import { SocialLoginButtons } from "@/components/auth/SocialLoginButtons";
 import { PasswordStrengthIndicator } from "@/components/auth/PasswordStrengthIndicator";
 import { logger } from "@/lib/logger";
 import { safeErrorMessage } from "@/lib/safeText";
-import { ensureCurrentUserFamilyMembership } from "@/lib/familyMembership";
+import { getEmailConfirmationRedirectUrl } from "@/lib/authRedirects";
+import { resolvePostAuthPath } from "@/lib/postAuthPath";
 
 const Signup = () => {
   const navigate = useNavigate();
@@ -31,38 +32,18 @@ const Signup = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (!loading && user) {
-      // Check for pending invite token (check both session and local storage)
-      const pendingToken = sessionStorage.getItem("pendingInviteToken") || localStorage.getItem("pendingInviteToken");
-      if (pendingToken) {
-        navigate(`/accept-invite?token=${pendingToken}`);
-      } else {
-        // Check if user has completed onboarding by checking if they have children
-        const checkOnboarding = async () => {
-          await ensureCurrentUserFamilyMembership(user.user_metadata?.full_name || user.email || null);
+      let active = true;
 
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("user_id", user.id)
-            .maybeSingle();
-          
-          if (profile) {
-            const { count } = await supabase
-              .from("parent_children")
-              .select("*", { count: "exact", head: true })
-              .eq("parent_id", profile.id);
-            
-            if (count && count > 0) {
-              navigate("/dashboard");
-            } else {
-              navigate("/onboarding");
-            }
-          } else {
-            navigate("/onboarding");
-          }
-        };
-        checkOnboarding();
-      }
+      void (async () => {
+        const path = await resolvePostAuthPath(user);
+        if (active) {
+          navigate(path);
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
     }
   }, [user, loading, navigate]);
 
@@ -80,7 +61,7 @@ const Signup = () => {
 
     setIsLoading(true);
 
-    const redirectUrl = `${window.location.origin}/`;
+    const redirectUrl = getEmailConfirmationRedirectUrl();
 
     const { error } = await supabase.auth.signUp({
       email: formData.email,
@@ -158,6 +139,7 @@ const Signup = () => {
                   placeholder="Enter your full name"
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  autoComplete="name"
                   required
                 />
               </div>
@@ -170,6 +152,10 @@ const Signup = () => {
                   placeholder="you@example.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  autoComplete="email"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   required
                 />
               </div>

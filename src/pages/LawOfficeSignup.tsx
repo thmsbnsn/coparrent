@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { PasswordStrengthIndicator } from "@/components/auth/PasswordStrengthIndicator";
+import { getEmailConfirmationRedirectUrl } from "@/lib/authRedirects";
 
 const LawOfficeSignup = () => {
   const navigate = useNavigate();
@@ -45,7 +46,7 @@ const LawOfficeSignup = () => {
 
     setIsLoading(true);
 
-    const redirectUrl = `${window.location.origin}/`;
+    const redirectUrl = getEmailConfirmationRedirectUrl();
 
     const { error } = await supabase.auth.signUp({
       email: formData.email,
@@ -125,6 +126,7 @@ const LawOfficeSignup = () => {
                   placeholder="Enter your full name"
                   value={formData.fullName}
                   onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
+                  autoComplete="name"
                   required
                 />
               </div>
@@ -137,6 +139,7 @@ const LawOfficeSignup = () => {
                   placeholder="Your law firm's name"
                   value={formData.firmName}
                   onChange={(e) => setFormData({ ...formData, firmName: e.target.value })}
+                  autoComplete="organization"
                   required
                 />
               </div>
@@ -149,6 +152,10 @@ const LawOfficeSignup = () => {
                   placeholder="you@lawfirm.com"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  autoComplete="email"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  spellCheck={false}
                   required
                 />
               </div>
@@ -162,6 +169,7 @@ const LawOfficeSignup = () => {
                     placeholder="Create a password"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    autoComplete="new-password"
                     required
                     minLength={8}
                   />

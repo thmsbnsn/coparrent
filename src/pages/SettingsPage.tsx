@@ -30,6 +30,7 @@ import { ThirdPartyManager } from "@/components/settings/ThirdPartyManager";
 import { PreferencesSettings } from "@/components/settings/PreferencesSettings";
 import { ChildAccountControls } from "@/components/settings/ChildAccountControls";
 import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
+import { PasskeySetup } from "@/components/auth/PasskeySetup";
 import { RecoveryCodes } from "@/components/auth/RecoveryCodes";
 import { SessionManager } from "@/components/auth/SessionManager";
 import { TrustedDevicesManager } from "@/components/auth/TrustedDevicesManager";
@@ -536,6 +537,10 @@ const SettingsPage = () => {
 
           <div className="space-y-4">
             <TwoFactorSetup onStatusChange={setTwoFactorEnabled} />
+
+            <Separator />
+
+            <PasskeySetup />
             
             <RecoveryCodes isEnabled={twoFactorEnabled} />
             

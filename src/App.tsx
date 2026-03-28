@@ -41,6 +41,7 @@ const TermsPage = lazy(() => import("./pages/TermsPage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const Login = lazy(() => import("./pages/Login"));
 const Signup = lazy(() => import("./pages/Signup"));
+const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
@@ -125,6 +126,7 @@ const App = () => (
                 {/* Auth Routes */}
                 <Route path="/login" element={<RouteErrorBoundary routeName="Login"><Login /></RouteErrorBoundary>} />
                 <Route path="/signup" element={<RouteErrorBoundary routeName="Signup"><Signup /></RouteErrorBoundary>} />
+                <Route path="/auth/callback" element={<RouteErrorBoundary routeName="Auth Callback"><AuthCallback /></RouteErrorBoundary>} />
                 <Route path="/forgot-password" element={<RouteErrorBoundary routeName="Forgot Password"><ForgotPassword /></RouteErrorBoundary>} />
                 <Route path="/reset-password" element={<RouteErrorBoundary routeName="Reset Password"><ResetPassword /></RouteErrorBoundary>} />
                 <Route path="/payment-success" element={<RouteErrorBoundary routeName="Payment Success"><PaymentSuccess /></RouteErrorBoundary>} />
