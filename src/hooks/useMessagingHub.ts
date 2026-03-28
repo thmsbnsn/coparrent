@@ -108,6 +108,18 @@ interface FamilyMemberRow {
   profiles: RelatedProfile | null;
 }
 
+interface CallableFamilyMemberRow {
+  avatar_url?: string | null;
+  email?: string | null;
+  full_name?: string | null;
+  id?: string;
+  membership_id?: string;
+  profile_id: string;
+  profiles?: RelatedProfile | null;
+  relationship_label: string | null;
+  role: string;
+}
+
 interface GroupParticipantRow {
   profile_id: string;
   profiles: RelatedProfile | null;
@@ -309,7 +321,7 @@ export const useMessagingHub = () => {
     }
 
     try {
-      const { data: memberships, error } = await supabase
+      const { data: selfMembership, error: selfMembershipError } = await supabase
         .from("family_members")
         .select(`
           id,
@@ -324,24 +336,79 @@ export const useMessagingHub = () => {
           )
         `)
         .eq("family_id", activeFamilyId)
-        .eq("status", "active");
+        .eq("profile_id", profileId)
+        .eq("status", "active")
+        .maybeSingle();
 
-      if (error) {
-        throw error;
+      if (selfMembershipError) {
+        throw selfMembershipError;
       }
 
-      const members = ((memberships as FamilyMemberRow[] | null) ?? [])
-        .filter((member) => member.role !== "child")
-        .map((member) => ({
-          id: member.id,
+      const { data: callableMembers, error: callableMembersError } = await supabase
+        .rpc("get_callable_family_members", {
+          p_family_id: activeFamilyId,
+        })
+        .returns<CallableFamilyMemberRow[]>();
+
+      let visibleMembers = (callableMembers as CallableFamilyMemberRow[] | null) ?? [];
+
+      if (callableMembersError) {
+        console.warn("Callable family member lookup failed, falling back to direct membership query:", callableMembersError);
+
+        const fallbackResult = await supabase
+          .from("family_members")
+          .select(`
+            id,
+            profile_id,
+            relationship_label,
+            role,
+            profiles!family_members_profile_id_fkey (
+              id,
+              full_name,
+              email,
+              avatar_url
+            )
+          `)
+          .eq("family_id", activeFamilyId)
+          .eq("status", "active")
+          .neq("profile_id", profileId);
+
+        if (fallbackResult.error) {
+          throw fallbackResult.error;
+        }
+
+        visibleMembers = (fallbackResult.data as CallableFamilyMemberRow[] | null) ?? [];
+      }
+
+      const membersByProfileId = new Map<string, FamilyMember>();
+      const upsertMember = (member: CallableFamilyMemberRow | FamilyMemberRow | null) => {
+        if (!member || member.role === "child") {
+          return;
+        }
+
+        membersByProfileId.set(member.profile_id, {
+          id: "membership_id" in member && member.membership_id ? member.membership_id : member.id,
           profile_id: member.profile_id,
           full_name:
+            ("full_name" in member ? member.full_name : null) ??
             member.profiles?.full_name ??
             formatRelationshipLabel(member.relationship_label, member.role),
-          email: member.profiles?.email ?? null,
+          email:
+            ("email" in member ? member.email : null) ??
+            member.profiles?.email ??
+            null,
           role: member.role,
-          avatar_url: member.profiles?.avatar_url ?? null,
-        }))
+          avatar_url:
+            ("avatar_url" in member ? member.avatar_url : null) ??
+            member.profiles?.avatar_url ??
+            null,
+        });
+      };
+
+      upsertMember(selfMembership as FamilyMemberRow | null);
+      visibleMembers.forEach(upsertMember);
+
+      const members = Array.from(membersByProfileId.values())
         .sort((left, right) =>
           resolveDisplayName({
             primary: left.full_name,

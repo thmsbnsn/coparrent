@@ -30,7 +30,11 @@ interface FamilyMember {
 
 interface FamilyMemberRow {
   id?: string;
+  membership_id?: string;
   profile_id: string;
+  avatar_url?: string | null;
+  email?: string | null;
+  full_name?: string | null;
   relationship_label?: string | null;
   role?: string | null;
   profiles: FamilyMember | FamilyMember[] | null;
@@ -65,21 +69,40 @@ export function ShareToFamilyDialog({
 
       setLoading(true);
       try {
-        const { data: familyData } = await supabase
-          .from("family_members")
-          .select("id, profile_id, relationship_label, role, profiles:profile_id(id, full_name, email, avatar_url)")
-          .eq("family_id", activeFamilyId)
-          .eq("status", "active");
+        const { data: familyData, error } = await supabase
+          .rpc("get_callable_family_members", {
+            p_family_id: activeFamilyId,
+          })
+          .returns<FamilyMemberRow[]>();
 
-        const members = ((familyData as FamilyMemberRow[] | null) ?? [])
+        let visibleMembers = (familyData as FamilyMemberRow[] | null) ?? [];
+
+        if (error) {
+          console.warn("Callable family member lookup failed for share dialog, falling back to direct family query:", error);
+
+          const fallbackResult = await supabase
+            .from("family_members")
+            .select("id, profile_id, relationship_label, role, profiles:profile_id(id, full_name, email, avatar_url)")
+            .eq("family_id", activeFamilyId)
+            .eq("status", "active")
+            .neq("profile_id", profileId);
+
+          if (fallbackResult.error) {
+            throw fallbackResult.error;
+          }
+
+          visibleMembers = (fallbackResult.data as FamilyMemberRow[] | null) ?? [];
+        }
+
+        const members = visibleMembers
           .filter((member) => member.profile_id !== profileId && member.role !== "child")
           .map((member) => {
             const profile = Array.isArray(member.profiles) ? member.profiles[0] ?? null : member.profiles;
             return {
-              avatar_url: profile?.avatar_url ?? null,
-              email: profile?.email ?? null,
+              avatar_url: member.avatar_url ?? profile?.avatar_url ?? null,
+              email: member.email ?? profile?.email ?? null,
               full_name: resolveDisplayName({
-                primary: profile?.full_name ?? null,
+                primary: member.full_name ?? profile?.full_name ?? null,
                 secondary: member.relationship_label ?? null,
                 fallback: "Family member",
               }),
