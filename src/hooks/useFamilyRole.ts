@@ -53,6 +53,7 @@ export const useFamilyRole = (): FamilyMemberInfo => {
   const {
     effectiveRole,
     profileId,
+    memberships,
     isParentInActiveFamily,
     isThirdPartyInActiveFamily,
     isChildInActiveFamily,
@@ -62,10 +63,13 @@ export const useFamilyRole = (): FamilyMemberInfo => {
     activeFamilyId,
   } = useFamily();
 
+  const activeMembership = memberships.find((membership) => membership.familyId === activeFamilyId) ?? null;
+
   return {
     role: effectiveRole,
     profileId,
-    primaryParentId: activeFamilyId, // Legacy compatibility - use activeFamilyId
+    // Legacy compatibility: callers expect the active family's primary parent profile id.
+    primaryParentId: activeMembership?.primaryParentId ?? null,
     isParent: isParentInActiveFamily,
     isThirdParty: isThirdPartyInActiveFamily,
     isChild: isChildInActiveFamily,

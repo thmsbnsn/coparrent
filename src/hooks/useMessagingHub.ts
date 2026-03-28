@@ -21,7 +21,7 @@
  * @see useUnreadMessages for unread count tracking
  * @see useTypingIndicator for typing status
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFamilyRole } from "./useFamilyRole";
@@ -161,10 +161,15 @@ export const useMessagingHub = () => {
   const [groupChats, setGroupChats] = useState<MessageThread[]>([]);
   const [familyChannel, setFamilyChannel] = useState<MessageThread | null>(null);
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
+  const familyMembersRef = useRef<FamilyMember[]>([]);
   const [activeThread, setActiveThread] = useState<MessageThread | null>(null);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [setupError, setSetupError] = useState<string | null>(null);
+
+  useEffect(() => {
+    familyMembersRef.current = familyMembers;
+  }, [familyMembers]);
 
   const findExistingFamilyChannel = useCallback(async () => {
     if (!primaryParentId) return null;
@@ -272,7 +277,16 @@ export const useMessagingHub = () => {
         .from("profiles")
         .select("id, full_name, email, avatar_url, co_parent_id")
         .eq("id", primaryParentId)
-        .single();
+        .maybeSingle();
+
+      if (!primaryProfile) {
+        logger.warn("Primary parent profile missing while loading messaging family members", {
+          primaryParentId,
+          profileId,
+        });
+        setFamilyMembers([]);
+        return [] as FamilyMember[];
+      }
 
       const members: FamilyMember[] = [];
 
@@ -292,7 +306,7 @@ export const useMessagingHub = () => {
             .from("profiles")
             .select("id, full_name, email, avatar_url")
             .eq("id", primaryProfile.co_parent_id)
-            .single();
+            .maybeSingle();
 
           if (coParent) {
             members.push({
@@ -410,10 +424,11 @@ export const useMessagingHub = () => {
   }, [profileId]);
 
   // Fetch threads
-  const fetchThreads = useCallback(async (visibleFamilyMembers: FamilyMember[] = familyMembers) => {
+  const fetchThreads = useCallback(async (visibleFamilyMembers?: FamilyMember[]) => {
     if (!primaryParentId || !profileId) return;
 
     try {
+      const memberDirectory = visibleFamilyMembers ?? familyMembersRef.current;
       const { data: threadData, error } = await supabase
         .from("message_threads")
         .select("*")
@@ -466,7 +481,7 @@ export const useMessagingHub = () => {
                 : thread.participant_a_id;
 
             if (otherParticipantId) {
-              const knownMember = visibleFamilyMembers.find(
+              const knownMember = memberDirectory.find(
                 (member) => member.profile_id === otherParticipantId,
               );
 
@@ -522,7 +537,7 @@ export const useMessagingHub = () => {
     } catch (error) {
       console.error("Error fetching threads:", error);
     }
-  }, [buildLastMessageMap, familyMembers, primaryParentId, profileId]);
+  }, [buildLastMessageMap, primaryParentId, profileId]);
 
   const applyThreadPreviewUpdate = useCallback(
     (threadId: string, lastMessage: ThreadMessage) => {

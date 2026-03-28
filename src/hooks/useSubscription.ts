@@ -18,105 +18,202 @@ interface SubscriptionStatus {
   pastDue: boolean;
 }
 
+type SubscriptionSnapshot = Omit<SubscriptionStatus, "loading" | "error">;
+
+const SUBSCRIPTION_CACHE_TTL_MS = 30_000;
+
+const FREE_SUBSCRIPTION_SNAPSHOT: SubscriptionSnapshot = {
+  subscribed: false,
+  tier: "free",
+  subscriptionEnd: null,
+  freeAccess: false,
+  accessReason: null,
+  trial: false,
+  trialEndsAt: null,
+  pastDue: false,
+};
+
+let cachedSubscriptionUserId: string | null = null;
+let cachedSubscriptionSnapshot: SubscriptionSnapshot | null = null;
+let cachedSubscriptionAt = 0;
+let inFlightSubscriptionUserId: string | null = null;
+let inFlightSubscriptionPromise: Promise<SubscriptionSnapshot> | null = null;
+
+function cloneSnapshot(snapshot: SubscriptionSnapshot): SubscriptionSnapshot {
+  return { ...snapshot };
+}
+
+function normalizeSubscriptionSnapshot(data: Record<string, unknown>): SubscriptionSnapshot {
+  return {
+    subscribed: Boolean(data.subscribed || data.free_access),
+    tier: ((data.tier as StripeTier | "free") || "free"),
+    subscriptionEnd: typeof data.subscription_end === "string" ? data.subscription_end : null,
+    freeAccess: Boolean(data.free_access),
+    accessReason: typeof data.access_reason === "string" ? data.access_reason : null,
+    trial: Boolean(data.trial),
+    trialEndsAt: typeof data.trial_ends_at === "string" ? data.trial_ends_at : null,
+    pastDue: Boolean(data.past_due),
+  };
+}
+
+function readCachedSubscriptionSnapshot(userId: string): SubscriptionSnapshot | null {
+  if (
+    cachedSubscriptionUserId === userId &&
+    cachedSubscriptionSnapshot &&
+    Date.now() - cachedSubscriptionAt < SUBSCRIPTION_CACHE_TTL_MS
+  ) {
+    return cloneSnapshot(cachedSubscriptionSnapshot);
+  }
+
+  return null;
+}
+
+function storeCachedSubscriptionSnapshot(userId: string, snapshot: SubscriptionSnapshot): void {
+  cachedSubscriptionUserId = userId;
+  cachedSubscriptionSnapshot = cloneSnapshot(snapshot);
+  cachedSubscriptionAt = Date.now();
+}
+
+function clearCachedSubscriptionSnapshot(userId?: string): void {
+  if (!userId || cachedSubscriptionUserId === userId) {
+    cachedSubscriptionUserId = null;
+    cachedSubscriptionSnapshot = null;
+    cachedSubscriptionAt = 0;
+  }
+}
+
+async function fetchSubscriptionSnapshot(
+  userId: string,
+  accessToken: string,
+  forceRefresh: boolean,
+): Promise<SubscriptionSnapshot> {
+  if (!forceRefresh) {
+    const cached = readCachedSubscriptionSnapshot(userId);
+    if (cached) {
+      return cached;
+    }
+
+    if (inFlightSubscriptionPromise && inFlightSubscriptionUserId === userId) {
+      return inFlightSubscriptionPromise;
+    }
+  }
+
+  inFlightSubscriptionUserId = userId;
+  inFlightSubscriptionPromise = (async () => {
+    const { data, error } = await supabase.functions.invoke("check-subscription", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (data?.error) {
+      throw new Error(String(data.error));
+    }
+
+    const snapshot = normalizeSubscriptionSnapshot((data || {}) as Record<string, unknown>);
+    storeCachedSubscriptionSnapshot(userId, snapshot);
+    return snapshot;
+  })();
+
+  try {
+    return await inFlightSubscriptionPromise;
+  } finally {
+    if (inFlightSubscriptionUserId === userId) {
+      inFlightSubscriptionUserId = null;
+      inFlightSubscriptionPromise = null;
+    }
+  }
+}
+
 export const useSubscription = () => {
-  const { user } = useAuth();
+  const { user, session, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [status, setStatus] = useState<SubscriptionStatus>({
-    subscribed: false,
-    tier: "free",
-    subscriptionEnd: null,
+    ...FREE_SUBSCRIPTION_SNAPSHOT,
     loading: true,
-    freeAccess: false,
-    accessReason: null,
     error: null,
-    trial: false,
-    trialEndsAt: null,
-    pastDue: false,
   });
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
 
-  const checkSubscription = useCallback(async (retry = false) => {
-    if (!user) {
-      setStatus({ 
-        subscribed: false, 
-        tier: "free", 
-        subscriptionEnd: null, 
-        loading: false, 
-        freeAccess: false, 
-        accessReason: null,
-        error: null,
-        trial: false,
-        trialEndsAt: null,
-        pastDue: false,
-      });
-      return;
-    }
-
-    try {
-      console.log("[useSubscription] Checking subscription status...");
-      const { data, error } = await supabase.functions.invoke("check-subscription");
-      
-      if (error) {
-        console.error("[useSubscription] Error checking subscription:", error);
-        
-        // Retry logic for network failures
-        if (retry && retryCount < 3) {
-          setRetryCount(prev => prev + 1);
-          setTimeout(() => checkSubscription(true), 2000 * (retryCount + 1));
-          return;
-        }
-        
-        throw error;
-      }
-
-      console.log("[useSubscription] Subscription data received:", data);
-      setRetryCount(0);
-
-      // Handle error responses from the function
-      if (data.error) {
-        console.warn("[useSubscription] Function returned error:", data.error);
-        setStatus(prev => ({ 
-          ...prev, 
-          loading: false, 
-          error: data.error,
-          subscribed: false,
-          tier: "free",
-        }));
+  const checkSubscription = useCallback(
+    async (retry = false, forceRefresh = false) => {
+      if (authLoading) {
         return;
       }
 
-      setStatus({
-        subscribed: data.subscribed || data.free_access || false,
-        tier: (data.tier as StripeTier | "free") || "free",
-        subscriptionEnd: data.subscription_end || null,
-        loading: false,
-        freeAccess: data.free_access || false,
-        accessReason: data.access_reason || null,
-        error: null,
-        trial: data.trial || false,
-        trialEndsAt: data.trial_ends_at || null,
-        pastDue: data.past_due || false,
-      });
-    } catch (error: unknown) {
-      console.error("[useSubscription] Error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to check subscription";
-      setStatus(prev => ({ 
-        ...prev, 
-        loading: false, 
-        error: errorMessage,
-      }));
-    }
-  }, [user, retryCount]);
+      if (!user || !session?.access_token) {
+        clearCachedSubscriptionSnapshot();
+        setStatus({
+          ...FREE_SUBSCRIPTION_SNAPSHOT,
+          loading: false,
+          error: null,
+        });
+        return;
+      }
+
+      const attemptCheck = async (attempt: number): Promise<void> => {
+        setStatus((prev) => ({
+          ...prev,
+          loading: true,
+          error: null,
+        }));
+
+        try {
+          const snapshot = await fetchSubscriptionSnapshot(
+            user.id,
+            session.access_token,
+            forceRefresh || attempt > 0,
+          );
+
+          setStatus({
+            ...snapshot,
+            loading: false,
+            error: null,
+          });
+        } catch (error: unknown) {
+          if (retry && attempt < 2) {
+            await new Promise((resolve) => {
+              window.setTimeout(resolve, 1500 * (attempt + 1));
+            });
+            await attemptCheck(attempt + 1);
+            return;
+          }
+
+          clearCachedSubscriptionSnapshot(user.id);
+          const errorMessage =
+            error instanceof Error ? error.message : "Failed to check subscription";
+
+          setStatus((prev) => ({
+            ...prev,
+            loading: false,
+            error: errorMessage,
+          }));
+        }
+      };
+
+      await attemptCheck(0);
+    },
+    [authLoading, session?.access_token, user],
+  );
 
   useEffect(() => {
-    checkSubscription(true);
-    
-    // Auto-refresh every minute
-    const interval = setInterval(() => checkSubscription(false), 60000);
-    return () => clearInterval(interval);
-  }, [checkSubscription]);
+    if (authLoading) {
+      return;
+    }
+
+    void checkSubscription(true);
+
+    const interval = window.setInterval(() => {
+      void checkSubscription(false);
+    }, 60000);
+
+    return () => window.clearInterval(interval);
+  }, [authLoading, checkSubscription]);
 
   const createCheckout = async (tier: StripeTier) => {
     if (!user) {
@@ -129,34 +226,28 @@ export const useSubscription = () => {
     }
 
     setCheckoutLoading(true);
-    console.log("[useSubscription] Creating checkout for tier:", tier);
 
     try {
       const priceId = STRIPE_TIERS[tier].priceId;
-      console.log("[useSubscription] Using price ID:", priceId);
-      
+
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: { priceId },
       });
 
       if (error) {
-        console.error("[useSubscription] Checkout error:", error);
         throw error;
       }
 
-      // Handle specific error codes from the function
       if (data.error) {
-        console.error("[useSubscription] Checkout function error:", data);
-        
-        // Show appropriate message based on error code
         const errorMessages: Record<string, string> = {
-          ALREADY_SUBSCRIBED: "You already have an active subscription. Visit Settings to manage it.",
+          ALREADY_SUBSCRIBED:
+            "You already have an active subscription. Visit Settings to manage it.",
           INVALID_PRICE: "This plan is no longer available. Please refresh the page.",
           SERVICE_UNAVAILABLE: "Payment service is temporarily unavailable. Please try again later.",
           AUTH_REQUIRED: "Please sign in to continue.",
           AUTH_FAILED: "Your session has expired. Please sign in again.",
         };
-        
+
         toast({
           title: "Unable to start checkout",
           description: errorMessages[data.code] || data.error,
@@ -164,8 +255,6 @@ export const useSubscription = () => {
         });
         return;
       }
-
-      console.log("[useSubscription] Checkout session created:", data);
 
       if (data.url) {
         window.open(data.url, "_blank");
@@ -195,20 +284,15 @@ export const useSubscription = () => {
     }
 
     setPortalLoading(true);
-    console.log("[useSubscription] Opening customer portal...");
 
     try {
       const { data, error } = await supabase.functions.invoke("customer-portal");
 
       if (error) {
-        console.error("[useSubscription] Portal error:", error);
         throw error;
       }
 
-      // Handle specific error codes from the function
       if (data.error) {
-        console.error("[useSubscription] Portal function error:", data);
-        
         if (data.action === "subscribe") {
           toast({
             title: "No subscription found",
@@ -216,7 +300,7 @@ export const useSubscription = () => {
           });
           return;
         }
-        
+
         if (data.code === "FREE_ACCESS") {
           toast({
             title: "Complimentary access",
@@ -224,7 +308,7 @@ export const useSubscription = () => {
           });
           return;
         }
-        
+
         toast({
           title: "Portal access failed",
           description: data.error,
@@ -232,8 +316,6 @@ export const useSubscription = () => {
         });
         return;
       }
-
-      console.log("[useSubscription] Portal session created:", data);
 
       if (data.url) {
         window.open(data.url, "_blank");
@@ -252,7 +334,6 @@ export const useSubscription = () => {
     }
   };
 
-  // Helper to check if user has premium access (either paid or free)
   const hasPremiumAccess = status.subscribed || status.freeAccess;
 
   return {
