@@ -1,260 +1,388 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { strictCors, getCorsHeaders } from "../_shared/cors.ts";
+import {
+  HttpError,
+  getActiveMembershipForProfile,
+  getActiveMembershipForUser,
+  requireAuthenticatedProfile,
+} from "../_shared/callHelpers.ts";
+
+const LOG_PREFIX = "CREATE-MESSAGE-THREAD";
 
 const logStep = (step: string, details?: unknown) => {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : "";
-  console.log(`[CREATE-MESSAGE-THREAD] ${step}${detailsStr}`);
+  console.log(`[${LOG_PREFIX}] ${step}${detailsStr}`);
 };
 
 interface CreateThreadRequest {
+  family_id?: string;
+  group_name?: string;
+  other_profile_id?: string;
+  participant_ids?: string[];
   thread_type: "family_channel" | "direct_message" | "group_chat";
-  other_profile_id?: string; // For DM
-  participant_ids?: string[]; // For group chat
-  group_name?: string; // For group chat
+}
+
+const jsonResponse = (req: Request, status: number, body: Record<string, unknown>) =>
+  new Response(JSON.stringify(body), {
+    headers: {
+      ...getCorsHeaders(req),
+      "Content-Type": "application/json",
+    },
+    status,
+  });
+
+async function resolveMembership(
+  supabaseAdmin: SupabaseClient,
+  userId: string,
+  requestedFamilyId?: string,
+) {
+  if (requestedFamilyId) {
+    return await getActiveMembershipForUser(supabaseAdmin, requestedFamilyId, userId);
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("family_members")
+    .select("id, family_id, primary_parent_id, profile_id, relationship_label, role, status, user_id")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .limit(2);
+
+  if (error || !data?.length) {
+    throw new HttpError(403, "You do not have access to an active family.");
+  }
+
+  if (data.length > 1) {
+    throw new HttpError(400, "family_id is required when your account belongs to multiple families.");
+  }
+
+  return data[0];
+}
+
+async function fetchThreadById(
+  supabaseAdmin: SupabaseClient,
+  threadId: string,
+) {
+  const { data, error } = await supabaseAdmin
+    .from("message_threads")
+    .select("*")
+    .eq("id", threadId)
+    .single();
+
+  if (error || !data) {
+    throw new HttpError(500, error?.message ?? "Unable to load the message thread.");
+  }
+
+  return data;
+}
+
+async function findExistingFamilyChannel(
+  supabaseAdmin: SupabaseClient,
+  familyId: string,
+  primaryParentId: string,
+) {
+  const { data: currentThread, error: currentThreadError } = await supabaseAdmin
+    .from("message_threads")
+    .select("*")
+    .eq("family_id", familyId)
+    .eq("thread_type", "family_channel")
+    .maybeSingle();
+
+  if (currentThreadError) {
+    throw new HttpError(500, currentThreadError.message);
+  }
+
+  if (currentThread) {
+    return currentThread;
+  }
+
+  const { data: legacyThread, error: legacyThreadError } = await supabaseAdmin
+    .from("message_threads")
+    .select("*")
+    .is("family_id", null)
+    .eq("primary_parent_id", primaryParentId)
+    .eq("thread_type", "family_channel")
+    .maybeSingle();
+
+  if (legacyThreadError) {
+    throw new HttpError(500, legacyThreadError.message);
+  }
+
+  if (!legacyThread) {
+    return null;
+  }
+
+  const { data: updatedThread, error: updateError } = await supabaseAdmin
+    .from("message_threads")
+    .update({ family_id: familyId })
+    .eq("id", legacyThread.id)
+    .select("*")
+    .single();
+
+  if (updateError || !updatedThread) {
+    throw new HttpError(500, updateError?.message ?? "Unable to update the family channel.");
+  }
+
+  return updatedThread;
+}
+
+async function findExistingDirectMessage(
+  supabaseAdmin: SupabaseClient,
+  familyId: string,
+  primaryParentId: string,
+  participantAId: string,
+  participantBId: string,
+) {
+  const { data: currentThread, error: currentThreadError } = await supabaseAdmin
+    .from("message_threads")
+    .select("*")
+    .eq("family_id", familyId)
+    .eq("thread_type", "direct_message")
+    .eq("participant_a_id", participantAId)
+    .eq("participant_b_id", participantBId)
+    .maybeSingle();
+
+  if (currentThreadError) {
+    throw new HttpError(500, currentThreadError.message);
+  }
+
+  if (currentThread) {
+    return currentThread;
+  }
+
+  const { data: legacyThread, error: legacyThreadError } = await supabaseAdmin
+    .from("message_threads")
+    .select("*")
+    .is("family_id", null)
+    .eq("primary_parent_id", primaryParentId)
+    .eq("thread_type", "direct_message")
+    .eq("participant_a_id", participantAId)
+    .eq("participant_b_id", participantBId)
+    .maybeSingle();
+
+  if (legacyThreadError) {
+    throw new HttpError(500, legacyThreadError.message);
+  }
+
+  if (!legacyThread) {
+    return null;
+  }
+
+  const { data: updatedThread, error: updateError } = await supabaseAdmin
+    .from("message_threads")
+    .update({ family_id: familyId })
+    .eq("id", legacyThread.id)
+    .select("*")
+    .single();
+
+  if (updateError || !updatedThread) {
+    throw new HttpError(500, updateError?.message ?? "Unable to update the direct-message thread.");
+  }
+
+  return updatedThread;
 }
 
 serve(async (req) => {
-  // Use strict CORS validation instead of wildcard
   const corsResponse = strictCors(req);
   if (corsResponse) return corsResponse;
-  
-  const corsHeaders = getCorsHeaders(req);
+
+  if (req.method !== "POST") {
+    return jsonResponse(req, 405, { success: false, error: "Method not allowed" });
+  }
 
   const supabaseAdmin = createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-    { auth: { persistSession: false } }
+    { auth: { persistSession: false } },
   );
 
   try {
-    logStep("Function started", {
-      origin: req.headers.get("Origin"),
-      method: req.method,
+    const { profile, user } = await requireAuthenticatedProfile(req, supabaseAdmin);
+    const body = (await req.json()) as CreateThreadRequest;
+
+    logStep("Request received", {
+      familyId: body.family_id ?? null,
+      otherProfileId: body.other_profile_id ?? null,
+      participantCount: body.participant_ids?.length ?? 0,
+      threadType: body.thread_type,
+      userId: user.id,
     });
 
-    // Authenticate user
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      throw new Error("No authorization header provided");
+    if (!body.thread_type) {
+      throw new HttpError(400, "thread_type is required.");
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !userData.user) {
-      throw new Error(`Authentication error: ${userError?.message || "User not found"}`);
+    const callerMembership = await resolveMembership(supabaseAdmin, user.id, body.family_id);
+    const familyId = callerMembership.family_id;
+
+    if (!familyId) {
+      throw new HttpError(400, "The selected family could not be resolved.");
     }
 
-    const userId = userData.user.id;
-    logStep("User authenticated", { userId });
+    let threadId: string | null = null;
 
-    // Get user's profile
-    const { data: profile, error: profileError } = await supabaseAdmin
-      .from("profiles")
-      .select("id, co_parent_id")
-      .eq("user_id", userId)
-      .single();
-
-    if (profileError || !profile) {
-      throw new Error("User profile not found");
-    }
-
-    const profileId = profile.id;
-    logStep("Profile found", { profileId });
-
-    // Calculate primary_parent_id (same logic as client-side)
-    let primaryParentId: string;
-    
-    // Check if user is a third-party member
-    const { data: familyMember } = await supabaseAdmin
-      .from("family_members")
-      .select("primary_parent_id")
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (familyMember) {
-      primaryParentId = familyMember.primary_parent_id;
-    } else {
-      // User is a parent - primary parent ID is the "lower" of the two parent IDs
-      if (profile.co_parent_id) {
-        primaryParentId = profile.id < profile.co_parent_id ? profile.id : profile.co_parent_id;
-      } else {
-        primaryParentId = profile.id;
-      }
-    }
-    logStep("Primary parent ID determined", { primaryParentId });
-
-    // Get user's family role
-    let userRole: "parent" | "guardian" | "third_party" = "parent";
-    if (familyMember) {
-      userRole = "third_party";
-    }
-    logStep("User role determined", { userRole });
-
-    // Parse request body
-    const body: CreateThreadRequest = await req.json();
-    logStep("Request body", body);
-
-    const { thread_type, other_profile_id, participant_ids, group_name } = body;
-
-    if (!thread_type) {
-      throw new Error("thread_type is required");
-    }
-
-    let thread;
-
-    if (thread_type === "family_channel") {
-      // Check for existing family channel
-      const { data: existingChannel } = await supabaseAdmin
-        .from("message_threads")
-        .select("*")
-        .eq("primary_parent_id", primaryParentId)
-        .eq("thread_type", "family_channel")
-        .maybeSingle();
+    if (body.thread_type === "family_channel") {
+      const existingChannel = await findExistingFamilyChannel(
+        supabaseAdmin,
+        familyId,
+        callerMembership.primary_parent_id,
+      );
 
       if (existingChannel) {
-        logStep("Existing family channel found", { threadId: existingChannel.id });
-        thread = existingChannel;
+        threadId = existingChannel.id;
       } else {
-        // Create new family channel
-        const { data: newChannel, error: channelError } = await supabaseAdmin
+        const { data: createdChannel, error: createError } = await supabaseAdmin
           .from("message_threads")
           .insert({
-            primary_parent_id: primaryParentId,
-            thread_type: "family_channel",
+            family_id: familyId,
             name: "Family Chat",
+            primary_parent_id: callerMembership.primary_parent_id,
+            thread_type: "family_channel",
           })
-          .select()
+          .select("*")
           .single();
 
-        if (channelError) {
-          logStep("Error creating family channel", channelError);
-          throw new Error(`Failed to create family channel: ${channelError.message}`);
+        if (createError || !createdChannel) {
+          throw new HttpError(500, createError?.message ?? "Failed to create the family channel.");
         }
 
-        logStep("Family channel created", { threadId: newChannel.id });
-        thread = newChannel;
+        threadId = createdChannel.id;
       }
-    } else if (thread_type === "direct_message") {
-      if (!other_profile_id) {
-        throw new Error("other_profile_id is required for direct messages");
+    } else if (body.thread_type === "direct_message") {
+      if (!body.other_profile_id) {
+        throw new HttpError(400, "other_profile_id is required for direct messages.");
       }
 
-      // Sort IDs to ensure consistent ordering
-      const [participantA, participantB] =
-        profileId < other_profile_id
-          ? [profileId, other_profile_id]
-          : [other_profile_id, profileId];
+      if (body.other_profile_id === profile.id) {
+        throw new HttpError(400, "You cannot create a direct message with yourself.");
+      }
 
-      // Check for existing DM thread
-      const { data: existingDM } = await supabaseAdmin
-        .from("message_threads")
-        .select("*")
-        .eq("primary_parent_id", primaryParentId)
-        .eq("thread_type", "direct_message")
-        .eq("participant_a_id", participantA)
-        .eq("participant_b_id", participantB)
-        .maybeSingle();
+      await getActiveMembershipForProfile(supabaseAdmin, familyId, body.other_profile_id);
 
-      if (existingDM) {
-        logStep("Existing DM thread found", { threadId: existingDM.id });
-        thread = existingDM;
+      const [participantAId, participantBId] =
+        profile.id < body.other_profile_id
+          ? [profile.id, body.other_profile_id]
+          : [body.other_profile_id, profile.id];
+
+      const existingThread = await findExistingDirectMessage(
+        supabaseAdmin,
+        familyId,
+        callerMembership.primary_parent_id,
+        participantAId,
+        participantBId,
+      );
+
+      if (existingThread) {
+        threadId = existingThread.id;
       } else {
-        // Create new DM thread
-        const { data: newDM, error: dmError } = await supabaseAdmin
+        const { data: createdThread, error: createError } = await supabaseAdmin
           .from("message_threads")
           .insert({
-            primary_parent_id: primaryParentId,
+            family_id: familyId,
+            participant_a_id: participantAId,
+            participant_b_id: participantBId,
+            primary_parent_id: callerMembership.primary_parent_id,
             thread_type: "direct_message",
-            participant_a_id: participantA,
-            participant_b_id: participantB,
           })
-          .select()
+          .select("*")
           .single();
 
-        if (dmError) {
-          logStep("Error creating DM thread", dmError);
-          throw new Error(`Failed to create DM thread: ${dmError.message}`);
+        if (createError || !createdThread) {
+          throw new HttpError(500, createError?.message ?? "Failed to create the direct-message thread.");
         }
 
-        logStep("DM thread created", { threadId: newDM.id });
-        thread = newDM;
+        threadId = createdThread.id;
       }
-    } else if (thread_type === "group_chat") {
-      if (!participant_ids || participant_ids.length === 0) {
-        throw new Error("participant_ids is required for group chats");
-      }
-
-      if (!group_name?.trim()) {
-        throw new Error("group_name is required for group chats");
+    } else if (body.thread_type === "group_chat") {
+      if (!body.group_name?.trim()) {
+        throw new HttpError(400, "group_name is required for group chats.");
       }
 
-      // Create new group chat thread
-      const { data: newGroup, error: groupError } = await supabaseAdmin
+      const requestedParticipants = [...new Set([profile.id, ...(body.participant_ids ?? [])])];
+      if (requestedParticipants.length < 2) {
+        throw new HttpError(400, "Select at least one other participant for the group.");
+      }
+
+      const { data: eligibleMembers, error: eligibleMembersError } = await supabaseAdmin
+        .from("family_members")
+        .select("profile_id")
+        .eq("family_id", familyId)
+        .eq("status", "active")
+        .in("profile_id", requestedParticipants);
+
+      if (eligibleMembersError) {
+        throw new HttpError(500, eligibleMembersError.message);
+      }
+
+      const eligibleProfileIds = new Set((eligibleMembers ?? []).map((member) => member.profile_id));
+      const invalidParticipants = requestedParticipants.filter((participantId) => !eligibleProfileIds.has(participantId));
+
+      if (invalidParticipants.length > 0) {
+        throw new HttpError(400, "One or more selected participants are not active in the current family.");
+      }
+
+      const { data: createdGroup, error: createError } = await supabaseAdmin
         .from("message_threads")
         .insert({
-          primary_parent_id: primaryParentId,
+          family_id: familyId,
+          name: body.group_name.trim(),
+          primary_parent_id: callerMembership.primary_parent_id,
           thread_type: "group_chat",
-          name: group_name.trim(),
         })
-        .select()
+        .select("*")
         .single();
 
-      if (groupError) {
-        logStep("Error creating group chat", groupError);
-        throw new Error(`Failed to create group chat: ${groupError.message}`);
+      if (createError || !createdGroup) {
+        throw new HttpError(500, createError?.message ?? "Failed to create the group chat.");
       }
 
-      logStep("Group chat created", { threadId: newGroup.id });
-
-      // Add all participants including the creator
-      const allParticipants = [...new Set([profileId, ...participant_ids])];
-
-      const { error: participantError } = await supabaseAdmin
+      const { error: participantsError } = await supabaseAdmin
         .from("group_chat_participants")
         .insert(
-          allParticipants.map((pid) => ({
-            thread_id: newGroup.id,
-            profile_id: pid,
-          }))
+          requestedParticipants.map((participantId) => ({
+            profile_id: participantId,
+            thread_id: createdGroup.id,
+          })),
         );
 
-      if (participantError) {
-        logStep("Error adding participants", participantError);
-        // Rollback: delete the thread if participant insert failed
-        await supabaseAdmin.from("message_threads").delete().eq("id", newGroup.id);
-        throw new Error(`Failed to add participants: ${participantError.message}`);
+      if (participantsError) {
+        await supabaseAdmin.from("message_threads").delete().eq("id", createdGroup.id);
+        throw new HttpError(500, participantsError.message);
       }
 
-      logStep("Participants added", { count: allParticipants.length });
-      thread = newGroup;
+      threadId = createdGroup.id;
     } else {
-      throw new Error(`Invalid thread_type: ${thread_type}`);
+      throw new HttpError(400, `Invalid thread_type: ${body.thread_type}`);
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        thread,
-        profile_id: profileId,
-        primary_parent_id: primaryParentId,
-        role: userRole,
-      }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 200,
-      }
-    );
+    if (!threadId) {
+      throw new HttpError(500, "Thread creation did not complete.");
+    }
+
+    const thread = await fetchThreadById(supabaseAdmin, threadId);
+
+    logStep("Thread ready", {
+      familyId,
+      threadId,
+      threadType: thread.thread_type,
+    });
+
+    return jsonResponse(req, 200, {
+      success: true,
+      family_id: familyId,
+      primary_parent_id: callerMembership.primary_parent_id,
+      profile_id: profile.id,
+      role: callerMembership.role,
+      thread,
+    });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("ERROR", { message: errorMessage });
-    return new Response(
-      JSON.stringify({ success: false, error: "Unable to create message thread. Please try again." }),
-      {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-        status: 400,
-      }
-    );
+    const status = error instanceof HttpError ? error.status : 500;
+    const message = error instanceof Error ? error.message : "Unable to create the message thread.";
+    logStep("Error", { message, status });
+
+    return jsonResponse(req, status, {
+      success: false,
+      error: message,
+    });
   }
 });

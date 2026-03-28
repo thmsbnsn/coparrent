@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { sanitizeErrorForUser } from "@/lib/errorMessages";
+import { resolveDisplayName } from "@/lib/safeText";
 
 interface FamilyMember {
   id: string;
@@ -28,7 +29,10 @@ interface FamilyMember {
 }
 
 interface FamilyMemberRow {
+  id?: string;
   profile_id: string;
+  relationship_label?: string | null;
+  role?: string | null;
   profiles: FamilyMember | FamilyMember[] | null;
 }
 
@@ -47,7 +51,7 @@ export function ShareToFamilyDialog({
 }: ShareToFamilyDialogProps) {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { profileId, primaryParentId } = useFamilyRole();
+  const { activeFamilyId, profileId } = useFamilyRole();
   const [familyMembers, setFamilyMembers] = useState<FamilyMember[]>([]);
   const [selectedMemberId, setSelectedMemberId] = useState<string>("");
   const [customMessage, setCustomMessage] = useState("");
@@ -57,50 +61,31 @@ export function ShareToFamilyDialog({
   // Fetch family members when dialog opens
   useEffect(() => {
     const fetchFamilyMembers = async () => {
-      if (!open || !profileId || !primaryParentId) return;
+      if (!open || !profileId || !activeFamilyId) return;
 
       setLoading(true);
       try {
-        // Get co-parent
-        const { data: myProfile } = await supabase
-          .from("profiles")
-          .select("co_parent_id")
-          .eq("id", profileId)
-          .single();
-
-        const memberIds = new Set<string>();
-        const members: FamilyMember[] = [];
-
-        // Add co-parent if exists
-        if (myProfile?.co_parent_id) {
-          const { data: coParent } = await supabase
-            .from("profiles")
-            .select("id, full_name, email, avatar_url")
-            .eq("id", myProfile.co_parent_id)
-            .single();
-
-          if (coParent && coParent.id !== profileId) {
-            memberIds.add(coParent.id);
-            members.push(coParent);
-          }
-        }
-
-        // Get family members (step-parents, third-party)
         const { data: familyData } = await supabase
           .from("family_members")
-          .select("profile_id, profiles:profile_id(id, full_name, email, avatar_url)")
-          .eq("primary_parent_id", primaryParentId)
+          .select("id, profile_id, relationship_label, role, profiles:profile_id(id, full_name, email, avatar_url)")
+          .eq("family_id", activeFamilyId)
           .eq("status", "active");
 
-        if (familyData) {
-          for (const fm of familyData as FamilyMemberRow[]) {
-            const profile = Array.isArray(fm.profiles) ? fm.profiles[0] ?? null : fm.profiles;
-            if (profile && profile.id !== profileId && !memberIds.has(profile.id)) {
-              memberIds.add(profile.id);
-              members.push(profile);
-            }
-          }
-        }
+        const members = ((familyData as FamilyMemberRow[] | null) ?? [])
+          .filter((member) => member.profile_id !== profileId && member.role !== "child")
+          .map((member) => {
+            const profile = Array.isArray(member.profiles) ? member.profiles[0] ?? null : member.profiles;
+            return {
+              avatar_url: profile?.avatar_url ?? null,
+              email: profile?.email ?? null,
+              full_name: resolveDisplayName({
+                primary: profile?.full_name ?? null,
+                secondary: member.relationship_label ?? null,
+                fallback: "Family member",
+              }),
+              id: profile?.id ?? member.profile_id,
+            };
+          });
 
         setFamilyMembers(members);
         if (members.length > 0 && !selectedMemberId) {
@@ -114,7 +99,7 @@ export function ShareToFamilyDialog({
     };
 
     fetchFamilyMembers();
-  }, [open, profileId, primaryParentId, selectedMemberId]);
+  }, [activeFamilyId, open, profileId, selectedMemberId]);
 
   // Reset state when dialog opens
   useEffect(() => {
@@ -124,7 +109,7 @@ export function ShareToFamilyDialog({
   }, [open]);
 
   const handleShare = async () => {
-    if (!selectedMemberId || !profileId) return;
+    if (!selectedMemberId || !profileId || !activeFamilyId) return;
 
     setSending(true);
     try {
@@ -133,6 +118,7 @@ export function ShareToFamilyDialog({
         "create-message-thread",
         {
           body: {
+            family_id: activeFamilyId,
             thread_type: "direct_message",
             other_profile_id: selectedMemberId,
           },

@@ -1,73 +1,133 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useFamilyRole } from "@/hooks/useFamilyRole";
+import { useFamily } from "@/contexts/FamilyContext";
 import type { CallSessionRow, CallSource, CallType } from "@/lib/calls";
 import { toast } from "sonner";
 
 const OPEN_STATUSES = ["ringing", "accepted"] as const;
+const CALL_SESSION_MUTATION_EVENT = "coparrent:call-session-mutated";
+
+const notifyCallSessionMutation = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.dispatchEvent(new Event(CALL_SESSION_MUTATION_EVENT));
+};
 
 export const useCallSessions = (activeThreadId: string | null) => {
-  const { activeFamilyId, profileId } = useFamilyRole();
+  const { activeFamilyId, memberships, profileId } = useFamily();
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState<CallSessionRow[]>([]);
+  const latestFetchIdRef = useRef(0);
+  const familyIds = useMemo(
+    () => [...new Set(memberships.map((membership) => membership.familyId).filter(Boolean))],
+    [memberships],
+  );
+  const familyIdsKey = familyIds.join(",");
 
-  const fetchSessions = useCallback(async () => {
-    if (!activeFamilyId || !profileId) {
+  const fetchSessions = useCallback(async (options?: { background?: boolean }) => {
+    if (familyIds.length === 0 || !profileId) {
       setSessions([]);
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    const fetchId = latestFetchIdRef.current + 1;
+    latestFetchIdRef.current = fetchId;
+
+    if (!options?.background) {
+      setLoading(true);
+    }
 
     const { data, error } = await supabase
       .from("call_sessions")
       .select("*")
-      .eq("family_id", activeFamilyId)
+      .in("family_id", familyIds)
       .in("status", [...OPEN_STATUSES])
       .or(`initiator_profile_id.eq.${profileId},callee_profile_id.eq.${profileId}`)
       .order("created_at", { ascending: false });
 
+    if (fetchId !== latestFetchIdRef.current) {
+      return;
+    }
+
     if (error) {
       console.error("Error fetching call sessions:", error);
-      toast.error("Unable to load call status right now.");
+      if (!options?.background) {
+        toast.error("Unable to load call status right now.");
+      }
       setLoading(false);
       return;
     }
 
     setSessions(data ?? []);
     setLoading(false);
-  }, [activeFamilyId, profileId]);
+  }, [familyIds, profileId]);
 
   useEffect(() => {
     void fetchSessions();
   }, [fetchSessions]);
 
   useEffect(() => {
-    if (!activeFamilyId) {
+    if (typeof window === "undefined") {
       return;
     }
 
-    const channel = supabase
-      .channel(`call-sessions-${activeFamilyId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "call_sessions",
-          filter: `family_id=eq.${activeFamilyId}`,
-        },
-        () => {
-          void fetchSessions();
-        },
-      )
-      .subscribe();
+    const handleMutation = () => {
+      void fetchSessions({ background: true });
+    };
+
+    window.addEventListener(CALL_SESSION_MUTATION_EVENT, handleMutation);
 
     return () => {
-      void supabase.removeChannel(channel);
+      window.removeEventListener(CALL_SESSION_MUTATION_EVENT, handleMutation);
     };
-  }, [activeFamilyId, fetchSessions]);
+  }, [fetchSessions]);
+
+  useEffect(() => {
+    if (familyIds.length === 0 || !profileId || sessions.length === 0) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void fetchSessions({ background: true });
+    }, 2_000);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [familyIds.length, fetchSessions, profileId, sessions.length]);
+
+  useEffect(() => {
+    if (familyIds.length === 0) {
+      return;
+    }
+
+    const channels = familyIds.map((familyId) =>
+      supabase
+        .channel(`call-sessions-${familyId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "call_sessions",
+            filter: `family_id=eq.${familyId}`,
+          },
+          () => {
+            void fetchSessions({ background: true });
+          },
+        )
+        .subscribe(),
+    );
+
+    return () => {
+      channels.forEach((channel) => {
+        void supabase.removeChannel(channel);
+      });
+    };
+  }, [familyIds, familyIdsKey, fetchSessions]);
 
   const createCall = useCallback(
     async (params: {
@@ -97,6 +157,7 @@ export const useCallSessions = (activeThreadId: string | null) => {
       }
 
       await fetchSessions();
+      notifyCallSessionMutation();
       return data.session as CallSessionRow;
     },
     [activeFamilyId, fetchSessions],
@@ -117,6 +178,7 @@ export const useCallSessions = (activeThreadId: string | null) => {
       }
 
       await fetchSessions();
+      notifyCallSessionMutation();
       return data.session as CallSessionRow;
     },
     [fetchSessions],
@@ -142,6 +204,7 @@ export const useCallSessions = (activeThreadId: string | null) => {
       }
 
       await fetchSessions();
+      notifyCallSessionMutation();
       return data.session as CallSessionRow;
     },
     [fetchSessions],

@@ -38,6 +38,7 @@ import { ERROR_MESSAGES } from "@/lib/errorMessages";
 
 type ThreadType = Database["public"]["Enums"]["thread_type"];
 type ThreadMessageRow = Database["public"]["Tables"]["thread_messages"]["Row"];
+type MessageThreadRow = Database["public"]["Tables"]["message_threads"]["Row"];
 
 export interface ThreadMessage {
   id: string;
@@ -134,6 +135,8 @@ const formatRelationshipLabel = (relationshipLabel: string | null, role: string)
       return "Guardian";
     case "third_party":
       return "Third-Party Member";
+    case "child":
+      return "Child";
     default:
       return "Parent";
   }
@@ -155,7 +158,7 @@ const sortThreadsByActivity = (threadList: MessageThread[]) =>
 export const useMessagingHub = () => {
   const { user } = useAuth();
   const { toast } = useToast();
-  const { profileId, primaryParentId, role, loading: roleLoading } = useFamilyRole();
+  const { activeFamilyId, profileId, primaryParentId, role, loading: roleLoading } = useFamilyRole();
   
   const [threads, setThreads] = useState<MessageThread[]>([]);
   const [groupChats, setGroupChats] = useState<MessageThread[]>([]);
@@ -172,30 +175,62 @@ export const useMessagingHub = () => {
   }, [familyMembers]);
 
   const findExistingFamilyChannel = useCallback(async () => {
+    if (!activeFamilyId && !primaryParentId) return null;
+
+    if (activeFamilyId) {
+      const { data, error } = await supabase
+        .from("message_threads")
+        .select("*")
+        .eq("family_id", activeFamilyId)
+        .eq("thread_type", "family_channel")
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) return data;
+    }
+
     if (!primaryParentId) return null;
 
     const { data, error } = await supabase
       .from("message_threads")
       .select("*")
+      .is("family_id", null)
       .eq("primary_parent_id", primaryParentId)
       .eq("thread_type", "family_channel")
       .maybeSingle();
 
     if (error) throw error;
     return data;
-  }, [primaryParentId]);
+  }, [activeFamilyId, primaryParentId]);
 
   const findExistingDirectMessage = useCallback(async (otherProfileId: string) => {
-    if (!primaryParentId || !profileId) return null;
+    if ((!activeFamilyId && !primaryParentId) || !profileId) return null;
 
     const [participantA, participantB] =
       profileId < otherProfileId
         ? [profileId, otherProfileId]
         : [otherProfileId, profileId];
 
+    if (activeFamilyId) {
+      const { data, error } = await supabase
+        .from("message_threads")
+        .select("*")
+        .eq("family_id", activeFamilyId)
+        .eq("thread_type", "direct_message")
+        .eq("participant_a_id", participantA)
+        .eq("participant_b_id", participantB)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (data) return data;
+    }
+
+    if (!primaryParentId) return null;
+
     const { data, error } = await supabase
       .from("message_threads")
       .select("*")
+      .is("family_id", null)
       .eq("primary_parent_id", primaryParentId)
       .eq("thread_type", "direct_message")
       .eq("participant_a_id", participantA)
@@ -204,10 +239,10 @@ export const useMessagingHub = () => {
 
     if (error) throw error;
     return data;
-  }, [primaryParentId, profileId]);
+  }, [activeFamilyId, primaryParentId, profileId]);
 
   const fallbackEnsureFamilyChannel = useCallback(async () => {
-    if (!primaryParentId) return null;
+    if (!activeFamilyId || !primaryParentId) return null;
 
     const existingChannel = await findExistingFamilyChannel();
     if (existingChannel) return existingChannel;
@@ -215,6 +250,7 @@ export const useMessagingHub = () => {
     const { data, error } = await supabase
       .from("message_threads")
       .insert({
+        family_id: activeFamilyId,
         primary_parent_id: primaryParentId,
         thread_type: "family_channel",
         name: "Family Chat",
@@ -230,10 +266,10 @@ export const useMessagingHub = () => {
     }
 
     return data;
-  }, [findExistingFamilyChannel, primaryParentId]);
+  }, [activeFamilyId, findExistingFamilyChannel, primaryParentId]);
 
   const fallbackGetOrCreateDMThread = useCallback(async (otherProfileId: string) => {
-    if (!primaryParentId || !profileId) return null;
+    if (!activeFamilyId || !primaryParentId || !profileId) return null;
 
     const existingThread = await findExistingDirectMessage(otherProfileId);
     if (existingThread) return existingThread;
@@ -246,6 +282,7 @@ export const useMessagingHub = () => {
     const { data, error } = await supabase
       .from("message_threads")
       .insert({
+        family_id: activeFamilyId,
         primary_parent_id: primaryParentId,
         thread_type: "direct_message",
         participant_a_id: participantA,
@@ -262,67 +299,17 @@ export const useMessagingHub = () => {
     }
 
     return data;
-  }, [findExistingDirectMessage, primaryParentId, profileId]);
+  }, [activeFamilyId, findExistingDirectMessage, primaryParentId, profileId]);
 
   // Fetch family members
   const fetchFamilyMembers = useCallback(async () => {
-    if (!primaryParentId || !profileId) {
+    if (!activeFamilyId || !profileId) {
       setFamilyMembers([]);
       return [] as FamilyMember[];
     }
 
     try {
-      // Get parents (primary parent and co-parent)
-      const { data: primaryProfile } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, avatar_url, co_parent_id")
-        .eq("id", primaryParentId)
-        .maybeSingle();
-
-      if (!primaryProfile) {
-        logger.warn("Primary parent profile missing while loading messaging family members", {
-          primaryParentId,
-          profileId,
-        });
-        setFamilyMembers([]);
-        return [] as FamilyMember[];
-      }
-
-      const members: FamilyMember[] = [];
-
-      if (primaryProfile) {
-        members.push({
-          id: primaryProfile.id,
-          profile_id: primaryProfile.id,
-          full_name: primaryProfile.full_name,
-          email: primaryProfile.email,
-          role: "parent",
-          avatar_url: primaryProfile.avatar_url,
-        });
-
-        // Get co-parent
-        if (primaryProfile.co_parent_id) {
-          const { data: coParent } = await supabase
-            .from("profiles")
-            .select("id, full_name, email, avatar_url")
-            .eq("id", primaryProfile.co_parent_id)
-            .maybeSingle();
-
-          if (coParent) {
-            members.push({
-              id: coParent.id,
-              profile_id: coParent.id,
-              full_name: coParent.full_name,
-              email: coParent.email,
-              role: "parent",
-              avatar_url: coParent.avatar_url,
-            });
-          }
-        }
-      }
-
-      // Get third-party members
-      const { data: thirdParties } = await supabase
+      const { data: memberships, error } = await supabase
         .from("family_members")
         .select(`
           id,
@@ -336,25 +323,38 @@ export const useMessagingHub = () => {
             avatar_url
           )
         `)
-        .eq("primary_parent_id", primaryParentId)
+        .eq("family_id", activeFamilyId)
         .eq("status", "active");
 
-      if (thirdParties) {
-        (thirdParties as FamilyMemberRow[]).forEach((tp) => {
-          if (members.some((member) => member.profile_id === tp.profile_id)) {
-            return;
-          }
-
-          members.push({
-            id: tp.id,
-            profile_id: tp.profile_id,
-            full_name: tp.profiles?.full_name ?? formatRelationshipLabel(tp.relationship_label, tp.role),
-            email: tp.profiles?.email ?? null,
-            role: tp.role,
-            avatar_url: tp.profiles?.avatar_url ?? null,
-          });
-        });
+      if (error) {
+        throw error;
       }
+
+      const members = ((memberships as FamilyMemberRow[] | null) ?? [])
+        .filter((member) => member.role !== "child")
+        .map((member) => ({
+          id: member.id,
+          profile_id: member.profile_id,
+          full_name:
+            member.profiles?.full_name ??
+            formatRelationshipLabel(member.relationship_label, member.role),
+          email: member.profiles?.email ?? null,
+          role: member.role,
+          avatar_url: member.profiles?.avatar_url ?? null,
+        }))
+        .sort((left, right) =>
+          resolveDisplayName({
+            primary: left.full_name,
+            secondary: left.email,
+            fallback: "Family member",
+          }).localeCompare(
+            resolveDisplayName({
+              primary: right.full_name,
+              secondary: right.email,
+              fallback: "Family member",
+            }),
+          ),
+        );
 
       setFamilyMembers(members);
       return members;
@@ -363,7 +363,7 @@ export const useMessagingHub = () => {
       setFamilyMembers([]);
       return [] as FamilyMember[];
     }
-  }, [primaryParentId, profileId]);
+  }, [activeFamilyId, profileId]);
 
   const buildLastMessageMap = useCallback(async (threadIds: string[]) => {
     const uniqueThreadIds = [...new Set(threadIds)];
@@ -425,17 +425,52 @@ export const useMessagingHub = () => {
 
   // Fetch threads
   const fetchThreads = useCallback(async (visibleFamilyMembers?: FamilyMember[]) => {
-    if (!primaryParentId || !profileId) return;
+    if ((!activeFamilyId && !primaryParentId) || !profileId) {
+      setFamilyChannel(null);
+      setThreads([]);
+      setGroupChats([]);
+      setActiveThread(null);
+      setMessages([]);
+      return;
+    }
 
     try {
       const memberDirectory = visibleFamilyMembers ?? familyMembersRef.current;
-      const { data: threadData, error } = await supabase
-        .from("message_threads")
-        .select("*")
-        .eq("primary_parent_id", primaryParentId)
-        .order("updated_at", { ascending: false });
+      const scopedThreadMap = new Map<string, MessageThreadRow>();
 
-      if (error) throw error;
+      if (activeFamilyId) {
+        const { data: familyThreads, error: familyThreadsError } = await supabase
+          .from("message_threads")
+          .select("*")
+          .eq("family_id", activeFamilyId)
+          .order("updated_at", { ascending: false });
+
+        if (familyThreadsError) throw familyThreadsError;
+
+        (familyThreads as MessageThreadRow[] | null)?.forEach((thread) => {
+          scopedThreadMap.set(thread.id, thread);
+        });
+      }
+
+      if (primaryParentId) {
+        const { data: legacyThreads, error: legacyThreadsError } = await supabase
+          .from("message_threads")
+          .select("*")
+          .is("family_id", null)
+          .eq("primary_parent_id", primaryParentId)
+          .order("updated_at", { ascending: false });
+
+        if (legacyThreadsError) throw legacyThreadsError;
+
+        (legacyThreads as MessageThreadRow[] | null)?.forEach((thread) => {
+          scopedThreadMap.set(thread.id, thread);
+        });
+      }
+
+      const threadData = Array.from(scopedThreadMap.values()).sort(
+        (left, right) =>
+          new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
+      );
 
       const dmThreads: MessageThread[] = [];
       const groupThreads: MessageThread[] = [];
@@ -527,17 +562,31 @@ export const useMessagingHub = () => {
       const hydratedFamilyChannel = channel ? hydrateThread(channel) : null;
       const hydratedThreads = sortThreadsByActivity(dmThreads.map(hydrateThread));
       const hydratedGroupChats = sortThreadsByActivity(groupThreads.map(hydrateThread));
+      const hydratedById = new Map<string, MessageThread>();
+
+      if (hydratedFamilyChannel) {
+        hydratedById.set(hydratedFamilyChannel.id, hydratedFamilyChannel);
+      }
+      hydratedThreads.forEach((thread) => hydratedById.set(thread.id, thread));
+      hydratedGroupChats.forEach((thread) => hydratedById.set(thread.id, thread));
 
       setFamilyChannel(hydratedFamilyChannel);
       setThreads(hydratedThreads);
       setGroupChats(hydratedGroupChats);
+      setActiveThread((current) => {
+        if (current?.id && hydratedById.has(current.id)) {
+          return hydratedById.get(current.id) ?? current;
+        }
+
+        return hydratedFamilyChannel ?? hydratedThreads[0] ?? hydratedGroupChats[0] ?? null;
+      });
       if (hydratedFamilyChannel) {
         setSetupError(null);
       }
     } catch (error) {
       console.error("Error fetching threads:", error);
     }
-  }, [buildLastMessageMap, primaryParentId, profileId]);
+  }, [activeFamilyId, buildLastMessageMap, primaryParentId, profileId]);
 
   const applyThreadPreviewUpdate = useCallback(
     (threadId: string, lastMessage: ThreadMessage) => {
@@ -722,6 +771,7 @@ export const useMessagingHub = () => {
     const fallbackToClient = async () => {
       try {
         logger.warn("Falling back to client-side direct message thread creation", {
+          activeFamilyId,
           profileId,
           otherProfileId,
         });
@@ -732,6 +782,7 @@ export const useMessagingHub = () => {
         return fallbackThread;
       } catch (fallbackError) {
         logger.error("Direct message fallback failed", fallbackError, {
+          activeFamilyId,
           profileId,
           otherProfileId,
         });
@@ -747,6 +798,7 @@ export const useMessagingHub = () => {
     try {
       const { data, error } = await supabase.functions.invoke("create-message-thread", {
         body: {
+          family_id: activeFamilyId,
           thread_type: "direct_message",
           other_profile_id: otherProfileId,
         },
@@ -754,6 +806,7 @@ export const useMessagingHub = () => {
 
       if (error) {
         logger.warn("Edge function direct message creation failed; trying fallback", error, {
+          activeFamilyId,
           profileId,
           otherProfileId,
         });
@@ -762,6 +815,7 @@ export const useMessagingHub = () => {
 
       if (!data?.success) {
         logger.warn("Edge function direct message creation returned unsuccessful response", {
+          activeFamilyId,
           profileId,
           otherProfileId,
           error: data?.error,
@@ -774,6 +828,7 @@ export const useMessagingHub = () => {
       return data.thread;
     } catch (error) {
       logger.warn("Direct message creation threw before completion; trying fallback", error, {
+        activeFamilyId,
         profileId,
         otherProfileId,
       });
@@ -786,6 +841,7 @@ export const useMessagingHub = () => {
     try {
       const { data, error } = await supabase.functions.invoke("create-message-thread", {
         body: {
+          family_id: activeFamilyId,
           thread_type: "group_chat",
           participant_ids: participantIds,
           group_name: name,
@@ -828,11 +884,12 @@ export const useMessagingHub = () => {
   // Create family channel via edge function
   const ensureFamilyChannel = async () => {
     if (familyChannel) return familyChannel;
-    if (!primaryParentId) return null;
+    if (!activeFamilyId || !primaryParentId) return null;
 
     const fallbackToClient = async () => {
       try {
         logger.warn("Falling back to client-side family channel creation", {
+          activeFamilyId,
           profileId,
           primaryParentId,
         });
@@ -846,6 +903,7 @@ export const useMessagingHub = () => {
         return fallbackThread;
       } catch (fallbackError) {
         logger.error("Family channel fallback failed", fallbackError, {
+          activeFamilyId,
           profileId,
           primaryParentId,
         });
@@ -857,12 +915,14 @@ export const useMessagingHub = () => {
     try {
       const { data, error } = await supabase.functions.invoke("create-message-thread", {
         body: {
+          family_id: activeFamilyId,
           thread_type: "family_channel",
         },
       });
 
       if (error) {
         logger.warn("Edge function family channel creation failed; trying fallback", error, {
+          activeFamilyId,
           profileId,
           primaryParentId,
         });
@@ -871,6 +931,7 @@ export const useMessagingHub = () => {
 
       if (!data?.success) {
         logger.warn("Edge function family channel creation returned unsuccessful response", {
+          activeFamilyId,
           profileId,
           primaryParentId,
           error: data?.error,
@@ -883,6 +944,7 @@ export const useMessagingHub = () => {
       return data.thread;
     } catch (error) {
       logger.warn("Family channel creation threw before completion; trying fallback", error, {
+        activeFamilyId,
         profileId,
         primaryParentId,
       });
@@ -893,7 +955,7 @@ export const useMessagingHub = () => {
   // Initialize
   useEffect(() => {
     const initialize = async () => {
-      if (roleLoading || !primaryParentId) return;
+      if (roleLoading || (!activeFamilyId && !primaryParentId)) return;
       
       setLoading(true);
       const members = await fetchFamilyMembers();
@@ -902,7 +964,7 @@ export const useMessagingHub = () => {
     };
 
     initialize();
-  }, [roleLoading, primaryParentId, fetchFamilyMembers, fetchThreads]);
+  }, [activeFamilyId, roleLoading, primaryParentId, fetchFamilyMembers, fetchThreads]);
 
   // Fetch messages when active thread changes
   useEffect(() => {
@@ -912,11 +974,29 @@ export const useMessagingHub = () => {
   }, [activeThread, fetchMessages]);
 
   useEffect(() => {
-    if (!primaryParentId || !profileId) return;
+    if ((!activeFamilyId && !primaryParentId) || !profileId) return;
 
-    const channel = supabase
-      .channel(`message-thread-metadata-${primaryParentId}`)
-      .on(
+    const channel = supabase.channel(
+      `message-thread-metadata-${activeFamilyId ?? "legacy"}-${primaryParentId ?? "none"}`,
+    );
+
+    if (activeFamilyId) {
+      channel.on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "message_threads",
+          filter: `family_id=eq.${activeFamilyId}`,
+        },
+        () => {
+          void fetchThreads();
+        },
+      );
+    }
+
+    if (primaryParentId) {
+      channel.on(
         "postgres_changes",
         {
           event: "*",
@@ -927,7 +1007,10 @@ export const useMessagingHub = () => {
         () => {
           void fetchThreads();
         },
-      )
+      );
+    }
+
+    channel
       .on(
         "postgres_changes",
         {
@@ -944,13 +1027,13 @@ export const useMessagingHub = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchThreads, primaryParentId, profileId]);
+  }, [activeFamilyId, fetchThreads, primaryParentId, profileId]);
 
   useEffect(() => {
-    if (!primaryParentId || !profileId) return;
+    if ((!activeFamilyId && !primaryParentId) || !profileId) return;
 
     const channel = supabase
-      .channel(`message-thread-previews-${primaryParentId}-${profileId}`)
+      .channel(`message-thread-previews-${activeFamilyId ?? "legacy"}-${profileId}`)
       .on(
         "postgres_changes",
         {
@@ -969,11 +1052,17 @@ export const useMessagingHub = () => {
           if (!knownThreadIds.has(newMessage.thread_id)) {
             const { data: threadRecord } = await supabase
               .from("message_threads")
-              .select("primary_parent_id")
+              .select("family_id, primary_parent_id")
               .eq("id", newMessage.thread_id)
               .maybeSingle();
 
-            if (threadRecord?.primary_parent_id === primaryParentId) {
+            const belongsToActiveFamily =
+              (activeFamilyId && threadRecord?.family_id === activeFamilyId) ||
+              (!threadRecord?.family_id &&
+                primaryParentId &&
+                threadRecord?.primary_parent_id === primaryParentId);
+
+            if (belongsToActiveFamily) {
               await fetchThreads();
             }
             return;
@@ -1001,7 +1090,7 @@ export const useMessagingHub = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [applyThreadPreviewUpdate, familyChannel, fetchThreads, groupChats, primaryParentId, profileId, threads]);
+  }, [activeFamilyId, applyThreadPreviewUpdate, familyChannel, fetchThreads, groupChats, primaryParentId, profileId, threads]);
 
   // Subscribe to realtime updates for messages
   useEffect(() => {

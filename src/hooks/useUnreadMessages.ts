@@ -25,91 +25,168 @@ interface UnreadCount {
   lastMessageAt: string | null;
 }
 
+interface ThreadAccessRow {
+  id: string;
+  thread_type: string;
+  participant_a_id: string | null;
+  participant_b_id: string | null;
+}
+
+interface ThreadMessageLite {
+  id: string;
+  thread_id: string;
+  created_at: string;
+}
+
 export const useUnreadMessages = () => {
-  const { profileId, primaryParentId } = useFamilyRole();
+  const { activeFamilyId, profileId, primaryParentId } = useFamilyRole();
   const { preferences } = useNotifications();
   const [unreadCounts, setUnreadCounts] = useState<UnreadCount[]>([]);
   const [totalUnread, setTotalUnread] = useState(0);
   const [loading, setLoading] = useState(true);
 
   const fetchUnreadCounts = useCallback(async () => {
-    if (!profileId || !primaryParentId) {
+    if (!profileId || (!activeFamilyId && !primaryParentId)) {
+      setUnreadCounts([]);
+      setTotalUnread(0);
       setLoading(false);
       return;
     }
 
     try {
-      // Fetch all threads for this user
-      const { data: threads, error: threadsError } = await supabase
-        .from("message_threads")
-        .select("id, thread_type, updated_at")
-        .eq("primary_parent_id", primaryParentId);
+      setLoading(true);
+      // Fetch thread access once, then batch unread work across the accessible set.
+      const scopedThreadMap = new Map<string, ThreadAccessRow>();
 
-      if (threadsError) throw threadsError;
+      if (activeFamilyId) {
+        const { data: familyThreads, error: familyThreadsError } = await supabase
+          .from("message_threads")
+          .select("id, thread_type, participant_a_id, participant_b_id")
+          .eq("family_id", activeFamilyId);
 
-      const counts: UnreadCount[] = [];
+        if (familyThreadsError) throw familyThreadsError;
 
-      for (const thread of threads || []) {
-        // Check if user has access to this thread
-        if (thread.thread_type === "direct_message") {
-          // For DMs, check participation through another query
-          const { data: dmThread } = await supabase
-            .from("message_threads")
-            .select("participant_a_id, participant_b_id")
-            .eq("id", thread.id)
-            .single();
-          
-          if (!dmThread || 
-              (dmThread.participant_a_id !== profileId && dmThread.participant_b_id !== profileId)) {
-            continue;
-          }
-        } else if (thread.thread_type === "group_chat") {
-          // Check group participation
-          const { data: participation } = await supabase
-            .from("group_chat_participants")
-            .select("id")
-            .eq("thread_id", thread.id)
-            .eq("profile_id", profileId)
-            .maybeSingle();
-          
-          if (!participation) continue;
-        }
-
-        // Count unread messages: messages not sent by me that I haven't read
-        const { data: unreadMessages, error: unreadError } = await supabase
-          .from("thread_messages")
-          .select("id, created_at")
-          .eq("thread_id", thread.id)
-          .neq("sender_id", profileId);
-
-        if (unreadError) continue;
-
-        // Check which of these messages I've read
-        const messageIds = (unreadMessages || []).map(m => m.id);
-        if (messageIds.length === 0) continue;
-
-        const { data: readReceipts } = await supabase
-          .from("message_read_receipts")
-          .select("message_id")
-          .in("message_id", messageIds)
-          .eq("reader_id", profileId);
-
-        const readMessageIds = new Set((readReceipts || []).map(r => r.message_id));
-        const unreadCount = messageIds.filter(id => !readMessageIds.has(id)).length;
-
-        if (unreadCount > 0) {
-          const lastMessage = unreadMessages?.sort((a, b) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )[0];
-
-          counts.push({
-            threadId: thread.id,
-            threadType: thread.thread_type,
-            count: unreadCount,
-            lastMessageAt: lastMessage?.created_at || null,
-          });
-        }
+        (familyThreads as ThreadAccessRow[] | null)?.forEach((thread) => {
+          scopedThreadMap.set(thread.id, thread);
+        });
       }
+
+      if (primaryParentId) {
+        const { data: legacyThreads, error: legacyThreadsError } = await supabase
+          .from("message_threads")
+          .select("id, thread_type, participant_a_id, participant_b_id")
+          .is("family_id", null)
+          .eq("primary_parent_id", primaryParentId);
+
+        if (legacyThreadsError) throw legacyThreadsError;
+
+        (legacyThreads as ThreadAccessRow[] | null)?.forEach((thread) => {
+          scopedThreadMap.set(thread.id, thread);
+        });
+      }
+
+      const threads = Array.from(scopedThreadMap.values());
+
+      const accessibleThreads: ThreadAccessRow[] = [];
+
+      threads.forEach((thread) => {
+        if (thread.thread_type === "family_channel") {
+          accessibleThreads.push(thread);
+          return;
+        }
+
+        if (
+          thread.thread_type === "direct_message" &&
+          (thread.participant_a_id === profileId || thread.participant_b_id === profileId)
+        ) {
+          accessibleThreads.push(thread);
+        }
+      });
+
+      const groupChatIds = threads
+        .filter((thread) => thread.thread_type === "group_chat")
+        .map((thread) => thread.id);
+
+      if (groupChatIds.length > 0) {
+        const { data: groupParticipations, error: groupParticipationsError } = await supabase
+          .from("group_chat_participants")
+          .select("thread_id")
+          .in("thread_id", groupChatIds)
+          .eq("profile_id", profileId);
+
+        if (groupParticipationsError) throw groupParticipationsError;
+
+        const allowedGroupIds = new Set((groupParticipations || []).map((item) => item.thread_id));
+        threads
+          .filter((thread) => thread.thread_type === "group_chat" && allowedGroupIds.has(thread.id))
+          .forEach((thread) => accessibleThreads.push(thread));
+      }
+
+      if (accessibleThreads.length === 0) {
+        setUnreadCounts([]);
+        setTotalUnread(0);
+        return;
+      }
+
+      const accessibleThreadIds = accessibleThreads.map((thread) => thread.id);
+
+      const { data: unreadMessages, error: unreadError } = await supabase
+        .from("thread_messages")
+        .select("id, thread_id, created_at")
+        .in("thread_id", accessibleThreadIds)
+        .neq("sender_id", profileId);
+
+      if (unreadError) throw unreadError;
+
+      const candidateMessages = (unreadMessages || []) as ThreadMessageLite[];
+      if (candidateMessages.length === 0) {
+        setUnreadCounts([]);
+        setTotalUnread(0);
+        return;
+      }
+
+      const { data: readReceipts, error: readReceiptsError } = await supabase
+        .from("message_read_receipts")
+        .select("message_id")
+        .in("message_id", candidateMessages.map((message) => message.id))
+        .eq("reader_id", profileId);
+
+      if (readReceiptsError) throw readReceiptsError;
+
+      const readMessageIds = new Set((readReceipts || []).map((receipt) => receipt.message_id));
+      const threadTypeLookup = new Map(accessibleThreads.map((thread) => [thread.id, thread.thread_type]));
+      const countsByThread = new Map<string, UnreadCount>();
+
+      candidateMessages.forEach((message) => {
+        if (readMessageIds.has(message.id)) {
+          return;
+        }
+
+        const existing = countsByThread.get(message.thread_id);
+        if (existing) {
+          existing.count += 1;
+          if (
+            !existing.lastMessageAt ||
+            new Date(message.created_at).getTime() > new Date(existing.lastMessageAt).getTime()
+          ) {
+            existing.lastMessageAt = message.created_at;
+          }
+          return;
+        }
+
+        countsByThread.set(message.thread_id, {
+          threadId: message.thread_id,
+          threadType: threadTypeLookup.get(message.thread_id) || "direct_message",
+          count: 1,
+          lastMessageAt: message.created_at,
+        });
+      });
+
+      const counts = Array.from(countsByThread.values()).sort((a, b) => {
+        const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return bTime - aTime;
+      });
 
       setUnreadCounts(counts);
       setTotalUnread(counts.reduce((sum, c) => sum + c.count, 0));
@@ -118,7 +195,7 @@ export const useUnreadMessages = () => {
     } finally {
       setLoading(false);
     }
-  }, [profileId, primaryParentId]);
+  }, [activeFamilyId, profileId, primaryParentId]);
 
   // Initial fetch
   useEffect(() => {
@@ -127,7 +204,7 @@ export const useUnreadMessages = () => {
 
   // Subscribe to new messages
   useEffect(() => {
-    if (!primaryParentId) return;
+    if (!activeFamilyId && !primaryParentId) return;
 
     const channel = supabase
       .channel("unread-messages-updates")
@@ -160,7 +237,7 @@ export const useUnreadMessages = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [primaryParentId, fetchUnreadCounts]);
+  }, [activeFamilyId, primaryParentId, fetchUnreadCounts]);
 
   // Helper to check if notifications are enabled
   const showIndicator = preferences.enabled && preferences.new_messages;
