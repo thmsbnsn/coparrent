@@ -714,6 +714,42 @@ export const useMessagingHub = () => {
     [familyChannel?.id, fetchThreads, groupChats, threads],
   );
 
+  const markMessagesRead = useCallback(
+    async (messageIds: string[]) => {
+      if (!profileId || messageIds.length === 0) {
+        return;
+      }
+
+      const uniqueMessageIds = [...new Set(messageIds)];
+      const payload = uniqueMessageIds.map((messageId) => ({
+        message_id: messageId,
+        reader_id: profileId,
+      }));
+
+      const { error } = await supabase
+        .from("message_read_receipts")
+        .insert(payload);
+
+      if (!error) {
+        return;
+      }
+
+      if (error.code === "23505") {
+        return;
+      }
+
+      logger.warn("Unable to create message read receipts", {
+        code: error.code,
+        details: error.details,
+        hint: error.hint,
+        message: error.message,
+        messageIds: uniqueMessageIds,
+        profileId,
+      });
+    },
+    [profileId],
+  );
+
   // Fetch messages for active thread with read receipts
   const fetchMessages = useCallback(async (threadId: string) => {
     if (!profileId) return;
@@ -774,22 +810,23 @@ export const useMessagingHub = () => {
       setMessages(formattedMessages);
 
       // Mark messages as read
-      const unreadMessages = (data || []).filter(m => 
-        m.sender_id !== profileId
-      );
-      
-      for (const msg of unreadMessages) {
-        await supabase
-          .from("message_read_receipts")
-          .upsert({
-            message_id: msg.id,
-            reader_id: profileId,
-          }, { onConflict: "message_id,reader_id" });
-      }
+      const unreadMessageIds = (data || [])
+        .filter((message) => {
+          if (message.sender_id === profileId) {
+            return false;
+          }
+
+          return !receiptsByMessage
+            .get(message.id)
+            ?.some((receipt) => receipt.reader_id === profileId);
+        })
+        .map((message) => message.id);
+
+      await markMessagesRead(unreadMessageIds);
     } catch (error) {
       console.error("Error fetching messages:", error);
     }
-  }, [profileId]);
+  }, [markMessagesRead, profileId]);
 
   // Send message with double-submit protection
   const sendMessage = async (content: string) => {
@@ -1199,12 +1236,7 @@ export const useMessagingHub = () => {
 
           // Mark as read if not from me
           if (newMsg.sender_id !== profileId && profileId) {
-            await supabase
-              .from("message_read_receipts")
-              .upsert({
-                message_id: newMsg.id,
-                reader_id: profileId,
-              }, { onConflict: "message_id,reader_id" });
+            await markMessagesRead([newMsg.id]);
           }
         }
       )
@@ -1213,7 +1245,7 @@ export const useMessagingHub = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [activeThread, profileId]);
+  }, [activeThread, markMessagesRead, profileId]);
 
   // Subscribe to realtime updates for read receipts
   useEffect(() => {
