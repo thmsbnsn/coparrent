@@ -20,6 +20,7 @@ const CALL_EVENTS = [
 
 export const useDailyCall = () => {
   const callObjectRef = useRef<DailyCall | null>(null);
+  const pendingJoinSessionIdRef = useRef<string | null>(null);
   const [callObject, setCallObject] = useState<DailyCall | null>(null);
   const [currentCallSessionId, setCurrentCallSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -101,9 +102,20 @@ export const useDailyCall = () => {
     async (session: CallSessionRow) => {
       setError(null);
 
+      if (pendingJoinSessionIdRef.current === session.id) {
+        return;
+      }
+
+      const sameSessionCallObject = callObjectRef.current;
+      const sameSessionMeetingState =
+        currentCallSessionId === session.id
+          ? sameSessionCallObject?.meetingState() ?? meetingState
+          : null;
+
       if (
         currentCallSessionId === session.id &&
-        (meetingState === "joining-meeting" || meetingState === "joined-meeting")
+        (sameSessionMeetingState === "joining-meeting" ||
+          sameSessionMeetingState === "joined-meeting")
       ) {
         return;
       }
@@ -112,28 +124,39 @@ export const useDailyCall = () => {
         await destroyCallObject();
       }
 
-      const { data, error: joinError } = await supabase.functions.invoke("join-call-session", {
-        body: {
-          call_session_id: session.id,
-        },
-      });
-
-      if (joinError || !data?.success) {
-        throw new Error(data?.error ?? joinError?.message ?? "Unable to join the call.");
-      }
-
-      const current = callObjectRef.current ?? DailyIframe.createCallObject();
-      callObjectRef.current = current;
-      setCallObject(current);
+      pendingJoinSessionIdRef.current = session.id;
       setCurrentCallSessionId(session.id);
 
-      await current.join({
-        token: data.token as string,
-        url: data.room_url as string,
-        userName: data.user_name as string,
-      });
+      try {
+        const { data, error: joinError } = await supabase.functions.invoke("join-call-session", {
+          body: {
+            call_session_id: session.id,
+          },
+        });
 
-      syncState(current);
+        if (joinError || !data?.success) {
+          throw new Error(data?.error ?? joinError?.message ?? "Unable to join the call.");
+        }
+
+        const current = callObjectRef.current ?? DailyIframe.createCallObject();
+        callObjectRef.current = current;
+        setCallObject(current);
+
+        await current.join({
+          token: data.token as string,
+          url: data.room_url as string,
+          userName: data.user_name as string,
+        });
+
+        syncState(current);
+      } catch (error) {
+        setCurrentCallSessionId((current) => (current === session.id ? null : current));
+        throw error;
+      } finally {
+        if (pendingJoinSessionIdRef.current === session.id) {
+          pendingJoinSessionIdRef.current = null;
+        }
+      }
     },
     [currentCallSessionId, destroyCallObject, meetingState, syncState],
   );
