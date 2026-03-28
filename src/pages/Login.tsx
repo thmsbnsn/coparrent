@@ -12,10 +12,13 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { SocialLoginButtons } from "@/components/auth/SocialLoginButtons";
-import { TwoFactorVerify } from "@/components/auth/TwoFactorVerify";
+import {
+  AuthMfaChallenge,
+  type VerifiedMfaFactor,
+} from "@/components/auth/AuthMfaChallenge";
 import { logger } from "@/lib/logger";
 import { safeErrorMessage } from "@/lib/safeText";
-import { ensureCurrentUserFamilyMembership } from "@/lib/familyMembership";
+import { resolvePostAuthPath } from "@/lib/postAuthPath";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -24,7 +27,8 @@ const Login = () => {
   const passwordRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [mfaRequired, setMfaRequired] = useState(false);
-  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaPrimaryFactor, setMfaPrimaryFactor] = useState<VerifiedMfaFactor | null>(null);
+  const [mfaSecondaryFactor, setMfaSecondaryFactor] = useState<VerifiedMfaFactor | null>(null);
   const [rememberMe, setRememberMe] = useState(() => {
     return localStorage.getItem("rememberMe") === "true";
   });
@@ -39,38 +43,58 @@ const Login = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (!loading && user && !mfaRequired) {
-      const pendingToken = sessionStorage.getItem("pendingInviteToken") || localStorage.getItem("pendingInviteToken");
-      if (pendingToken) {
-        navigate(`/accept-invite?token=${pendingToken}`);
-      } else {
-        const checkOnboarding = async () => {
-          await ensureCurrentUserFamilyMembership(user.user_metadata?.full_name || user.email || null);
+      let active = true;
 
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("user_id", user.id)
-            .maybeSingle();
-          
-          if (profile) {
-            const { count } = await supabase
-              .from("parent_children")
-              .select("*", { count: "exact", head: true })
-              .eq("parent_id", profile.id);
-            
-            if (count && count > 0) {
-              navigate("/dashboard");
-            } else {
-              navigate("/onboarding");
-            }
-          } else {
-            navigate("/onboarding");
-          }
-        };
-        checkOnboarding();
-      }
+      void (async () => {
+        const path = await resolvePostAuthPath(user);
+        if (active) {
+          navigate(path);
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
     }
   }, [user, loading, navigate, mfaRequired]);
+
+  const prepareMfaChallenge = (factorsData: {
+    totp: Array<{ id: string; status: string; friendly_name?: string | null }>;
+    webauthn: Array<{ id: string; status: string; friendly_name?: string | null }>;
+  }) => {
+    const verifiedPasskey = factorsData.webauthn.find((factor) => factor.status === "verified");
+    const verifiedTotp = factorsData.totp.find((factor) => factor.status === "verified");
+
+    if (!verifiedPasskey && !verifiedTotp) {
+      return false;
+    }
+
+    const primaryFactor: VerifiedMfaFactor = verifiedPasskey
+      ? {
+          id: verifiedPasskey.id,
+          type: "webauthn",
+          friendlyName: verifiedPasskey.friendly_name ?? null,
+        }
+      : {
+          id: verifiedTotp!.id,
+          type: "totp",
+          friendlyName: verifiedTotp!.friendly_name ?? null,
+        };
+
+    const secondaryFactor: VerifiedMfaFactor | null =
+      verifiedPasskey && verifiedTotp
+        ? {
+            id: verifiedTotp.id,
+            type: "totp",
+            friendlyName: verifiedTotp.friendly_name ?? null,
+          }
+        : null;
+
+    setMfaPrimaryFactor(primaryFactor);
+    setMfaSecondaryFactor(secondaryFactor);
+    setMfaRequired(true);
+    return true;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,15 +124,15 @@ const Login = () => {
     // Check if MFA is required
     if (data.session) {
       const { data: factorsData } = await supabase.auth.mfa.listFactors();
-      
-      if (factorsData?.totp && factorsData.totp.length > 0) {
-        const verifiedFactor = factorsData.totp.find(f => f.status === "verified");
-        if (verifiedFactor) {
-          // MFA is enabled, require verification
-          setMfaFactorId(verifiedFactor.id);
-          setMfaRequired(true);
-          return;
-        }
+
+      if (
+        factorsData &&
+        prepareMfaChallenge({
+          totp: factorsData.totp || [],
+          webauthn: factorsData.webauthn || [],
+        })
+      ) {
+        return;
       }
     }
 
@@ -134,13 +158,16 @@ const Login = () => {
 
   const handleMfaSuccess = () => {
     setMfaRequired(false);
+    setMfaPrimaryFactor(null);
+    setMfaSecondaryFactor(null);
     completeLogin();
   };
 
   const handleMfaCancel = async () => {
     await supabase.auth.signOut();
     setMfaRequired(false);
-    setMfaFactorId(null);
+    setMfaPrimaryFactor(null);
+    setMfaSecondaryFactor(null);
     setFormData({ ...formData, password: "" });
   };
 
@@ -161,9 +188,10 @@ const Login = () => {
             <Logo size="lg" />
           </Link>
 
-          {mfaRequired && mfaFactorId ? (
-            <TwoFactorVerify
-              factorId={mfaFactorId}
+          {mfaRequired && mfaPrimaryFactor ? (
+            <AuthMfaChallenge
+              primaryFactor={mfaPrimaryFactor}
+              secondaryFactor={mfaSecondaryFactor}
               onSuccess={handleMfaSuccess}
               onCancel={handleMfaCancel}
             />
@@ -186,6 +214,10 @@ const Login = () => {
                     placeholder="you@example.com"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    autoComplete="username"
+                    autoCapitalize="off"
+                    autoCorrect="off"
+                    spellCheck={false}
                     required
                   />
                 </div>
