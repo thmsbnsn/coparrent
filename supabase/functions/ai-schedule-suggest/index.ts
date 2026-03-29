@@ -169,7 +169,7 @@ Return ONLY valid JSON, no explanation.`;
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://coparrent.app",
+        "HTTP-Referer": "https://www.coparrent.com",
         "X-Title": "CoParrent Schedule Wizard",
       },
       body: JSON.stringify({
@@ -327,7 +327,7 @@ Respond ONLY with the JSON object, no other text.`;
       headers: {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://coparrent.app",
+        "HTTP-Referer": "https://www.coparrent.com",
         "X-Title": "CoParrent Schedule Wizard",
       },
       body: JSON.stringify({

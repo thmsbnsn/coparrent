@@ -12,6 +12,8 @@ type ValidAction = typeof VALID_ACTIONS[number];
 const VALID_MODES = ["neutral", "deescalate", "facts_only", "boundary_setting"] as const;
 type ValidMode = typeof VALID_MODES[number];
 
+const TEXT_MODEL_ID = "google/gemini-3-flash-preview";
+
 // Input length limits per plan tier
 const INPUT_LIMITS: Record<string, number> = {
   free: 600,
@@ -259,11 +261,11 @@ Return ONLY valid JSON, no markdown or explanation.`;
       headers: {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://coparrent.app",
+        "HTTP-Referer": "https://www.coparrent.com",
         "X-Title": "CoParrent Message Assistant",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.0-flash-exp:free",
+        model: TEXT_MODEL_ID,
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
@@ -309,11 +311,11 @@ Return ONLY valid JSON, no markdown or explanation.`;
           headers: {
             Authorization: `Bearer ${OPENROUTER_API_KEY}`,
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://coparrent.app",
+            "HTTP-Referer": "https://www.coparrent.com",
             "X-Title": "CoParrent Message Assistant",
           },
           body: JSON.stringify({
-            model: "google/gemini-2.0-flash-exp:free",
+            model: TEXT_MODEL_ID,
             messages: [
               { role: "system", content: "Fix this malformed JSON and return ONLY valid JSON with no markdown." },
               { role: "user", content: aiResponse },

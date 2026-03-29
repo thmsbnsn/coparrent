@@ -3,20 +3,18 @@
  * Implements strict origin validation with env-based allowlist
  */
 
-// Default allowed origins for production
+// Default allowed origins for production.
+// Keep this list narrow and require explicit env config for previews or
+// temporary hosts instead of carrying historical domains forever.
 const DEFAULT_ALLOWED_ORIGINS = [
-  "https://coparrent.app",
-  "https://www.coparrent.app",
   "https://coparrent.com",
   "https://www.coparrent.com",
-  "https://lovable.dev",
+  "https://coparrent.vercel.app",
 ];
 
-// Optional wildcard origin patterns for preview environments
-const DEFAULT_ALLOWED_ORIGIN_PATTERNS = [
-  "https://*.lovableproject.com",
-  "https://*.lovable.app",
-];
+// Preview wildcard origins must be configured explicitly via
+// ALLOWED_ORIGIN_PATTERNS so production defaults stay tight.
+const DEFAULT_ALLOWED_ORIGIN_PATTERNS: string[] = [];
 
 // Localhost patterns for development
 const LOCALHOST_PATTERNS = [

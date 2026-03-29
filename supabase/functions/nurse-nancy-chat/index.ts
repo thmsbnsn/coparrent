@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { aiGuard, getPlanLimits, validateInputLength } from "../_shared/aiGuard.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { strictCors, getCorsHeaders } from "../_shared/aiCors.ts";
 
 // Rate limit: 100 messages per day per user for Nurse Nancy
 const NURSE_NANCY_DAILY_LIMIT = 100;
@@ -250,9 +246,10 @@ function detectSafetyTriggers(message: string): {
 }
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const corsResponse = strictCors(req);
+  if (corsResponse) return corsResponse;
+
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -451,7 +448,7 @@ serve(async (req) => {
       headers: {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://coparrent.app",
+        "HTTP-Referer": "https://www.coparrent.com",
         "X-Title": "CoParrent Nurse Nancy",
       },
       body: JSON.stringify({

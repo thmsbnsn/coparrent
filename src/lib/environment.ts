@@ -1,14 +1,11 @@
 const PRODUCTION_HOSTS = new Set([
   "coparrent.com",
   "www.coparrent.com",
-  "coparrent.app",
-  "www.coparrent.app",
-  "coparrent.lovable.app",
+  "coparrent.vercel.app",
 ]);
 
 const STAGING_HOST_PATTERNS = [
   /\.vercel\.app$/i,
-  /\.lovableproject\.com$/i,
 ];
 
 export type AppEnvironment = "production" | "staging" | "development";

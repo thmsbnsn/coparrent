@@ -1,11 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { aiGuard, getPlanLimits, validateInputLength } from "../_shared/aiGuard.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { strictCors, getCorsHeaders } from "../_shared/aiCors.ts";
 
 // Rate limit: 20 coloring pages per day per user
 const COLORING_PAGE_DAILY_LIMIT = 20;
@@ -18,9 +14,19 @@ const DIFFICULTY_PROMPTS: Record<string, string> = {
   detailed: "Create a detailed coloring page suitable for ages 8 and up. Include intricate patterns, fine details, and complex designs. Can include mandalas, zentangle patterns, or highly detailed scenes.",
 };
 
+const IMAGE_MODEL_CANDIDATES = [
+  "google/gemini-2.5-flash-image",
+  "google/gemini-3.1-flash-image-preview",
+];
+
 interface GenerateRequest {
   prompt: string;
   difficulty: "simple" | "medium" | "detailed";
+}
+
+interface ImageGenerationResult {
+  imageUrl: string;
+  modelId: string;
 }
 
 /**
@@ -117,10 +123,78 @@ async function checkColoringPageRateLimit(
   }
 }
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+async function generateColoringImage(
+  apiKey: string,
+  fullPrompt: string,
+): Promise<ImageGenerationResult> {
+  let lastError: string | null = null;
+
+  for (const modelId of IMAGE_MODEL_CANDIDATES) {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://www.coparrent.com",
+        "X-Title": "CoParrent Coloring Pages",
+      },
+      body: JSON.stringify({
+        model: modelId,
+        messages: [
+          {
+            role: "user",
+            content: fullPrompt
+          }
+        ],
+        modalities: ["image", "text"]
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      if (response.status === 429) {
+        throw new Error("AI_RATE_LIMIT");
+      }
+
+      if (response.status === 404 || response.status === 503) {
+        lastError = `Model ${modelId} unavailable: ${errorText}`;
+        console.warn(`[COLORING-PAGE] ${lastError}`);
+        continue;
+      }
+
+      console.error(`[COLORING-PAGE] OpenRouter error for ${modelId}: ${response.status} - ${errorText}`);
+      throw new Error("AI_SERVICE_ERROR");
+    }
+
+    const data = await response.json();
+    const firstImage = data.choices?.[0]?.message?.images?.[0];
+    const imageUrl = firstImage?.image_url?.url ?? firstImage?.imageUrl?.url;
+
+    if (!imageUrl) {
+      lastError = `Model ${modelId} returned no image payload`;
+      console.warn(`[COLORING-PAGE] ${lastError}`);
+      continue;
+    }
+
+    return {
+      imageUrl,
+      modelId,
+    };
   }
+
+  if (lastError) {
+    console.error(`[COLORING-PAGE] ${lastError}`);
+  }
+
+  throw new Error("AI_UNAVAILABLE");
+}
+
+serve(async (req) => {
+  const corsResponse = strictCors(req);
+  if (corsResponse) return corsResponse;
+
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -220,28 +294,13 @@ Style requirements:
       throw new Error("AI service is not configured");
     }
 
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": "https://coparrent.app",
-        "X-Title": "CoParrent Coloring Pages",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
-        messages: [
-          {
-            role: "user",
-            content: fullPrompt
-          }
-        ],
-        modalities: ["image", "text"]
-      }),
-    });
+    let imageResult: ImageGenerationResult;
+    try {
+      imageResult = await generateColoringImage(OPENROUTER_API_KEY, fullPrompt);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
 
-    if (!response.ok) {
-      if (response.status === 429) {
+      if (message === "AI_RATE_LIMIT") {
         return new Response(
           JSON.stringify({
             ok: false,
@@ -251,17 +310,19 @@ Style requirements:
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      console.error(`[COLORING-PAGE] OpenRouter error status=${response.status}`);
-      throw new Error("AI service temporarily unavailable");
-    }
 
-    const data = await response.json();
-    const firstImage = data.choices?.[0]?.message?.images?.[0];
-    const imageUrl = firstImage?.image_url?.url ?? firstImage?.imageUrl?.url;
+      if (message === "AI_UNAVAILABLE") {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            code: "AI_UNAVAILABLE",
+            message: "AI service temporarily unavailable. Please try again in a minute.",
+          }),
+          { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
-    if (!imageUrl) {
-      console.error("[COLORING-PAGE] No image in response");
-      throw new Error("Failed to generate coloring page");
+      throw error;
     }
 
     // Store metadata in coloring_pages table
@@ -271,7 +332,7 @@ Style requirements:
         user_id: userId,
         prompt,
         difficulty,
-        image_url: imageUrl,
+        image_url: imageResult.imageUrl,
       })
       .select()
       .single();
@@ -281,14 +342,15 @@ Style requirements:
       // Continue anyway - user still gets the image
     }
 
-    console.log(`[COLORING-PAGE] Generated successfully id=${coloringPage?.id?.slice(0, 8) || 'unknown'}...`);
+    console.log(`[COLORING-PAGE] Generated successfully id=${coloringPage?.id?.slice(0, 8) || 'unknown'}... model=${imageResult.modelId}`);
 
     return new Response(
       JSON.stringify({
         ok: true,
-        imageUrl,
+        imageUrl: imageResult.imageUrl,
         coloringPageId: coloringPage?.id,
         remaining: rateLimit.remaining,
+        modelId: imageResult.modelId,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

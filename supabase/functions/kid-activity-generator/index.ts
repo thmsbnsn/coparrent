@@ -1,17 +1,15 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { aiGuard } from "../_shared/aiGuard.ts";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { strictCors, getCorsHeaders } from "../_shared/aiCors.ts";
 
 interface ActivityRequest {
   type: "activity" | "recipe" | "craft";
+  prompt?: string;
   childAge?: number;
   childName?: string;
   duration?: string; // "15min", "30min", "1hour", "2hours"
   location?: "indoor" | "outdoor" | "both";
+  energyLevel?: "calm" | "moderate" | "high";
   materials?: string[];
   dietary?: string[]; // For recipes: allergies, preferences
 }
@@ -22,14 +20,20 @@ const SYSTEM_PROMPTS: Record<string, string> = {
 Your response MUST be valid JSON with this exact structure:
 {
   "title": "Activity Name",
-  "description": "Brief description",
-  "ageRange": "3-5 years",
-  "duration": "30 minutes",
+  "age_range": "3-5 years",
+  "duration_minutes": 30,
+  "indoor_outdoor": "indoor",
+  "energy_level": "moderate",
+  "mess_level": "low",
+  "supervision_level": "medium",
   "materials": ["item1", "item2"],
   "steps": ["Step 1", "Step 2", "Step 3"],
-  "learningAreas": ["motor skills", "creativity"],
-  "safetyNotes": ["Adult supervision required"],
-  "variations": ["Make it easier by...", "Make it harder by..."]
+  "variations": {
+    "easier": "Make it easier by...",
+    "harder": "Make it harder by..."
+  },
+  "learning_goals": ["motor skills", "creativity"],
+  "safety_notes": "Adult supervision required"
 }
 
 Return ONLY valid JSON, no markdown or explanation.`,
@@ -72,10 +76,121 @@ Your response MUST be valid JSON with this exact structure:
 Return ONLY valid JSON, no markdown or explanation.`
 };
 
-serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+function toStringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
   }
+
+  return value
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return entry.trim();
+      }
+
+      if (entry && typeof entry === "object") {
+        const record = entry as Record<string, unknown>;
+
+        for (const key of ["instruction", "item", "name", "title", "quantity", "amount"]) {
+          const candidate = record[key];
+          if (typeof candidate === "string" && candidate.trim()) {
+            return candidate.trim();
+          }
+        }
+      }
+
+      return null;
+    })
+    .filter((entry): entry is string => Boolean(entry));
+}
+
+function toDurationMinutes(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(1, Math.round(value));
+  }
+
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const numericMatch = normalized.match(/(\d+(?:\.\d+)?)/);
+  if (!numericMatch) {
+    return undefined;
+  }
+
+  const amount = Number.parseFloat(numericMatch[1]);
+  if (!Number.isFinite(amount)) {
+    return undefined;
+  }
+
+  if (normalized.includes("hour")) {
+    return Math.max(1, Math.round(amount * 60));
+  }
+
+  return Math.max(1, Math.round(amount));
+}
+
+function normalizeVariations(value: unknown): { easier?: string; harder?: string } {
+  if (Array.isArray(value)) {
+    return {
+      easier: toStringValue(value[0]),
+      harder: toStringValue(value[1]),
+    };
+  }
+
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return {
+      easier: toStringValue(record.easier ?? record.easy),
+      harder: toStringValue(record.harder ?? record.challenge),
+    };
+  }
+
+  return {};
+}
+
+function normalizeActivityResult(rawResult: unknown) {
+  const result = rawResult && typeof rawResult === "object"
+    ? rawResult as Record<string, unknown>
+    : {};
+
+  return {
+    title: toStringValue(result.title) ?? "Generated Activity",
+    age_range:
+      toStringValue(result.age_range) ??
+      toStringValue(result.ageRange) ??
+      toStringValue(result.age) ??
+      "5-8 years",
+    duration_minutes:
+      toDurationMinutes(result.duration_minutes) ??
+      toDurationMinutes(result.duration),
+    indoor_outdoor: toStringValue(result.indoor_outdoor ?? result.location),
+    energy_level: toStringValue(result.energy_level),
+    mess_level: toStringValue(result.mess_level ?? result.messLevel),
+    supervision_level: toStringValue(result.supervision_level),
+    materials: toStringArray(result.materials),
+    steps: toStringArray(result.steps),
+    variations: normalizeVariations(result.variations),
+    learning_goals: toStringArray(result.learning_goals ?? result.learningAreas ?? result.skillsLearned),
+    safety_notes:
+      toStringValue(result.safety_notes) ??
+      toStringValue(Array.isArray(result.safetyNotes) ? result.safetyNotes.join("; ") : result.safetyNotes),
+  };
+}
+
+serve(async (req) => {
+  const corsResponse = strictCors(req);
+  if (corsResponse) return corsResponse;
+
+  const corsHeaders = getCorsHeaders(req);
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -106,7 +221,7 @@ serve(async (req) => {
 
     // Parse request
     const body: ActivityRequest = await req.json();
-    const { type = "activity", childAge, childName, duration, location, materials, dietary } = body;
+    const { type = "activity", prompt, childAge, childName, duration, location, energyLevel, materials, dietary } = body;
 
     if (!["activity", "recipe", "craft"].includes(type)) {
       return new Response(
@@ -116,19 +231,34 @@ serve(async (req) => {
     }
 
     // Build user prompt based on type
+    const trimmedPrompt = prompt?.trim();
     let userPrompt = "";
     const ageText = childAge ? `a ${childAge}-year-old` : "children";
     const nameText = childName ? ` named ${childName}` : "";
 
     if (type === "activity") {
-      userPrompt = `Generate a fun ${location || "indoor or outdoor"} activity for ${ageText}${nameText}.`;
+      userPrompt = trimmedPrompt
+        ? `Generate one fun activity idea based on this request: "${trimmedPrompt}".`
+        : `Generate a fun ${location || "indoor or outdoor"} activity for ${ageText}${nameText}.`;
+      if (childAge) userPrompt += ` The activity should feel right for ${childAge}-year-olds.`;
+      if (childName) userPrompt += ` You can refer to the child as ${childName}.`;
       if (duration) userPrompt += ` It should take about ${duration}.`;
+      if (location) userPrompt += ` Prefer a ${location} setting.`;
+      if (energyLevel) userPrompt += ` Target a ${energyLevel} energy level.`;
       if (materials?.length) userPrompt += ` Available materials: ${materials.join(", ")}.`;
     } else if (type === "recipe") {
-      userPrompt = `Generate a kid-friendly recipe that ${ageText}${nameText} can help prepare.`;
+      userPrompt = trimmedPrompt
+        ? `Generate one kid-friendly recipe idea based on this request: "${trimmedPrompt}".`
+        : `Generate a kid-friendly recipe that ${ageText}${nameText} can help prepare.`;
+      if (childAge) userPrompt += ` The recipe should fit a ${childAge}-year-old helper.`;
+      if (childName) userPrompt += ` You can refer to the child as ${childName}.`;
       if (dietary?.length) userPrompt += ` Dietary considerations: ${dietary.join(", ")}.`;
     } else if (type === "craft") {
-      userPrompt = `Generate a creative craft project for ${ageText}${nameText}.`;
+      userPrompt = trimmedPrompt
+        ? `Generate one creative craft project based on this request: "${trimmedPrompt}".`
+        : `Generate a creative craft project for ${ageText}${nameText}.`;
+      if (childAge) userPrompt += ` The craft should fit a ${childAge}-year-old.`;
+      if (childName) userPrompt += ` You can refer to the child as ${childName}.`;
       if (duration) userPrompt += ` It should take about ${duration}.`;
       if (materials?.length) userPrompt += ` Available materials: ${materials.join(", ")}.`;
     }
@@ -149,7 +279,7 @@ serve(async (req) => {
       headers: {
         Authorization: `Bearer ${OPENROUTER_API_KEY}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://coparrent.app",
+        "HTTP-Referer": "https://www.coparrent.com",
         "X-Title": "CoParrent Activity Generator",
       },
       body: JSON.stringify({
@@ -207,6 +337,10 @@ serve(async (req) => {
       console.error(`[KID-ACTIVITY] JSON parse error:`, parseError);
       // Return raw content as fallback
       result = { title: "Generated Content", content: aiContent };
+    }
+
+    if (type === "activity") {
+      result = normalizeActivityResult(result);
     }
 
     console.log(`[KID-ACTIVITY] Successfully generated ${type} for user=${userContext.userId}`);

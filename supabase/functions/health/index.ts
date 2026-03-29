@@ -86,12 +86,11 @@ function getEnvironment(req: Request): string {
   const host = (req.headers.get("host") || "").toLowerCase();
   if (
     host.includes("coparrent.com") ||
-    host.includes("coparrent.app") ||
-    host.includes("coparrent.lovable.app")
+    host.includes("coparrent.vercel.app")
   ) {
     return "production";
   }
-  if (host.includes("preview") || host.includes(".vercel.app") || host.includes(".lovableproject.com")) {
+  if (host.includes("preview") || host.includes(".vercel.app")) {
     return "staging";
   }
   return "development";
