@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useFamily } from "@/contexts/FamilyContext";
 import { useToast } from "@/hooks/use-toast";
 import type { Child } from "@/hooks/useChildren";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -12,6 +12,11 @@ import {
   isMutationInProgress 
 } from "@/lib/mutations";
 import { ERROR_MESSAGES } from "@/lib/errorMessages";
+import {
+  ensureFamilyChildLinksSynced,
+  fetchChildIdsForProfile,
+  fetchFamilyChildIds,
+} from "@/lib/familyScope";
 
 // Helper to delete all files in a storage folder
 const deleteStorageFolder = async (bucket: string, folderPath: string): Promise<void> => {
@@ -28,92 +33,69 @@ type RealtimeChildPayload = Partial<Child> & {
 };
 
 export const useRealtimeChildren = () => {
-  const { user, loading: authLoading } = useAuth();
+  const {
+    activeFamilyId,
+    isParentInActiveFamily,
+    loading: familyLoading,
+    profileId,
+    roleLoading,
+  } = useFamily();
   const { toast } = useToast();
   const { sendNotification } = useNotifications();
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userProfileId, setUserProfileId] = useState<string | null>(null);
-
-  // Fetch user's profile ID
-  useEffect(() => {
-    const fetchProfileId = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (error) {
-          console.error("Error fetching profile:", error);
-        }
-
-        if (profile) {
-          setUserProfileId(profile.id);
-        } else {
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error("Error fetching profile:", error);
-        setLoading(false);
-      }
-    };
-
-    if (!authLoading) {
-      fetchProfileId();
-    }
-  }, [user, authLoading]);
 
   // Fetch children
   const fetchChildren = useCallback(async () => {
-    if (!userProfileId) {
-      setLoading(false);
+    if (familyLoading || roleLoading) {
       return;
     }
 
-    const { data: links, error: linksError } = await supabase
-      .from("parent_children")
-      .select("child_id")
-      .eq("parent_id", userProfileId);
-
-    if (linksError) {
-      console.error("Error fetching child links:", linksError);
-      setLoading(false);
-      return;
-    }
-
-    if (!links || links.length === 0) {
+    if (!profileId) {
       setChildren([]);
       setLoading(false);
       return;
     }
 
-    const childIds = links.map((l) => l.child_id);
+    setLoading(true);
 
-    const { data, error } = await supabase
-      .from("children")
-      .select("*")
-      .in("id", childIds)
-      .order("name");
+    try {
+      if (activeFamilyId && isParentInActiveFamily) {
+        await ensureFamilyChildLinksSynced(activeFamilyId);
+      }
 
-    if (error) {
+      const childIds = activeFamilyId
+        ? await fetchFamilyChildIds(activeFamilyId)
+        : await fetchChildIdsForProfile(profileId);
+
+      if (childIds.length === 0) {
+        setChildren([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("children")
+        .select("*")
+        .in("id", childIds)
+        .order("name");
+
+      if (error) {
+        throw error;
+      }
+
+      setChildren((data as Child[]) || []);
+    } catch (error) {
       console.error("Error fetching children:", error);
       toast({
         title: "Error",
         description: "Failed to load children",
         variant: "destructive",
       });
-    } else {
-      setChildren((data as Child[]) || []);
+      setChildren([]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, [userProfileId, toast]);
+  }, [activeFamilyId, familyLoading, isParentInActiveFamily, profileId, roleLoading, toast]);
 
   useEffect(() => {
     fetchChildren();
@@ -121,11 +103,11 @@ export const useRealtimeChildren = () => {
 
   // Set up realtime subscriptions
   useEffect(() => {
-    if (!userProfileId) return;
+    if (!profileId || familyLoading || roleLoading) return;
 
     // Subscribe to children table changes
     const childrenChannel = supabase
-      .channel('children-changes')
+      .channel(`children-changes-${activeFamilyId ?? profileId}`)
       .on(
         'postgres_changes',
         {
@@ -153,32 +135,48 @@ export const useRealtimeChildren = () => {
       .subscribe();
 
     // Subscribe to parent_children link changes
-    const linksChannel = supabase
-      .channel('parent-children-changes')
+    const linksChannelBuilder = supabase
+      .channel(`parent-children-changes-${activeFamilyId ?? profileId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
           table: 'parent_children',
-          filter: `parent_id=eq.${userProfileId}`
         },
         (payload) => {
           console.log('Parent-children link change:', payload);
           // Refetch children when links change
-          fetchChildren();
+          void fetchChildren();
         }
-      )
-      .subscribe();
+      );
+
+    const linksChannel = activeFamilyId
+      ? linksChannelBuilder.subscribe()
+      : supabase
+          .channel(`parent-children-changes-profile-${profileId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'parent_children',
+              filter: `parent_id=eq.${profileId}`
+            },
+            () => {
+              void fetchChildren();
+            }
+          )
+          .subscribe();
 
     return () => {
       supabase.removeChannel(childrenChannel);
       supabase.removeChannel(linksChannel);
     };
-  }, [userProfileId, fetchChildren, sendNotification]);
+  }, [activeFamilyId, familyLoading, fetchChildren, profileId, roleLoading, sendNotification]);
 
   const addChild = async (name: string, dateOfBirth?: string): Promise<Child | null> => {
-    if (!userProfileId) {
+    if (!profileId) {
       toast({
         title: "Error",
         description: ERROR_MESSAGES.NOT_AUTHENTICATED,
@@ -199,10 +197,16 @@ export const useRealtimeChildren = () => {
 
     try {
       // Use the secure RPC that enforces plan limits
-      const { data, error } = await supabase.rpc("rpc_add_child", {
-        p_name: name.trim(),
-        p_dob: dateOfBirth || null,
-      });
+      const { data, error } = activeFamilyId
+        ? await supabase.rpc("rpc_add_child_to_family", {
+            p_family_id: activeFamilyId,
+            p_name: name.trim(),
+            p_dob: dateOfBirth || null,
+          })
+        : await supabase.rpc("rpc_add_child", {
+            p_name: name.trim(),
+            p_dob: dateOfBirth || null,
+          });
 
       if (error) {
         console.error("Error creating child:", error);
@@ -231,12 +235,30 @@ export const useRealtimeChildren = () => {
         description: `${name} has been added`,
       });
 
-      // Refetch to get the updated list
-      await fetchChildren();
+      const newChild = result.data
+        ? ({
+            id: result.data.id,
+            name: name.trim(),
+            date_of_birth: dateOfBirth || null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            avatar_url: null,
+            blood_type: null,
+            allergies: null,
+            medications: null,
+            medical_notes: null,
+            emergency_contact: null,
+            emergency_phone: null,
+            doctor_name: null,
+            doctor_phone: null,
+            school_name: null,
+            school_phone: null,
+            grade: null,
+          } as Child)
+        : null;
 
-      // Find and return the newly created child
-      const newChild = children.find(c => c.id === result.data?.id);
-      return newChild || null;
+      await fetchChildren();
+      return newChild;
     } finally {
       releaseMutationLock(mutationKey);
     }
@@ -253,6 +275,10 @@ export const useRealtimeChildren = () => {
     }
 
     try {
+      if (activeFamilyId && isParentInActiveFamily) {
+        await ensureFamilyChildLinksSynced(activeFamilyId);
+      }
+
       const { error } = await supabase
         .from("children")
         .update(updates)
@@ -279,7 +305,7 @@ export const useRealtimeChildren = () => {
   };
 
   const deleteChild = async (childId: string): Promise<boolean> => {
-    if (!userProfileId) {
+    if (!profileId) {
       toast({
         title: "Error",
         description: ERROR_MESSAGES.NOT_AUTHENTICATED,
@@ -299,15 +325,15 @@ export const useRealtimeChildren = () => {
     }
 
     try {
-      // First verify the user has access to this child
-      const { data: link } = await supabase
-        .from("parent_children")
-        .select("id")
-        .eq("parent_id", userProfileId)
-        .eq("child_id", childId)
-        .maybeSingle();
+      if (activeFamilyId && isParentInActiveFamily) {
+        await ensureFamilyChildLinksSynced(activeFamilyId);
+      }
 
-      if (!link) {
+      const visibleChildIds = activeFamilyId
+        ? await fetchFamilyChildIds(activeFamilyId)
+        : await fetchChildIdsForProfile(profileId);
+
+      if (!visibleChildIds.includes(childId)) {
         toast({
           title: "Error",
           description: ERROR_MESSAGES.ACCESS_DENIED,

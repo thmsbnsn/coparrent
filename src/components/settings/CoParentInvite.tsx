@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { ensureCurrentUserFamilyMembership } from "@/lib/familyMembership";
+import { useFamily } from "@/contexts/FamilyContext";
 
 interface Invitation {
   id: string;
@@ -32,6 +33,7 @@ export const CoParentInvite = ({
   existingInvitations, 
   onInviteSent 
 }: CoParentInviteProps) => {
+  const { activeFamilyId } = useFamily();
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
@@ -52,7 +54,10 @@ export const CoParentInvite = ({
     setIsLoading(true);
 
     try {
-      const ensuredFamily = await ensureCurrentUserFamilyMembership(inviterName || null);
+      const ensuredFamily = activeFamilyId
+        ? { familyId: activeFamilyId }
+        : await ensureCurrentUserFamilyMembership(inviterName || null);
+
       if (!ensuredFamily.familyId) {
         throw new Error("Could not determine your family for this invitation.");
       }

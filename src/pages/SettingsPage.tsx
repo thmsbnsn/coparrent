@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useNotifications, NotificationPreferences } from "@/hooks/useNotifications";
 import { useSubscription } from "@/hooks/useSubscription";
 import { supabase } from "@/integrations/supabase/client";
+import { useFamily } from "@/contexts/FamilyContext";
 
 interface Profile {
   id: string;
@@ -69,6 +70,7 @@ interface Invitation {
 
 const SettingsPage = () => {
   const { user, signOut } = useAuth();
+  const { activeFamilyId } = useFamily();
   const {
     disableShakeReporting,
     enableShakeReporting,
@@ -126,22 +128,34 @@ const SettingsPage = () => {
           email: profileData.email || "",
         });
 
-        // Fetch co-parent if linked
-        if (profileData.co_parent_id) {
-          const { data: coParentData } = await supabase
-            .from("profiles")
-            .select("full_name, email")
-            .eq("id", profileData.co_parent_id)
-            .single();
-          setCoParent(coParentData);
+        // Fetch the other parent/guardian in the ACTIVE family, not a global profile link
+        if (activeFamilyId) {
+          const { data: familyAdults } = await supabase
+            .from("family_members")
+            .select("profile_id, role, status, profiles:profile_id(full_name, email)")
+            .eq("family_id", activeFamilyId)
+            .in("role", ["parent", "guardian"])
+            .eq("status", "active");
+
+          const otherAdult = (familyAdults || []).find((member) => member.profile_id !== profileData.id);
+          const profileRecord = Array.isArray(otherAdult?.profiles) ? otherAdult.profiles[0] : otherAdult?.profiles;
+          setCoParent(profileRecord ? { full_name: profileRecord.full_name, email: profileRecord.email } : null);
+        } else {
+          setCoParent(null);
         }
 
         // Fetch invitations
-        const { data: invitationsData } = await supabase
+        let invitationsQuery = supabase
           .from("invitations")
           .select("id, invitee_email, status, created_at, expires_at, token")
           .eq("inviter_id", profileData.id)
           .order("created_at", { ascending: false });
+
+        if (activeFamilyId) {
+          invitationsQuery = invitationsQuery.eq("family_id", activeFamilyId);
+        }
+
+        const { data: invitationsData } = await invitationsQuery;
 
         setInvitations(invitationsData || []);
       }
@@ -150,7 +164,7 @@ const SettingsPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [activeFamilyId, user]);
 
   useEffect(() => {
     if (user) {

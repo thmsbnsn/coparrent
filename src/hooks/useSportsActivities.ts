@@ -1,9 +1,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useFamily } from "@/contexts/FamilyContext";
 import { useToast } from "@/hooks/use-toast";
 import type { Json } from "@/integrations/supabase/types";
 import { handleError } from "@/lib/errorMessages";
+import {
+  ensureFamilyChildLinksSynced,
+  fetchChildIdsForProfile,
+  fetchFamilyChildIds,
+  fetchFamilyParentProfiles,
+} from "@/lib/familyScope";
 
 export interface EquipmentItem {
   id: string;
@@ -124,60 +130,91 @@ const parseEquipmentChecklist = (data: Json | null): EquipmentItem[] => {
 };
 
 export const useSportsActivities = () => {
-  const { user } = useAuth();
+  const {
+    activeFamilyId,
+    isParentInActiveFamily,
+    loading: familyLoading,
+    profileId,
+    roleLoading,
+  } = useFamily();
   const { toast } = useToast();
   const [activities, setActivities] = useState<ChildActivity[]>([]);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
-  const [profileId, setProfileId] = useState<string | null>(null);
-  const [coParentId, setCoParentId] = useState<string | null>(null);
+  const [familyChildIds, setFamilyChildIds] = useState<string[]>([]);
   const [parentProfiles, setParentProfiles] = useState<{ id: string; full_name: string }[]>([]);
+  const [scopeLoading, setScopeLoading] = useState(true);
 
-  // Fetch profile and co-parent info
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user?.id) return;
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, co_parent_id")
-        .eq("user_id", user.id)
-        .single();
-      if (data) {
-        setProfileId(data.id);
-        setCoParentId(data.co_parent_id);
-        
-        // Fetch both parent profiles for dropdown
-        const parentIds = [data.id];
-        if (data.co_parent_id) parentIds.push(data.co_parent_id);
-        
-        const { data: profiles } = await supabase
-          .from("profiles")
-          .select("id, full_name")
-          .in("id", parentIds);
-        
-        if (profiles) {
-          setParentProfiles(profiles.map(p => ({ 
-            id: p.id, 
-            full_name: p.full_name || "Parent" 
-          })));
+    const hydrateFamilyScope = async () => {
+      if (familyLoading || roleLoading) {
+        return;
+      }
+
+      if (!profileId) {
+        setFamilyChildIds([]);
+        setParentProfiles([]);
+        setScopeLoading(false);
+        return;
+      }
+
+      setScopeLoading(true);
+
+      try {
+        if (activeFamilyId && isParentInActiveFamily) {
+          await ensureFamilyChildLinksSynced(activeFamilyId);
         }
+
+        const [childIds, familyParents] = await Promise.all([
+          activeFamilyId ? fetchFamilyChildIds(activeFamilyId) : fetchChildIdsForProfile(profileId),
+          activeFamilyId ? fetchFamilyParentProfiles(activeFamilyId) : Promise.resolve([]),
+        ]);
+
+        setFamilyChildIds(childIds);
+        setParentProfiles(
+          familyParents.map((parent) => ({
+            id: parent.profileId,
+            full_name: parent.fullName || "Parent",
+          })),
+        );
+      } catch (error) {
+        handleError(error, { feature: "Sports", action: "hydrateFamilyScope" });
+        setFamilyChildIds([]);
+        setParentProfiles([]);
+      } finally {
+        setScopeLoading(false);
       }
     };
-    fetchProfile();
-  }, [user?.id]);
+
+    void hydrateFamilyScope();
+  }, [activeFamilyId, familyLoading, isParentInActiveFamily, profileId, roleLoading]);
 
   // Fetch activities with child names
   const fetchActivities = useCallback(async () => {
-    if (!profileId) return;
-    
+    if (familyLoading || roleLoading || scopeLoading) {
+      return;
+    }
+
+    if (!profileId) {
+      setActivities([]);
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
+      if (familyChildIds.length === 0) {
+        setActivities([]);
+        return;
+      }
+
       const { data, error } = await supabase
         .from("child_activities")
         .select(`
           *,
           children:child_id (name)
         `)
+        .in("child_id", familyChildIds)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -208,19 +245,44 @@ export const useSportsActivities = () => {
     } finally {
       setLoading(false);
     }
-  }, [profileId]);
+  }, [familyChildIds, familyLoading, profileId, roleLoading, scopeLoading]);
 
   // Fetch upcoming events
   const fetchEvents = useCallback(async () => {
-    if (!profileId) return;
+    if (familyLoading || roleLoading || scopeLoading) {
+      return;
+    }
+
+    if (!profileId) {
+      setEvents([]);
+      return;
+    }
 
     try {
+      if (familyChildIds.length === 0) {
+        setEvents([]);
+        return;
+      }
+
       const today = new Date().toISOString().split("T")[0];
-      
-      // First get events
+
+      const { data: activitiesData, error: activitiesError } = await supabase
+        .from("child_activities")
+        .select("id, name, sport_type, child_id, children:child_id (name)")
+        .in("child_id", familyChildIds);
+
+      if (activitiesError) throw activitiesError;
+
+      if (!activitiesData || activitiesData.length === 0) {
+        setEvents([]);
+        return;
+      }
+
+      const activityIds = [...new Set(activitiesData.map((activity) => activity.id))];
       const { data: eventsData, error: eventsError } = await supabase
         .from("activity_events")
         .select("*")
+        .in("activity_id", activityIds)
         .gte("event_date", today)
         .eq("is_cancelled", false)
         .order("event_date", { ascending: true })
@@ -232,13 +294,6 @@ export const useSportsActivities = () => {
         setEvents([]);
         return;
       }
-
-      // Get activity details
-      const activityIds = [...new Set(eventsData.map(e => e.activity_id))];
-      const { data: activitiesData } = await supabase
-        .from("child_activities")
-        .select("id, name, sport_type, child_id, children:child_id (name)")
-        .in("id", activityIds);
 
       const activitiesMap = new Map(
         (activitiesData || []).map(a => [a.id, { 
@@ -300,23 +355,30 @@ export const useSportsActivities = () => {
     } catch (error) {
       handleError(error, { feature: 'Sports', action: 'fetchEvents' });
     }
-  }, [profileId]);
+  }, [familyChildIds, familyLoading, profileId, roleLoading, scopeLoading]);
 
   // Initial fetch
   useEffect(() => {
-    if (profileId) {
-      fetchActivities();
-      fetchEvents();
+    if (familyLoading || roleLoading || scopeLoading) {
+      return;
     }
-  }, [profileId, fetchActivities, fetchEvents]);
+
+    void fetchActivities();
+    void fetchEvents();
+  }, [familyLoading, fetchActivities, fetchEvents, roleLoading, scopeLoading]);
 
   // Create activity
   const createActivity = useCallback(async (input: CreateActivityInput): Promise<boolean> => {
     if (!profileId) return false;
 
     try {
+      if (activeFamilyId && isParentInActiveFamily) {
+        await ensureFamilyChildLinksSynced(activeFamilyId);
+      }
+
       const { error } = await supabase.from("child_activities").insert({
         child_id: input.child_id,
+        family_id: activeFamilyId || null,
         name: input.name,
         sport_type: input.sport_type,
         team_name: input.team_name || null,
@@ -340,7 +402,7 @@ export const useSportsActivities = () => {
       toast({ title: "Error", description: message, variant: "destructive" });
       return false;
     }
-  }, [profileId, toast, fetchActivities]);
+  }, [activeFamilyId, fetchActivities, isParentInActiveFamily, profileId, toast]);
 
   // Update activity
   const updateActivity = useCallback(async (
@@ -348,6 +410,10 @@ export const useSportsActivities = () => {
     updates: Partial<CreateActivityInput>
   ): Promise<boolean> => {
     try {
+      if (activeFamilyId && isParentInActiveFamily) {
+        await ensureFamilyChildLinksSynced(activeFamilyId);
+      }
+
       const updateData: Record<string, unknown> = {};
       if (updates.child_id !== undefined) updateData.child_id = updates.child_id;
       if (updates.name !== undefined) updateData.name = updates.name;
@@ -378,11 +444,15 @@ export const useSportsActivities = () => {
       toast({ title: "Error", description: message, variant: "destructive" });
       return false;
     }
-  }, [toast, fetchActivities]);
+  }, [activeFamilyId, fetchActivities, isParentInActiveFamily, toast]);
 
   // Delete activity
   const deleteActivity = useCallback(async (activityId: string): Promise<boolean> => {
     try {
+      if (activeFamilyId && isParentInActiveFamily) {
+        await ensureFamilyChildLinksSynced(activeFamilyId);
+      }
+
       const { error } = await supabase
         .from("child_activities")
         .delete()
@@ -399,13 +469,17 @@ export const useSportsActivities = () => {
       toast({ title: "Error", description: message, variant: "destructive" });
       return false;
     }
-  }, [toast, fetchActivities, fetchEvents]);
+  }, [activeFamilyId, fetchActivities, fetchEvents, isParentInActiveFamily, toast]);
 
   // Create event
   const createEvent = useCallback(async (input: CreateEventInput): Promise<boolean> => {
     if (!profileId) return false;
 
     try {
+      if (activeFamilyId && isParentInActiveFamily) {
+        await ensureFamilyChildLinksSynced(activeFamilyId);
+      }
+
       const { error } = await supabase.from("activity_events").insert({
         activity_id: input.activity_id,
         event_type: input.event_type,
@@ -433,7 +507,7 @@ export const useSportsActivities = () => {
       toast({ title: "Error", description: message, variant: "destructive" });
       return false;
     }
-  }, [profileId, toast, fetchEvents]);
+  }, [activeFamilyId, fetchEvents, isParentInActiveFamily, profileId, toast]);
 
   // Update event
   const updateEvent = useCallback(async (
@@ -441,6 +515,10 @@ export const useSportsActivities = () => {
     updates: Partial<CreateEventInput>
   ): Promise<boolean> => {
     try {
+      if (activeFamilyId && isParentInActiveFamily) {
+        await ensureFamilyChildLinksSynced(activeFamilyId);
+      }
+
       const updateData: Record<string, unknown> = {};
       if (updates.activity_id !== undefined) updateData.activity_id = updates.activity_id;
       if (updates.event_type !== undefined) updateData.event_type = updates.event_type;
@@ -473,11 +551,15 @@ export const useSportsActivities = () => {
       toast({ title: "Error", description: message, variant: "destructive" });
       return false;
     }
-  }, [toast, fetchEvents]);
+  }, [activeFamilyId, fetchEvents, isParentInActiveFamily, toast]);
 
   // Cancel event
   const cancelEvent = useCallback(async (eventId: string): Promise<boolean> => {
     try {
+      if (activeFamilyId && isParentInActiveFamily) {
+        await ensureFamilyChildLinksSynced(activeFamilyId);
+      }
+
       const { error } = await supabase
         .from("activity_events")
         .update({ is_cancelled: true })
@@ -493,11 +575,15 @@ export const useSportsActivities = () => {
       toast({ title: "Error", description: message, variant: "destructive" });
       return false;
     }
-  }, [toast, fetchEvents]);
+  }, [activeFamilyId, fetchEvents, isParentInActiveFamily, toast]);
 
   // Delete event
   const deleteEvent = useCallback(async (eventId: string): Promise<boolean> => {
     try {
+      if (activeFamilyId && isParentInActiveFamily) {
+        await ensureFamilyChildLinksSynced(activeFamilyId);
+      }
+
       const { error } = await supabase
         .from("activity_events")
         .delete()
@@ -513,14 +599,13 @@ export const useSportsActivities = () => {
       toast({ title: "Error", description: "Failed to delete event", variant: "destructive" });
       return false;
     }
-  }, [toast, fetchEvents]);
+  }, [activeFamilyId, fetchEvents, isParentInActiveFamily, toast]);
 
   return {
     activities,
     events,
     loading,
     profileId,
-    coParentId,
     parentProfiles,
     createActivity,
     updateActivity,

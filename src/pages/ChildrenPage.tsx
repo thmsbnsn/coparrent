@@ -80,34 +80,39 @@ const formatDate = (dateString: string | null) => {
 };
 
 // Segmented control for tabs that wraps on mobile
-const TabSegment = ({ 
-  tabs, 
-  activeTab, 
-  onTabChange 
-}: { 
-  tabs: { id: string; label: string; icon: React.ElementType }[]; 
+const TabSegment = ({
+  tabs,
+  activeTab,
+  onTabChange
+}: {
+  tabs: { id: string; label: string; icon: React.ElementType }[];
   activeTab: string; 
   onTabChange: (id: string) => void;
 }) => (
-  <div className="flex flex-wrap gap-1.5 p-1 bg-muted/50 rounded-lg w-full">
-    {tabs.map((tab) => {
-      const Icon = tab.icon;
-      return (
-        <button
-          key={tab.id}
-          onClick={() => onTabChange(tab.id)}
-          className={cn(
-            "flex-1 min-w-[calc(50%-4px)] sm:min-w-0 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all",
-            activeTab === tab.id
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground hover:bg-background/50"
-          )}
-        >
-          <Icon className="w-3.5 h-3.5" />
-          <span>{tab.label}</span>
-        </button>
-      );
-    })}
+  <div className="rounded-lg bg-muted/50 p-1">
+    <div
+      className="flex gap-1.5 overflow-x-auto pb-1 sm:grid sm:overflow-visible sm:pb-0"
+      style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
+    >
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onTabChange(tab.id)}
+            className={cn(
+              "flex min-w-[8.25rem] shrink-0 items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-medium transition-all sm:min-w-0 sm:text-sm",
+              activeTab === tab.id
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-background/50 hover:text-foreground"
+            )}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            <span>{tab.label}</span>
+          </button>
+        );
+      })}
+    </div>
   </div>
 );
 
@@ -140,7 +145,7 @@ const InfoCard = ({
 
 const ChildrenPage = () => {
   const { children, loading, addChild, updateChild, deleteChild } = useRealtimeChildren();
-  const { kids_used, max_kids, canAddChild, isAtChildLimit, tier, refresh: refreshLimits } = usePlanLimits();
+  const { kids_used, max_kids, isAtChildLimit, tier, refresh: refreshLimits } = usePlanLimits();
   const { permissions } = usePermissions();
   const [selectedChild, setSelectedChild] = useState<Child | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -382,7 +387,7 @@ const ChildrenPage = () => {
               <DialogHeader>
                 <DialogTitle>Add a Child</DialogTitle>
                 <DialogDescription>
-                  Enter your child's information. This will be shared with your co-parent.
+                  Enter your child's information. This will be shared with the parent or guardian members in this family.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
@@ -446,7 +451,7 @@ const ChildrenPage = () => {
                 <div className="text-center space-y-2">
                   <h2 className="text-lg sm:text-xl font-display font-bold">No Children Added Yet</h2>
                   <p className="text-sm sm:text-base text-muted-foreground text-center max-w-md px-4">
-                    Add your children to keep track of their information and share it with your co-parent.
+                    Add your children to keep track of their information and share it with the adults in this family workspace.
                   </p>
                 </div>
                 <Button onClick={() => setIsAddDialogOpen(true)} className="mt-2">
@@ -479,6 +484,11 @@ const ChildrenPage = () => {
                   {isAtChildLimit && (
                     <p className="text-xs text-muted-foreground">
                       {tier === "free" ? "Upgrade to Power for up to 6 children" : "Maximum reached"}
+                    </p>
+                  )}
+                  {!isAtChildLimit && (
+                    <p className="text-xs text-muted-foreground">
+                      Tap a child to open their profile, medical notes, gallery, and emergency details.
                     </p>
                   )}
                 </CardHeader>
@@ -551,10 +561,10 @@ const ChildrenPage = () => {
                                 ? `Born ${formatDate(selectedChild.date_of_birth)} • ${calculateAge(selectedChild.date_of_birth)} years old`
                                 : "Date of birth not set"}
                             </p>
-                            <div className="flex flex-wrap gap-2 mt-3">
+                            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
                               <Button 
                                 onClick={openEditDialog} 
-                                className="flex-1 sm:flex-none"
+                                className="w-full sm:w-auto"
                               >
                                 <Edit2 className="w-4 h-4 mr-2" />
                                 Edit Profile
@@ -562,7 +572,7 @@ const ChildrenPage = () => {
                               <Button
                                 variant="outline"
                                 onClick={() => setChildToDelete(selectedChild)}
-                                className="flex-1 sm:flex-none text-destructive hover:text-destructive hover:bg-destructive/10"
+                                className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive sm:w-auto"
                               >
                                 <Trash2 className="w-4 h-4 mr-2" />
                                 Delete
@@ -757,7 +767,7 @@ const ChildrenPage = () => {
           <DialogHeader>
             <DialogTitle>Edit Child Profile</DialogTitle>
             <DialogDescription>
-              Update your child's information. All changes are shared with your co-parent.
+              Update your child's information. All changes are shared with the parent or guardian members in this family.
             </DialogDescription>
           </DialogHeader>
           

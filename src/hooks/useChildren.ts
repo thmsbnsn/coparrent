@@ -1,8 +1,12 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useFamily } from "@/contexts/FamilyContext";
 import { useToast } from "@/hooks/use-toast";
-import { handleError, ERROR_MESSAGES } from "@/lib/errorMessages";
+import {
+  ensureFamilyChildLinksSynced,
+  fetchChildIdsForProfile,
+  fetchFamilyChildIds,
+} from "@/lib/familyScope";
 
 export interface ChildHealth {
   blood_type: string | null;
@@ -51,99 +55,76 @@ interface AddChildRpcResponse {
 }
 
 export const useChildren = () => {
-  const { user, loading: authLoading } = useAuth();
+  const {
+    activeFamilyId,
+    isParentInActiveFamily,
+    loading: familyLoading,
+    profileId,
+    roleLoading,
+  } = useFamily();
   const { toast } = useToast();
   const [children, setChildren] = useState<Child[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userProfileId, setUserProfileId] = useState<string | null>(null);
-
-  // Fetch user's profile ID
-  useEffect(() => {
-    const fetchProfileId = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (error) {
-          console.error("Error fetching profile:", error);
-        }
-
-        if (profile) {
-          setUserProfileId(profile.id);
-        } else {
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error("Error fetching profile:", error);
-        setLoading(false);
-      }
-    };
-
-    if (!authLoading) {
-      fetchProfileId();
-    }
-  }, [user, authLoading]);
 
   // Fetch children
   useEffect(() => {
     const fetchChildren = async () => {
-      if (!userProfileId) {
-        setLoading(false);
+      if (familyLoading || roleLoading) {
         return;
       }
 
-      // First get child IDs from parent_children
-      const { data: links, error: linksError } = await supabase
-        .from("parent_children")
-        .select("child_id")
-        .eq("parent_id", userProfileId);
-
-      if (linksError) {
-        console.error("Error fetching child links:", linksError);
-        setLoading(false);
-        return;
-      }
-
-      if (!links || links.length === 0) {
+      if (!profileId) {
         setChildren([]);
         setLoading(false);
         return;
       }
 
-      const childIds = links.map((l) => l.child_id);
+      setLoading(true);
 
-      const { data, error } = await supabase
-        .from("children")
-        .select("*")
-        .in("id", childIds)
-        .order("name");
+      try {
+        if (activeFamilyId && isParentInActiveFamily) {
+          await ensureFamilyChildLinksSynced(activeFamilyId);
+        }
 
-      if (error) {
+        const childIds = activeFamilyId
+          ? await fetchFamilyChildIds(activeFamilyId)
+          : await fetchChildIdsForProfile(profileId);
+
+        if (childIds.length === 0) {
+          setChildren([]);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from("children")
+          .select("*")
+          .in("id", childIds)
+          .order("name");
+
+        if (error) {
+          throw error;
+        }
+
+        setChildren((data as Child[]) || []);
+      } catch (error) {
         console.error("Error fetching children:", error);
         toast({
           title: "Error",
           description: "Failed to load children",
           variant: "destructive",
         });
-      } else {
-        setChildren((data as Child[]) || []);
+        setChildren([]);
       }
-      setLoading(false);
+      finally {
+        setLoading(false);
+      }
     };
 
-    fetchChildren();
-  }, [userProfileId, toast]);
+    void fetchChildren();
+  }, [activeFamilyId, familyLoading, isParentInActiveFamily, profileId, roleLoading, toast]);
 
   const addChild = async (name: string, dateOfBirth?: string) => {
-    if (!userProfileId) {
+    if (!profileId) {
       toast({
         title: "Error",
         description: "You must be logged in to add a child",
@@ -164,10 +145,16 @@ export const useChildren = () => {
     }
 
     // Use RPC function with limit enforcement
-    const { data, error } = await supabase.rpc("rpc_add_child", {
-      p_name: trimmedName,
-      p_dob: dateOfBirth || null,
-    });
+    const { data, error } = activeFamilyId
+      ? await supabase.rpc("rpc_add_child_to_family", {
+          p_family_id: activeFamilyId,
+          p_name: trimmedName,
+          p_dob: dateOfBirth || null,
+        })
+      : await supabase.rpc("rpc_add_child", {
+          p_name: trimmedName,
+          p_dob: dateOfBirth || null,
+        });
 
     if (error) {
       console.error("Error creating child:", error);

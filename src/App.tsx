@@ -52,6 +52,7 @@ const MessagesPage = lazy(() => import("./pages/MessagesPage"));
 const MessagingHubPage = lazy(() => import("./pages/MessagingHubPage"));
 const DocumentsPage = lazy(() => import("./pages/DocumentsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const AddFamilyPage = lazy(() => import("./pages/AddFamilyPage"));
 const AcceptInvite = lazy(() => import("./pages/AcceptInvite"));
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard"));
 const NotificationsPage = lazy(() => import("./pages/NotificationsPage"));
@@ -148,6 +149,7 @@ const App = () => (
                 <Route path="/dashboard/messages-legacy" element={<ProtectedRoute><RouteErrorBoundary routeName="Messages Legacy"><MessagesPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/documents" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Documents"><DocumentsPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/settings" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Settings"><SettingsPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/families/new" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Add Family"><AddFamilyPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/notifications" element={<ProtectedRoute><RouteErrorBoundary routeName="Notifications"><NotificationsPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/law-library" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Law Library"><UnifiedLawLibraryPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/law-library/resources" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Law Library"><UnifiedLawLibraryPage /></RouteErrorBoundary></ProtectedRoute>} />

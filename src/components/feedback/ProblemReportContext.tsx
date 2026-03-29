@@ -234,6 +234,9 @@ export const ProblemReportProvider = ({ children }: { children: ReactNode }) => 
       !motionSupport.secure ||
       !preferences.shakeEnabled ||
       preferences.motionPermissionState === "denied");
+  const floatingButtonVisible =
+    fallbackButtonVisible &&
+    !routePath.startsWith("/dashboard/messages");
 
   const motionPrompt = (
     <MotionPermissionPrompt
@@ -261,7 +264,7 @@ export const ProblemReportProvider = ({ children }: { children: ReactNode }) => 
     >
       {children}
 
-      {fallbackButtonVisible && !modalOpen && (
+      {floatingButtonVisible && !modalOpen && (
         <div className="pointer-events-none fixed right-4 z-40 [bottom:calc(1rem+env(safe-area-inset-bottom))]">
           <Button
             className="pointer-events-auto h-12 rounded-full px-4 shadow-lg"

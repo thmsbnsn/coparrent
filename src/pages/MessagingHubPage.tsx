@@ -24,7 +24,7 @@
  * - Collapsed attribution ❌
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { 
   MessageSquare, 
@@ -35,7 +35,9 @@ import {
   Search,
   Menu,
   RefreshCw,
-  Printer
+  Printer,
+  MoreHorizontal,
+  Loader2,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -44,12 +46,17 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useMessagingHub, MessageThread, FamilyMember } from "@/hooks/useMessagingHub";
-import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -64,6 +71,8 @@ import { PullToRefreshIndicator } from "@/components/messages/PullToRefreshIndic
 import { CallActionButtons } from "@/components/calls/CallActionButtons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useCallSessions } from "@/hooks/useCallSessions";
+import { useProblemReport } from "@/components/feedback/useProblemReport";
+import { buildMessageTimeline } from "@/components/messages/threadTimeline";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import jsPDF from "jspdf";
@@ -128,8 +137,8 @@ const MessagingHubPage = () => {
     familyMembers,
     activeThread,
     messages,
+    systemEvents,
     loading,
-    role,
     profileId,
     setActiveThread,
     sendMessage,
@@ -137,18 +146,21 @@ const MessagingHubPage = () => {
     createGroupChat,
     ensureFamilyChannel,
     fetchThreads,
+    refreshActiveThread,
     setupError,
   } = useMessagingHub();
   const [searchParams] = useSearchParams();
   const appliedThreadParamRef = useRef<string | null>(null);
+  const refreshContainerRef = useRef<HTMLDivElement | null>(null);
 
   const {
     createCall,
     currentThreadCall,
     incomingSession,
   } = useCallSessions(activeThread?.id ?? null);
+  const { openReportModal } = useProblemReport();
   
-  const { typingText, setTyping, clearTyping } = useTypingIndicator(activeThread?.id || null);
+  const { setTyping, clearTyping } = useTypingIndicator(activeThread?.id || null);
   const { 
     totalUnread, 
     getUnreadForThread, 
@@ -173,25 +185,57 @@ const MessagingHubPage = () => {
    * Court View State
    * RULE: Court View is first-class, not a buried setting
    */
-  const [courtView, setCourtView] = useState(false);
+  const [viewMode, setViewMode] = useState<"chat" | "court">("chat");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const refreshInFlightRef = useRef(false);
+  const courtView = viewMode === "court";
+  const timelineItems = useMemo(
+    () => buildMessageTimeline(messages, systemEvents),
+    [messages, systemEvents],
+  );
 
   // Pull-to-refresh for mobile
-  const handleRefresh = useCallback(async () => {
-    await Promise.all([
-      ensureFamilyChannel(),
-      fetchThreads(),
-      refreshUnread(),
-    ]);
-  }, [ensureFamilyChannel, fetchThreads, refreshUnread]);
+  const handleRefresh = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (refreshInFlightRef.current) {
+        return;
+      }
 
-  const { 
-    isRefreshing, 
-    pullDistance, 
-    bindEvents 
+      refreshInFlightRef.current = true;
+      setIsRefreshing(true);
+
+      try {
+        await Promise.all([
+          ensureFamilyChannel(),
+          fetchThreads(),
+          refreshUnread(),
+          refreshActiveThread(),
+        ]);
+
+        if (!options?.silent) {
+          toast.success("Messages updated");
+        }
+      } catch (error) {
+        console.error("Error refreshing Messaging Hub:", error);
+        toast.error("Unable to refresh messages right now.");
+      } finally {
+        refreshInFlightRef.current = false;
+        setIsRefreshing(false);
+      }
+    },
+    [ensureFamilyChannel, fetchThreads, refreshActiveThread, refreshUnread],
+  );
+
+  const {
+    isRefreshing: isPullRefreshing,
+    pullDistance,
+    bindEvents,
   } = usePullToRefresh({
-    onRefresh: handleRefresh,
+    onRefresh: () => handleRefresh({ silent: true }),
     enabled: isMobile,
   });
+
+  useEffect(() => bindEvents(refreshContainerRef.current), [bindEvents]);
 
   // Initialize family channel
   useEffect(() => {
@@ -303,15 +347,25 @@ const MessagingHubPage = () => {
     doc.setFont("helvetica", "normal");
     doc.text(`Thread: ${activeThread?.name || getThreadDisplayName(activeThread)}`, 14, 28);
     doc.text(`Exported: ${format(new Date(), "MMMM d, yyyy 'at' h:mm a")}`, 14, 34);
-    doc.text(`Total Messages: ${messages.length}`, 14, 40);
+    doc.text(`Total Timeline Entries: ${timelineItems.length}`, 14, 40);
 
-    // Messages table - full attribution
-    const tableData = messages.map((msg) => [
-      format(new Date(msg.created_at), "MMM d, yyyy h:mm a"),
-      resolveSenderName(msg.sender_name),
-      ROLE_LABELS[msg.sender_role] || "Member",
-      msg.content,
-    ]);
+    const tableData = timelineItems.map((item) => {
+      if (item.kind === "system") {
+        return [
+          format(new Date(item.event.timestamp), "MMM d, yyyy h:mm a"),
+          item.event.actorName || "System",
+          "System Event",
+          item.event.note,
+        ];
+      }
+
+      return [
+        format(new Date(item.message.created_at), "MMM d, yyyy h:mm a"),
+        resolveSenderName(item.message.sender_name),
+        ROLE_LABELS[item.message.sender_role] || "Member",
+        item.message.content,
+      ];
+    });
 
     autoTable(doc, {
       head: [["Date & Time", "Sender", "Role", "Message Content"]],
@@ -352,7 +406,7 @@ const MessagingHubPage = () => {
 
     doc.save(`messages-${format(new Date(), "yyyy-MM-dd-HHmm")}.pdf`);
     toast.success("Message record exported successfully");
-  }, [activeThread, messages]);
+  }, [activeThread, timelineItems]);
 
   /**
    * Print current view
@@ -463,7 +517,9 @@ const MessagingHubPage = () => {
 
   const currentThreadTitle = activeThread ? getThreadDisplayName(activeThread) : "Open a conversation";
   const currentThreadDescription = activeThread
-    ? `${messages.length} message${messages.length === 1 ? "" : "s"} in the current record.`
+    ? messages.length === 0
+      ? "No messages yet in this record."
+      : `${messages.length} message${messages.length === 1 ? "" : "s"} in the current record.`
     : "Start in the family channel or pick a direct or group thread.";
 
   // Sidebar content - thread navigation
@@ -709,7 +765,7 @@ const MessagingHubPage = () => {
     return (
       <DashboardLayout>
         <div className="flex items-center justify-center h-64">
-          <LoadingSpinner size="lg" />
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
       </DashboardLayout>
     );
@@ -731,10 +787,17 @@ const MessagingHubPage = () => {
           }
         `}</style>
 
-        <div className={cn(
-          "h-[calc(100vh-8rem)] flex flex-col",
-          courtView && "print-area"
-        )}>
+        <div
+          ref={refreshContainerRef}
+          className={cn(
+            "relative h-[calc(100vh-8rem)] flex flex-col",
+            courtView && "print-area",
+          )}
+        >
+          <PullToRefreshIndicator
+            isRefreshing={isRefreshing || isPullRefreshing}
+            pullDistance={pullDistance}
+          />
           {/* 
             Header - Minimal, functional
             RULE: No "friendly app" aesthetics
@@ -777,74 +840,87 @@ const MessagingHubPage = () => {
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-2">
-                  {isMobile && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="relative"
-                      onClick={() => setShowSidebar(true)}
-                    >
-                      <Menu className="mr-2 h-4 w-4" />
-                      Conversations
-                      {showIndicator && totalUnread > 0 && (
-                        <UnreadBadge
-                          count={totalUnread}
-                          className="absolute -top-1 -right-1"
-                          size="sm"
-                        />
-                      )}
-                    </Button>
-                  )}
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRefresh}
-                    disabled={isRefreshing}
-                  >
-                    <RefreshCw className={cn("mr-2 h-4 w-4", isRefreshing && "animate-spin")} />
-                    Refresh
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowSearch(true)}
-                    aria-label="Search messages"
-                  >
-                    <Search className="mr-2 h-4 w-4" />
-                    Search
-                  </Button>
-
-                  <CourtViewToggle
-                    enabled={courtView}
-                    onToggle={() => setCourtView(!courtView)}
-                  />
-
-                  {activeThread && messages.length > 0 && (
-                    <>
-                      {courtView && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handlePrint}
-                          aria-label="Print messages"
-                        >
-                          <Printer className="mr-2 h-4 w-4" />
-                          Print
-                        </Button>
-                      )}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isMobile && (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={handleExportPDF}
+                        className="relative"
+                        onClick={() => setShowSidebar(true)}
                       >
-                        <FileText className="mr-2 h-4 w-4" />
-                        Export
+                        <Menu className="mr-2 h-4 w-4" />
+                        Conversations
+                        {showIndicator && totalUnread > 0 && (
+                          <UnreadBadge
+                            count={totalUnread}
+                            className="absolute -top-1 -right-1"
+                            size="sm"
+                          />
+                        )}
                       </Button>
-                    </>
-                  )}
+                    )}
+
+                    <CourtViewToggle
+                      enabled={courtView}
+                      onToggle={() =>
+                        setViewMode((currentMode) =>
+                          currentMode === "court" ? "chat" : "court",
+                        )
+                      }
+                    />
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleRefresh()}
+                      disabled={isRefreshing || isPullRefreshing}
+                    >
+                      <RefreshCw
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          (isRefreshing || isPullRefreshing) && "animate-spin",
+                        )}
+                      />
+                      {isRefreshing || isPullRefreshing ? "Refreshing..." : "Refresh"}
+                    </Button>
+
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="sm" aria-label="More messaging actions">
+                          <MoreHorizontal className="mr-2 h-4 w-4" />
+                          More
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuItem onClick={() => setShowSearch(true)}>
+                          <Search className="mr-2 h-4 w-4" />
+                          Search messages
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openReportModal("manual")}>
+                          <MessageSquare className="mr-2 h-4 w-4" />
+                          Report a problem
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          disabled={!activeThread || timelineItems.length === 0}
+                          onClick={handleExportPDF}
+                        >
+                          <FileText className="mr-2 h-4 w-4" />
+                          Export thread
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={!courtView || timelineItems.length === 0}
+                          onClick={handlePrint}
+                        >
+                          <Printer className="mr-2 h-4 w-4" />
+                          Print current view
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               </div>
             </div>
@@ -989,8 +1065,8 @@ const MessagingHubPage = () => {
                     RULE: Evidence and Action must be visually separated
                   */}
                   <EvidencePanel
-                    messages={messages}
-                    courtView={courtView}
+                    timelineItems={timelineItems}
+                    viewMode={viewMode}
                     className="flex-1"
                   />
 

@@ -37,6 +37,7 @@ export const ThreadSummaryBar = ({
 }: ThreadSummaryBarProps) => {
   const thread = THREAD_LABELS[threadType];
   const Icon = thread.icon;
+  const emptyThread = totalMessages === 0;
 
   return (
     <div
@@ -50,20 +51,30 @@ export const ThreadSummaryBar = ({
           <Icon className="h-3.5 w-3.5" />
           {thread.label}
         </Badge>
-        <Badge variant={unreadCount > 0 ? "destructive" : "secondary"}>
-          {unreadCount > 0 ? `${unreadCount} unread` : "No unread"}
-        </Badge>
-        <Badge variant="secondary">{totalMessages} messages</Badge>
+        {emptyThread ? (
+          <Badge variant="secondary">No messages yet</Badge>
+        ) : (
+          <>
+            {unreadCount > 0 && (
+              <Badge variant="destructive">{unreadCount} unread</Badge>
+            )}
+            <Badge variant="secondary">
+              {totalMessages} message{totalMessages === 1 ? "" : "s"}
+            </Badge>
+          </>
+        )}
         <Badge variant={courtView ? "default" : "outline"} className="gap-1.5">
           <FileText className="h-3.5 w-3.5" />
-          {courtView ? "Court view active" : "Standard view"}
+          {courtView ? "Court view active" : "Chat view active"}
         </Badge>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        {thread.note}. Messages are permanent and exportable for review.
-        {unreadCount > 0 && " Review unread items before replying."}
+        {emptyThread
+          ? `${thread.note}. The record is open and ready for the first message.`
+          : `${thread.note}. Messages are permanent and exportable for review.`}
+        {!emptyThread && unreadCount > 0 && " Review unread items before replying."}
       </p>
-      {unreadCount > 5 && (
+      {!emptyThread && unreadCount > 5 && (
         <div className="mt-2 flex items-center gap-1.5 text-xs text-warning">
           <AlertTriangle className="h-3.5 w-3.5" />
           This thread has accumulated unread activity.

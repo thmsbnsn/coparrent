@@ -132,6 +132,43 @@ interface ReadReceiptRow {
   profiles: Pick<RelatedProfile, "full_name" | "email"> | null;
 }
 
+interface CallSessionThreadRow {
+  answered_at: string | null;
+  call_type: Database["public"]["Enums"]["call_type"];
+  callee_display_name: string | null;
+  callee_profile_id: string;
+  created_at: string;
+  id: string;
+  initiator_display_name: string | null;
+  initiator_profile_id: string;
+  status: Database["public"]["Enums"]["call_status"];
+}
+
+interface CallEventThreadRow {
+  actor_display_name: string | null;
+  actor_profile_id: string | null;
+  call_session_id: string;
+  created_at: string;
+  event_type: Database["public"]["Enums"]["call_event_type"];
+  id: string;
+}
+
+export interface ThreadSystemEvent {
+  actorId: string | null;
+  actorName: string | null;
+  callType?: Database["public"]["Enums"]["call_type"] | null;
+  eventType:
+    | "call_answered"
+    | "call_attempt"
+    | "call_declined"
+    | "call_missed"
+    | "conversation_started";
+  id: string;
+  note: string;
+  timestamp: string;
+  type: "system";
+}
+
 const formatRelationshipLabel = (relationshipLabel: string | null, role: string) => {
   const cleaned = relationshipLabel?.trim();
   if (cleaned) {
@@ -179,6 +216,7 @@ export const useMessagingHub = () => {
   const familyMembersRef = useRef<FamilyMember[]>([]);
   const [activeThread, setActiveThread] = useState<MessageThread | null>(null);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
+  const [systemEvents, setSystemEvents] = useState<ThreadSystemEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [setupError, setSetupError] = useState<string | null>(null);
 
@@ -498,6 +536,7 @@ export const useMessagingHub = () => {
       setGroupChats([]);
       setActiveThread(null);
       setMessages([]);
+      setSystemEvents([]);
       return;
     }
 
@@ -728,13 +767,16 @@ export const useMessagingHub = () => {
 
       const { error } = await supabase
         .from("message_read_receipts")
-        .insert(payload);
+        .upsert(payload, {
+          ignoreDuplicates: true,
+          onConflict: "message_id,reader_id",
+        });
 
       if (!error) {
         return;
       }
 
-      if (error.code === "23505") {
+      if (error.code === "23505" || error.code === "23503") {
         return;
       }
 
@@ -774,20 +816,24 @@ export const useMessagingHub = () => {
         (profiles || []).map(p => [p.id, resolveDisplayName({ primary: p.full_name, fallback: "Family member" })])
       );
 
-      // Fetch read receipts
       const messageIds = (data || []).map(m => m.id);
-      const { data: receipts } = await supabase
-        .from("message_read_receipts")
-        .select(`
-          message_id,
-          reader_id,
-          read_at,
-          profiles!message_read_receipts_reader_id_fkey (
-            full_name,
-            email
-          )
-        `)
-        .in("message_id", messageIds);
+      const receipts =
+        messageIds.length > 0
+          ? (
+              await supabase
+                .from("message_read_receipts")
+                .select(`
+                  message_id,
+                  reader_id,
+                  read_at,
+                  profiles!message_read_receipts_reader_id_fkey (
+                    full_name,
+                    email
+                  )
+                `)
+                .in("message_id", messageIds)
+            ).data
+          : [];
 
       const receiptsByMessage = new Map<string, ReadReceipt[]>();
       ((receipts as ReadReceiptRow[] | null) ?? []).forEach((r) => {
@@ -827,6 +873,159 @@ export const useMessagingHub = () => {
       console.error("Error fetching messages:", error);
     }
   }, [markMessagesRead, profileId]);
+
+  const fetchSystemEvents = useCallback(async (thread: MessageThread) => {
+    const conversationStartedEvent: ThreadSystemEvent = {
+      actorId: null,
+      actorName: null,
+      eventType: "conversation_started",
+      id: `conversation-started-${thread.id}`,
+      note:
+        thread.thread_type === "family_channel"
+          ? "This family record is active and ready for documented communication."
+          : thread.thread_type === "group_chat"
+            ? "This group conversation is active and ready for documented communication."
+            : "This direct conversation is active and ready for documented communication.",
+      timestamp: thread.created_at,
+      type: "system",
+    };
+
+    setSystemEvents([conversationStartedEvent]);
+
+    try {
+      const { data: sessions, error: sessionsError } = await supabase
+        .from("call_sessions")
+        .select(
+          "id, created_at, answered_at, call_type, status, initiator_profile_id, initiator_display_name, callee_profile_id, callee_display_name",
+        )
+        .eq("thread_id", thread.id)
+        .order("created_at", { ascending: true })
+        .returns<CallSessionThreadRow[]>();
+
+      if (sessionsError || !sessions || sessions.length === 0) {
+        if (sessionsError) {
+          console.error("Error fetching call sessions for thread:", sessionsError);
+        }
+        setSystemEvents([conversationStartedEvent]);
+        return;
+      }
+
+      const sessionIds = sessions.map((session) => session.id);
+      const callEventsBySession = new Map<string, CallEventThreadRow[]>();
+
+      if (sessionIds.length > 0) {
+        const { data: callEvents, error: callEventsError } = await supabase
+          .from("call_events")
+          .select("id, call_session_id, actor_profile_id, actor_display_name, event_type, created_at")
+          .in("call_session_id", sessionIds)
+          .in("event_type", ["accepted", "created", "declined", "missed", "ringing"])
+          .order("created_at", { ascending: true })
+          .returns<CallEventThreadRow[]>();
+
+        if (callEventsError) {
+          console.error("Error fetching call events for thread:", callEventsError);
+        } else {
+          (callEvents || []).forEach((event) => {
+            const existing = callEventsBySession.get(event.call_session_id) || [];
+            existing.push(event);
+            callEventsBySession.set(event.call_session_id, existing);
+          });
+        }
+      }
+
+      const callTimeline: ThreadSystemEvent[] = sessions.flatMap((session) => {
+        const sessionEvents = callEventsBySession.get(session.id) || [];
+        const initialCallEvent =
+          sessionEvents.find((event) => event.event_type === "created") ||
+          sessionEvents.find((event) => event.event_type === "ringing");
+        const acceptedEvent = sessionEvents.find((event) => event.event_type === "accepted");
+        const declinedEvent = sessionEvents.find((event) => event.event_type === "declined");
+        const missedEvent = sessionEvents.find((event) => event.event_type === "missed");
+
+        const timeline: ThreadSystemEvent[] = [
+          {
+            actorId: initialCallEvent?.actor_profile_id ?? session.initiator_profile_id,
+            actorName:
+              initialCallEvent?.actor_display_name ??
+              session.initiator_display_name ??
+              "Family member",
+            callType: session.call_type,
+            eventType: "call_attempt",
+            id: `call-attempt-${session.id}`,
+            note: `${session.call_type === "video" ? "Video" : "Audio"} call started.`,
+            timestamp: initialCallEvent?.created_at ?? session.created_at,
+            type: "system",
+          },
+        ];
+
+        if (acceptedEvent || session.status === "accepted" || session.status === "ended") {
+          timeline.push({
+            actorId: acceptedEvent?.actor_profile_id ?? session.callee_profile_id,
+            actorName:
+              acceptedEvent?.actor_display_name ??
+              session.callee_display_name ??
+              "Family member",
+            callType: session.call_type,
+            eventType: "call_answered",
+            id: `call-answered-${session.id}`,
+            note: `${session.call_type === "video" ? "Video" : "Audio"} call connected.`,
+            timestamp: acceptedEvent?.created_at ?? session.answered_at ?? session.created_at,
+            type: "system",
+          });
+        } else if (declinedEvent || session.status === "declined") {
+          timeline.push({
+            actorId: declinedEvent?.actor_profile_id ?? session.callee_profile_id,
+            actorName:
+              declinedEvent?.actor_display_name ??
+              session.callee_display_name ??
+              "Family member",
+            callType: session.call_type,
+            eventType: "call_declined",
+            id: `call-declined-${session.id}`,
+            note: "The call was declined.",
+            timestamp: declinedEvent?.created_at ?? session.created_at,
+            type: "system",
+          });
+        } else if (missedEvent || session.status === "missed") {
+          timeline.push({
+            actorId: missedEvent?.actor_profile_id ?? null,
+            actorName: missedEvent?.actor_display_name ?? null,
+            callType: session.call_type,
+            eventType: "call_missed",
+            id: `call-missed-${session.id}`,
+            note: "No answer.",
+            timestamp: missedEvent?.created_at ?? session.created_at,
+            type: "system",
+          });
+        }
+
+        return timeline;
+      });
+
+      setSystemEvents(
+        [conversationStartedEvent, ...callTimeline].sort(
+          (left, right) =>
+            new Date(left.timestamp).getTime() - new Date(right.timestamp).getTime(),
+        ),
+      );
+    } catch (error) {
+      console.error("Error fetching thread system events:", error);
+      setSystemEvents([conversationStartedEvent]);
+    }
+  }, []);
+
+  const refreshActiveThread = useCallback(async () => {
+    if (!activeThread) {
+      setMessages([]);
+      setSystemEvents([]);
+      return;
+    }
+
+    await Promise.all([
+      fetchMessages(activeThread.id),
+      fetchSystemEvents(activeThread),
+    ]);
+  }, [activeThread, fetchMessages, fetchSystemEvents]);
 
   // Send message with double-submit protection
   const sendMessage = async (content: string) => {
@@ -1073,9 +1272,14 @@ export const useMessagingHub = () => {
   // Fetch messages when active thread changes
   useEffect(() => {
     if (activeThread) {
-      fetchMessages(activeThread.id);
+      setMessages([]);
+      setSystemEvents([]);
+      void refreshActiveThread();
+    } else {
+      setMessages([]);
+      setSystemEvents([]);
     }
-  }, [activeThread, fetchMessages]);
+  }, [activeThread, refreshActiveThread]);
 
   useEffect(() => {
     if ((!activeFamilyId && !primaryParentId) || !profileId) return;
@@ -1307,6 +1511,30 @@ export const useMessagingHub = () => {
     };
   }, [activeThread, messages, profileId]);
 
+  useEffect(() => {
+    if (!activeThread) return;
+
+    const channel = supabase
+      .channel(`thread-call-events-${activeThread.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "call_sessions",
+          filter: `thread_id=eq.${activeThread.id}`,
+        },
+        () => {
+          void fetchSystemEvents(activeThread);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeThread, fetchSystemEvents]);
+
   return {
     threads,
     groupChats,
@@ -1314,6 +1542,7 @@ export const useMessagingHub = () => {
     familyMembers,
     activeThread,
     messages,
+    systemEvents,
     loading,
     role,
     profileId,
@@ -1323,6 +1552,7 @@ export const useMessagingHub = () => {
     createGroupChat,
     ensureFamilyChannel,
     fetchThreads,
+    refreshActiveThread,
     setupError,
   };
 };

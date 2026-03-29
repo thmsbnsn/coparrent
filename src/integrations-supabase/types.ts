@@ -3475,6 +3475,14 @@ export type Database = {
         Returns: string
       }
       rpc_add_child: { Args: { p_dob?: string; p_name: string }; Returns: Json }
+      rpc_add_child_to_family: {
+        Args: { p_dob?: string; p_family_id: string; p_name: string }
+        Returns: Json
+      }
+      rpc_create_additional_family: {
+        Args: { p_display_name?: string }
+        Returns: Json
+      }
       rpc_create_third_party_invite: {
         Args: {
           p_child_ids?: string[]
@@ -3485,6 +3493,14 @@ export type Database = {
         Returns: Json
       }
       rpc_revoke_third_party: { Args: { p_member_id: string }; Returns: Json }
+      rpc_sync_family_child_links: {
+        Args: { p_family_id: string }
+        Returns: Json
+      }
+      rpc_update_family_display_name: {
+        Args: { p_display_name: string; p_family_id: string }
+        Returns: Json
+      }
       search_messages: {
         Args: { p_limit?: number; p_query: string; p_thread_id?: string }
         Returns: {
