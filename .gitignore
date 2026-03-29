@@ -26,3 +26,12 @@ dist-ssr
 .vercel
 tester-accounts.local.md
 tester-accounts.local.yaml
+
+# Local workspace artifacts
+_(2).env
+env.txt
+gitignore.txt
+dev-dist/
+output/
+tmp/
+supabase/.temp/
