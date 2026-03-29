@@ -1032,7 +1032,11 @@ async function startMessagingHubVideoCall(page: Page): Promise<void> {
 }
 
 async function answerIncomingCall(page: Page, callType: "audio" | "video"): Promise<void> {
-  await page.getByText(new RegExp(`Incoming ${callType} call`, "i")).waitFor({ state: "visible", timeout: 45_000 });
+  await page
+    .getByRole("heading", {
+      name: new RegExp(`Incoming ${callType} call`, "i"),
+    })
+    .waitFor({ state: "visible", timeout: 45_000 });
   await page.getByRole("button", { name: /answer/i }).click();
 }
 
@@ -1056,31 +1060,6 @@ async function waitForActiveCallPanel(
     connectedBadge.waitFor({ state: "visible", timeout: 15_000 }),
     endCallButton.waitFor({ state: "visible", timeout: 15_000 }),
   ]);
-}
-
-async function waitForActiveCallPanelWithFallback(params: {
-  baseUrl: string;
-  callType: "audio" | "video";
-  label: string;
-  page: Page;
-}): Promise<void> {
-  const { baseUrl, callType, label, page } = params;
-
-  try {
-    await waitForActiveCallPanel(page, callType, 25_000);
-    logStep("Active call panel reached without refresh", { callType, label });
-    return;
-  } catch (error) {
-    logStep("Active call panel not visible yet; retrying after dashboard refresh", {
-      callType,
-      error: error instanceof Error ? error.message : String(error),
-      label,
-    });
-  }
-
-  await openRoute(page, baseUrl, "/dashboard");
-  await waitForActiveCallPanel(page, callType, 60_000);
-  logStep("Active call panel reached after refresh", { callType, label });
 }
 
 async function endActiveCall(page: Page): Promise<void> {
@@ -1122,18 +1101,10 @@ async function runDashboardAudioScenario(params: {
   logStep("Dashboard audio call answered from callee UI", { callSessionId: createdSession.id });
   await waitForCallSessionStatus(adminClient, createdSession.id, "accepted");
   logStep("Dashboard audio call reached accepted status", { callSessionId: createdSession.id });
-  await waitForActiveCallPanelWithFallback({
-    baseUrl,
-    callType: "audio",
-    label: "caller",
-    page: callerPage,
-  });
-  await waitForActiveCallPanelWithFallback({
-    baseUrl,
-    callType: "audio",
-    label: "callee",
-    page: calleePage,
-  });
+  await waitForActiveCallPanel(callerPage, "audio");
+  logStep("Active call panel reached without refresh", { callType: "audio", label: "caller" });
+  await waitForActiveCallPanel(calleePage, "audio");
+  logStep("Active call panel reached without refresh", { callType: "audio", label: "callee" });
   logStep("Dashboard audio call connected", { callSessionId: createdSession.id });
 
   const callerScreenshot = path.join(artifactDir, `daily-calls-${timestamp}-dashboard-audio-caller.png`);
@@ -1232,18 +1203,10 @@ async function runMessagingVideoScenario(params: {
   logStep("Messaging video call answered from callee UI", { callSessionId: createdSession.id });
   await waitForCallSessionStatus(adminClient, createdSession.id, "accepted");
   logStep("Messaging video call reached accepted status", { callSessionId: createdSession.id });
-  await waitForActiveCallPanelWithFallback({
-    baseUrl,
-    callType: "video",
-    label: "caller",
-    page: callerPage,
-  });
-  await waitForActiveCallPanelWithFallback({
-    baseUrl,
-    callType: "video",
-    label: "callee",
-    page: calleePage,
-  });
+  await waitForActiveCallPanel(callerPage, "video");
+  logStep("Active call panel reached without refresh", { callType: "video", label: "caller" });
+  await waitForActiveCallPanel(calleePage, "video");
+  logStep("Active call panel reached without refresh", { callType: "video", label: "callee" });
   logStep("Messaging video call connected", { callSessionId: createdSession.id });
 
   const callerScreenshot = path.join(artifactDir, `daily-calls-${timestamp}-messaging-video-caller.png`);

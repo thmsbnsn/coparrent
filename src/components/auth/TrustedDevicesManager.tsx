@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format, formatDistanceToNow } from "date-fns";
 import { Monitor, Smartphone, Tablet, Shield, ShieldCheck, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,11 @@ interface UserDevice {
   is_trusted: boolean;
 }
 
+interface DeviceGroup {
+  signature: string;
+  devices: UserDevice[];
+}
+
 const getDeviceIcon = (deviceName: string) => {
   const name = deviceName.toLowerCase();
   if (name.includes("mobile") || name.includes("phone")) {
@@ -42,12 +47,41 @@ const getDeviceIcon = (deviceName: string) => {
   return <Monitor className="w-5 h-5" />;
 };
 
+const getDeviceSignature = (device: UserDevice) =>
+  [device.device_name, device.browser, device.os, device.location ?? ""].join("|");
+
+const groupSimilarDevices = (devices: UserDevice[]): DeviceGroup[] => {
+  const groups = new Map<string, UserDevice[]>();
+
+  devices.forEach((device) => {
+    const signature = getDeviceSignature(device);
+    const existing = groups.get(signature) ?? [];
+    existing.push(device);
+    groups.set(signature, existing);
+  });
+
+  return Array.from(groups.entries())
+    .map(([signature, groupedDevices]) => ({
+      signature,
+      devices: [...groupedDevices].sort(
+        (a, b) => new Date(b.last_seen_at).getTime() - new Date(a.last_seen_at).getTime(),
+      ),
+    }))
+    .sort(
+      (a, b) =>
+        new Date(b.devices[0].last_seen_at).getTime() - new Date(a.devices[0].last_seen_at).getTime(),
+    );
+};
+
 export const TrustedDevicesManager = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [devices, setDevices] = useState<UserDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  const groupedDevices = useMemo(() => groupSimilarDevices(devices), [devices]);
 
   const fetchDevices = useCallback(async () => {
     if (!user) return;
@@ -139,6 +173,112 @@ export const TrustedDevicesManager = () => {
     }
   };
 
+  const toggleGroup = (signature: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [signature]: !prev[signature],
+    }));
+  };
+
+  const renderDeviceCard = (device: UserDevice, showGroupedHint?: string) => (
+    <div
+      key={device.id}
+      className={`p-4 rounded-lg border ${
+        device.is_trusted
+          ? "border-primary/30 bg-primary/5"
+          : "border-border bg-muted/30"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className={`p-2 rounded-lg ${
+            device.is_trusted ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          }`}>
+            {getDeviceIcon(device.device_name)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium">{device.device_name}</span>
+              {device.is_trusted && (
+                <Badge variant="default" className="text-xs">
+                  <ShieldCheck className="w-3 h-3 mr-1" />
+                  Trusted
+                </Badge>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {device.browser} on {device.os}
+            </p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-muted-foreground">
+              <span>First seen: {format(new Date(device.first_seen_at), "MMM d, yyyy")}</span>
+              <span>Last active: {formatDistanceToNow(new Date(device.last_seen_at), { addSuffix: true })}</span>
+              {device.ip_address && device.ip_address !== "Unknown" && (
+                <span>IP: {device.ip_address}</span>
+              )}
+            </div>
+            {showGroupedHint && (
+              <p className="mt-2 text-xs text-muted-foreground">{showGroupedHint}</p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant={device.is_trusted ? "outline" : "default"}
+            size="sm"
+            onClick={() => toggleTrust(device.id, device.is_trusted)}
+            disabled={actionLoading === device.id}
+          >
+            {actionLoading === device.id ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : device.is_trusted ? (
+              <>
+                <Shield className="w-4 h-4 mr-1" />
+                Untrust
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="w-4 h-4 mr-1" />
+                Trust
+              </>
+            )}
+          </Button>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                disabled={actionLoading === device.id}
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Remove Device</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to remove "{device.device_name}" from your trusted devices?
+                  You'll receive a login notification the next time this browser accesses your account.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => removeDevice(device.id)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Remove
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+    </div>
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -163,112 +303,53 @@ export const TrustedDevicesManager = () => {
         <div>
           <h3 className="font-medium">Trusted Devices</h3>
           <p className="text-sm text-muted-foreground">
-            Manage devices that have accessed your account
+            Review browsers that have accessed your account and collapse similar sign-ins when the list gets noisy
           </p>
         </div>
         <Badge variant="secondary">{devices.length} device{devices.length !== 1 ? 's' : ''}</Badge>
       </div>
 
       <div className="space-y-3">
-        {devices.map((device) => (
-          <div
-            key={device.id}
-            className={`p-4 rounded-lg border ${
-              device.is_trusted 
-                ? "border-primary/30 bg-primary/5" 
-                : "border-border bg-muted/30"
-            }`}
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className={`p-2 rounded-lg ${
-                  device.is_trusted ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                }`}>
-                  {getDeviceIcon(device.device_name)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium">{device.device_name}</span>
-                    {device.is_trusted && (
-                      <Badge variant="default" className="text-xs">
-                        <ShieldCheck className="w-3 h-3 mr-1" />
-                        Trusted
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {device.browser} on {device.os}
-                  </p>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-muted-foreground">
-                    <span>First seen: {format(new Date(device.first_seen_at), "MMM d, yyyy")}</span>
-                    <span>Last active: {formatDistanceToNow(new Date(device.last_seen_at), { addSuffix: true })}</span>
-                    {device.ip_address && device.ip_address !== "Unknown" && (
-                      <span>IP: {device.ip_address}</span>
-                    )}
-                  </div>
-                </div>
-              </div>
+        {groupedDevices.map((group) => {
+          const [latestDevice, ...olderDevices] = group.devices;
+          const isExpanded = expandedGroups[group.signature] ?? false;
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant={device.is_trusted ? "outline" : "default"}
-                  size="sm"
-                  onClick={() => toggleTrust(device.id, device.is_trusted)}
-                  disabled={actionLoading === device.id}
-                >
-                  {actionLoading === device.id ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : device.is_trusted ? (
-                    <>
-                      <Shield className="w-4 h-4 mr-1" />
-                      Untrust
-                    </>
-                  ) : (
-                    <>
-                      <ShieldCheck className="w-4 h-4 mr-1" />
-                      Trust
-                    </>
-                  )}
-                </Button>
+          return (
+            <div key={group.signature} className="space-y-2">
+              {renderDeviceCard(
+                latestDevice,
+                olderDevices.length > 0
+                  ? `${olderDevices.length} similar sign-in record${olderDevices.length === 1 ? "" : "s"} hidden below this one.`
+                  : undefined,
+              )}
 
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      disabled={actionLoading === device.id}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Remove Device</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Are you sure you want to remove "{device.device_name}" from your trusted devices? 
-                        You'll receive a login notification the next time this device accesses your account.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={() => removeDevice(device.id)}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        Remove
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
+              {olderDevices.length > 0 && (
+                <div className="pl-4">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2 text-xs text-muted-foreground"
+                    onClick={() => toggleGroup(group.signature)}
+                  >
+                    {isExpanded
+                      ? `Hide ${olderDevices.length} older similar record${olderDevices.length === 1 ? "" : "s"}`
+                      : `Show ${olderDevices.length} older similar record${olderDevices.length === 1 ? "" : "s"}`}
+                  </Button>
+                </div>
+              )}
+
+              {isExpanded &&
+                olderDevices.map((device) =>
+                  renderDeviceCard(device, "Older similar browser record retained for security history."),
+                )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <p className="text-xs text-muted-foreground pt-2">
-        Trusted devices won't trigger login notifications. Remove devices you don't recognize.
+        Trusted devices won't trigger login notifications. Similar entries are grouped so it is easier to spot something you do not recognize.
       </p>
     </div>
   );

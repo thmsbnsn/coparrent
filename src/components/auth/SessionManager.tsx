@@ -181,9 +181,9 @@ export const SessionManager = () => {
             <Globe className="w-5 h-5 text-muted-foreground" />
           </div>
           <div>
-            <p className="font-medium">Active Sessions</p>
+            <p className="font-medium">Current Session</p>
             <p className="text-sm text-muted-foreground">
-              Manage devices where you're signed in
+              This section shows the browser session you are using right now. Use Trusted Devices above for broader browser history.
             </p>
           </div>
         </div>
@@ -259,7 +259,7 @@ export const SessionManager = () => {
 
       {sessions.length === 0 && (
         <div className="text-center text-muted-foreground py-8">
-          No active sessions found.
+          No current browser session details available.
         </div>
       )}
 

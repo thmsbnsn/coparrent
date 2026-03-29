@@ -8,34 +8,60 @@ interface DeviceInfo {
   os: string;
 }
 
-const generateDeviceFingerprint = (): string => {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (ctx) {
-    ctx.textBaseline = "top";
-    ctx.font = "14px Arial";
-    ctx.fillText("fingerprint", 2, 2);
-  }
-  
-  const fingerprint = [
-    navigator.userAgent,
-    navigator.language,
-    screen.width + "x" + screen.height,
-    screen.colorDepth,
-    new Date().getTimezoneOffset(),
-    !!window.sessionStorage,
-    !!window.localStorage,
-    navigator.hardwareConcurrency || "unknown",
-  ].join("|");
+const DEVICE_FINGERPRINT_STORAGE_KEY = "coparrent_device_fingerprint";
 
-  // Simple hash function
+const hashFingerprint = (value: string): string => {
   let hash = 0;
-  for (let i = 0; i < fingerprint.length; i++) {
-    const char = fingerprint.charCodeAt(i);
+  for (let i = 0; i < value.length; i++) {
+    const char = value.charCodeAt(i);
     hash = ((hash << 5) - hash) + char;
     hash = hash & hash;
   }
+
   return Math.abs(hash).toString(36);
+};
+
+const buildDeviceFingerprintSeed = (): string => {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "unknown";
+  const nav = navigator as Navigator & {
+    deviceMemory?: number;
+    userAgentData?: { platform?: string; brands?: Array<{ brand: string }> };
+  };
+
+  const brandList = nav.userAgentData?.brands?.map((brand) => brand.brand).join(",") || "";
+  const platform = nav.userAgentData?.platform || navigator.platform || "unknown";
+
+  return [
+    navigator.userAgent,
+    platform,
+    navigator.language,
+    timezone,
+    navigator.hardwareConcurrency || "unknown",
+    navigator.maxTouchPoints || 0,
+    nav.deviceMemory || "unknown",
+    brandList,
+  ].join("|");
+};
+
+const generateDeviceFingerprint = (): string => {
+  try {
+    const storedFingerprint = window.localStorage.getItem(DEVICE_FINGERPRINT_STORAGE_KEY);
+    if (storedFingerprint) {
+      return storedFingerprint;
+    }
+  } catch {
+    // Ignore storage access issues and fall back to a computed fingerprint.
+  }
+
+  const fingerprint = hashFingerprint(buildDeviceFingerprintSeed());
+
+  try {
+    window.localStorage.setItem(DEVICE_FINGERPRINT_STORAGE_KEY, fingerprint);
+  } catch {
+    // Ignore storage access issues and return the computed fingerprint.
+  }
+
+  return fingerprint;
 };
 
 const parseUserAgent = (): { browser: string; os: string; deviceName: string } => {
@@ -88,8 +114,6 @@ export const useLoginNotification = () => {
       const { browser, os, deviceName } = parseUserAgent();
       const deviceFingerprint = generateDeviceFingerprint();
 
-      console.log("Checking login notification for device:", { deviceName, browser, os });
-
       const { data, error } = await supabase.functions.invoke("login-notification", {
         body: {
           userId,
@@ -106,7 +130,6 @@ export const useLoginNotification = () => {
         return { success: false, isNewDevice: false };
       }
 
-      console.log("Login notification result:", data);
       return { success: true, isNewDevice: data?.isNewDevice || false };
     } catch (error) {
       console.error("Error in login notification:", error);

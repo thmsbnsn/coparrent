@@ -51,7 +51,13 @@ const handler = async (req: Request): Promise<Response> => {
       console.log("Known device, updating last seen");
       await supabase
         .from("user_devices")
-        .update({ last_seen_at: now })
+        .update({
+          last_seen_at: now,
+          device_name: deviceName,
+          browser,
+          os,
+          ip_address: ipAddress || existingDevice.ip_address || "Unknown",
+        })
         .eq("id", existingDevice.id);
     } else {
       // New device - insert and send notification
