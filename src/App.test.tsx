@@ -68,6 +68,10 @@ vi.mock("./pages/MessagingHubPage", () => ({
   default: () => <div>messaging-hub-page</div>,
 }));
 
+vi.mock("./pages/KidsHubPage", () => ({
+  default: () => <div>kids-hub-page</div>,
+}));
+
 const renderAppAtPath = async (path: string) => {
   window.history.replaceState({}, "", path);
 
@@ -117,5 +121,14 @@ describe("App messaging routes", () => {
 
     expect(window.location.pathname).toBe("/dashboard/messages");
     expect(container.textContent).toContain("messaging-hub-page");
+  });
+
+  it("hides /dashboard/kids-hub/chore-chart by replacing it with Kids Hub", async () => {
+    const rendered = await renderAppAtPath("/dashboard/kids-hub/chore-chart");
+    container = rendered.container;
+    root = rendered.root;
+
+    expect(window.location.pathname).toBe("/dashboard/kids-hub");
+    expect(container.textContent).toContain("kids-hub-page");
   });
 });

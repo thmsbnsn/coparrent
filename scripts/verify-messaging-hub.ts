@@ -44,7 +44,7 @@ interface VerificationReport {
 
 const SUPABASE_URL_KEY = "VITE_SUPABASE_URL";
 const SUPABASE_ANON_KEY_KEY = "VITE_SUPABASE_PUBLISHABLE_KEY";
-const DEFAULT_BASE_URL = "https://coparrent.com";
+const DEFAULT_BASE_URL = "https://www.coparrent.com";
 const DEFAULT_TESTER_LABEL = "Parent A";
 const DEFAULT_PARTNER_LABEL = "Parent B";
 const LOCALHOST_ORIGIN = "http://127.0.0.1:4173";

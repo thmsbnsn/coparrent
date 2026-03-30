@@ -29,6 +29,7 @@ import { BlogDashboardCard } from "@/components/dashboard/BlogDashboardCard";
 import { resolveSenderName } from "@/lib/displayResolver";
 import { fetchFamilyParentProfiles, type FamilyParentProfile } from "@/lib/familyScope";
 import { canAccessProtectedRoute } from "@/lib/routeAccess";
+import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Profile = Tables<"profiles">;
@@ -324,80 +325,157 @@ const Dashboard = () => {
       value: children.length.toString(),
       detail: children.length > 0 ? "profiles ready" : "add your first child",
       icon: Users,
+      accentClass: "from-primary/20 via-primary/10 to-transparent",
+      iconClass: "bg-primary/15 text-primary ring-1 ring-primary/20",
+      valueClass: children.length > 0 ? "text-white" : "text-slate-300",
     },
     {
       label: isExchangeDay() ? "Today" : "Schedule",
       value: schedule ? (isExchangeDay() ? "Exchange day" : "Active") : "Not set",
       detail: schedule ? "calendar is available" : "build your parenting plan",
       icon: Calendar,
+      accentClass: "from-accent/20 via-accent/10 to-transparent",
+      iconClass: "bg-accent/15 text-accent ring-1 ring-accent/20",
+      valueClass: schedule ? "text-white" : "text-slate-300",
     },
     {
       label: "Journal",
       value: journalCount.toString(),
       detail: journalCount > 0 ? "entries this month" : "good place for exchange notes",
       icon: BookHeart,
+      accentClass: "from-[#21B0FE]/20 via-[#21B0FE]/10 to-transparent",
+      iconClass: "bg-[#21B0FE]/10 text-[#21B0FE] ring-1 ring-[#21B0FE]/20",
+      valueClass: journalCount > 0 ? "text-white" : "text-slate-300",
     },
   ];
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-8 lg:space-y-10">
         {/* Subscription Status Banner */}
-        <SubscriptionBanner />
+        <div className="relative isolate overflow-hidden rounded-[30px] border border-primary/15 bg-gradient-to-r from-primary/10 via-background to-accent/10 p-[1px] shadow-[0_18px_40px_-28px_rgba(15,23,42,0.8)]">
+          <div className="absolute inset-y-0 left-8 w-28 rounded-full bg-primary/15 blur-3xl" />
+          <div className="absolute inset-y-0 right-10 w-28 rounded-full bg-accent/15 blur-3xl" />
+          <div className="relative rounded-[28px] border border-white/5 bg-background/80 p-1 backdrop-blur-sm">
+            <SubscriptionBanner />
+          </div>
+        </div>
 
         {/* Welcome Section */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-3xl border border-border bg-gradient-to-br from-primary/10 via-background to-accent/10 p-5 sm:p-6"
+          className="relative isolate overflow-hidden rounded-[34px] border border-primary/15 bg-[radial-gradient(circle_at_top_left,rgba(45,212,191,0.18),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.16),transparent_35%),linear-gradient(135deg,rgba(15,23,42,0.94),rgba(10,16,27,0.92))] p-5 shadow-[0_28px_70px_-38px_rgba(15,23,42,0.9)] sm:p-6"
         >
-          <div className="flex flex-col gap-5">
-            <div className="space-y-3">
-              <div className="inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                {heroEyebrow}
+          <div className="absolute inset-x-0 top-0 h-px bg-white/10" />
+          <div className="absolute left-6 top-5 h-32 w-32 rounded-full bg-primary/20 blur-3xl" />
+          <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-accent/15 blur-3xl" />
+          <div className="relative flex flex-col gap-6">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/80">
+                    {heroEyebrow}
+                  </div>
+                  <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-primary-foreground/70">
+                    Family command center
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h1 className="max-w-3xl text-3xl font-display font-bold tracking-tight text-white sm:text-4xl">
+                    {heroTitle}
+                  </h1>
+                  <p className="max-w-2xl text-sm leading-6 text-slate-200/80 sm:text-base">
+                    {heroDescription}
+                  </p>
+                </div>
               </div>
-              <div className="space-y-2">
-                <h1 className="text-2xl font-display font-bold tracking-tight sm:text-3xl">
-                  {heroTitle}
-                </h1>
-                <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
-                  {heroDescription}
-                </p>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:w-[360px] xl:grid-cols-1">
+                <div className="rounded-[26px] border border-white/10 bg-white/5 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
+                    Family connection
+                  </p>
+                  <p className="mt-3 text-lg font-semibold text-white">
+                    {otherParent?.fullName || "Setup still needed"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-300/70">
+                    {otherParent
+                      ? "Shared records, schedule coordination, and communication are connected."
+                      : canAccessSettingsRoute
+                        ? "Invite the other parent or guardian to finish family setup."
+                        : "A parent or guardian must complete family setup before shared actions open."}
+                  </p>
+                </div>
+
+                <div className="rounded-[26px] border border-white/10 bg-slate-950/35 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
+                    Current focus
+                  </p>
+                  <p className="mt-3 text-lg font-semibold text-white">
+                    {schedule ? "Plan and document" : "Finish core setup"}
+                  </p>
+                  <p className="mt-1 text-sm text-slate-300/70">
+                    {schedule
+                      ? "Review the schedule, keep communication clean, and record what matters without leaving the dashboard."
+                      : "Build the calendar first so exchanges, messages, and records all stay aligned."}
+                  </p>
+                </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              {statusCards.map(({ label, value, detail, icon: Icon }) => (
-                <div key={label} className="rounded-2xl border bg-card/80 p-4">
-                  <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-                    <Icon className="h-4 w-4 text-primary" />
-                    {label}
+              {statusCards.map(({ accentClass, detail, icon: Icon, iconClass, label, value, valueClass }) => (
+                <div
+                  key={label}
+                  className={cn(
+                    "relative overflow-hidden rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm",
+                    "before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/10",
+                  )}
+                >
+                  <div className={cn("absolute inset-x-0 top-0 h-28 bg-gradient-to-br opacity-80", accentClass)} />
+                  <div className="relative flex items-start justify-between gap-3">
+                    <div className="space-y-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
+                        {label}
+                      </p>
+                      <p className={cn("text-2xl font-display font-semibold sm:text-[1.9rem]", valueClass)}>
+                        {value}
+                      </p>
+                    </div>
+                    <div className={cn("flex h-12 w-12 items-center justify-center rounded-2xl backdrop-blur-sm", iconClass)}>
+                      <Icon className="h-5 w-5" />
+                    </div>
                   </div>
-                  <p className="mt-3 text-xl font-semibold text-foreground">{value}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{detail}</p>
+                  <p className="relative mt-4 text-sm leading-6 text-slate-300/70">{detail}</p>
                 </div>
               ))}
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
-              {quickLinks.map(({ label, description, href, icon: Icon }) => (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {quickLinks.map(({ label, description, href, icon: Icon }, index) => (
                 <Button
                   key={href}
                   variant="outline"
-                  className="h-auto justify-between rounded-2xl px-4 py-3 text-left"
+                  className={cn(
+                    "group h-auto rounded-[26px] border border-white/10 bg-white/5 p-0 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-200 hover:-translate-y-1 hover:border-white/20 hover:bg-white/10 hover:shadow-[0_20px_35px_-24px_rgba(15,23,42,0.95)]",
+                    index === 1 && "border-primary/20 bg-primary/10",
+                  )}
                   asChild
                 >
-                  <Link to={href}>
+                  <Link to={href} className="flex h-full items-center justify-between gap-4 px-4 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-slate-950/35 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-transform duration-200 group-hover:scale-[1.03]">
                         <Icon className="h-5 w-5" />
                       </div>
-                      <div>
-                        <p className="font-medium text-foreground">{label}</p>
-                        <p className="text-xs text-muted-foreground">{description}</p>
+                      <div className="space-y-1">
+                        <p className="font-semibold text-white">{label}</p>
+                        <p className="text-xs leading-5 text-slate-300/70">{description}</p>
                       </div>
                     </div>
-                    <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-slate-200/70 transition-all duration-200 group-hover:translate-x-0.5 group-hover:border-white/20 group-hover:text-white">
+                      <ArrowRight className="h-4 w-4" />
+                    </div>
                   </Link>
                 </Button>
               ))}
@@ -406,12 +484,15 @@ const Dashboard = () => {
         </motion.div>
 
         {isParent && (
-          <DashboardCallWidget
-            contacts={callableMembers}
-            disabled={Boolean(incomingSession || dashboardOutgoingSession || activeSession)}
-            loading={callableMembersLoading}
-            onStartCall={handleStartDashboardCall}
-          />
+          <div className="relative isolate">
+            <div className="absolute inset-x-10 top-6 h-24 rounded-full bg-emerald-500/10 blur-3xl" />
+            <DashboardCallWidget
+              contacts={callableMembers}
+              disabled={Boolean(incomingSession || dashboardOutgoingSession || activeSession)}
+              loading={callableMembersLoading}
+              onStartCall={handleStartDashboardCall}
+            />
+          </div>
         )}
 
         {/* Today's Schedule Card */}
@@ -419,11 +500,11 @@ const Dashboard = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="rounded-2xl border border-border bg-card p-6"
+          className="overflow-hidden rounded-[30px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-6 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.85)]"
         >
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-              <Calendar className="w-5 h-5 text-primary" />
+          <div className="mb-6 flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+              <Calendar className="h-5 w-5 text-primary" />
             </div>
             <div>
               <h2 className="font-display font-semibold">Today's Parenting Time</h2>
@@ -431,32 +512,32 @@ const Dashboard = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl bg-parent-a-light border border-parent-a">
-              <p className="text-sm font-medium text-parent-a mb-1">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="rounded-[24px] border border-parent-a/40 bg-[linear-gradient(135deg,rgba(33,176,254,0.18),rgba(255,255,255,0.03))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+              <p className="mb-1 text-sm font-medium text-parent-a">
                 {schedule ? "Status today" : "Your parenting time"}
               </p>
               <p className="text-2xl font-display font-bold text-parent-a">
                 {schedule ? (isExchangeDay() ? "Exchange day" : "Schedule active") : "Set up your schedule"}
               </p>
-              <p className="text-sm text-parent-a/70 mt-2">
+              <p className="mt-2 text-sm leading-6 text-parent-a/80">
                 {otherParent
                   ? `Other parent/guardian: ${otherParent.fullName || "Connected"}`
                   : "Add another parent or guardian to get started"}
               </p>
             </div>
-            <div className="p-4 rounded-xl bg-muted border border-border">
-              <p className="text-sm font-medium text-muted-foreground mb-1">Next best move</p>
-              <p className="text-sm text-muted-foreground">
+            <div className="rounded-[24px] border border-border/70 bg-background/55 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+              <p className="mb-1 text-sm font-medium text-muted-foreground">Next best move</p>
+              <p className="text-sm leading-6 text-muted-foreground">
                 {schedule
                   ? "Open the calendar for timing details or send a written update without leaving the dashboard."
                   : "Build the schedule first, then use messages and journal entries to document changes cleanly."}
               </p>
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <Button variant="outline" size="sm" asChild>
+                <Button variant="outline" size="sm" className="rounded-full border-border/70 bg-background/80" asChild>
                   <Link to="/dashboard/calendar">View Schedule</Link>
                 </Button>
-                <Button variant="outline" size="sm" asChild>
+                <Button variant="outline" size="sm" className="rounded-full border-border/70 bg-background/80" asChild>
                   <Link to="/dashboard/messages">Send Message</Link>
                 </Button>
               </div>
@@ -481,32 +562,41 @@ const Dashboard = () => {
         {/* Quick Stats Grid */}
 
         {/* Quick Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {/* Upcoming Exchanges */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="rounded-2xl border border-border bg-card p-5"
+            className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-5 shadow-[0_20px_45px_-34px_rgba(15,23,42,0.85)]"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display font-semibold">Upcoming Exchanges</h3>
-              <Clock className="w-5 h-5 text-muted-foreground" />
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
+                  Planning
+                </p>
+                <h3 className="font-display font-semibold">Upcoming Exchanges</h3>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/70 bg-background/70 text-muted-foreground">
+                <Clock className="h-5 w-5" />
+              </div>
             </div>
             <div className="space-y-3">
               {otherParent ? (
-                <p className="text-sm text-muted-foreground">
-                  Set up your custody schedule to see upcoming exchanges.
-                </p>
+                <div className="rounded-2xl border border-dashed border-border/70 bg-background/40 p-4">
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    Set up your custody schedule to see upcoming exchanges.
+                  </p>
+                </div>
               ) : (
-                <div className="text-center py-4">
-                  <p className="text-sm text-muted-foreground mb-3">
+                <div className="rounded-2xl border border-dashed border-border/70 bg-background/40 px-4 py-5 text-center">
+                  <p className="text-sm leading-6 text-muted-foreground">
                     {canAccessSettingsRoute
                       ? "Add another parent or guardian to manage exchanges"
                       : "A parent or guardian needs to finish family setup before exchanges can appear"}
                   </p>
                   {canAccessSettingsRoute && (
-                    <Button variant="outline" size="sm" asChild>
+                    <Button variant="outline" size="sm" className="mt-4 rounded-full" asChild>
                       <Link to="/dashboard/settings">Set Up</Link>
                     </Button>
                   )}
@@ -520,11 +610,18 @@ const Dashboard = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="rounded-2xl border border-border bg-card p-5"
+            className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-5 shadow-[0_20px_45px_-34px_rgba(15,23,42,0.85)]"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display font-semibold">Recent Messages</h3>
-              <MessageSquare className="w-5 h-5 text-muted-foreground" />
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
+                  Communication
+                </p>
+                <h3 className="font-display font-semibold">Recent Messages</h3>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/70 bg-background/70 text-primary">
+                <MessageSquare className="h-5 w-5" />
+              </div>
             </div>
             <div className="space-y-3">
               {messages.length > 0 ? (
@@ -532,10 +629,10 @@ const Dashboard = () => {
                   <Link
                     key={msg.id}
                     to={`/dashboard/messages?thread=${msg.thread_id}`}
-                    className="block p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                    className="group block rounded-[22px] border border-border/70 bg-background/50 p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-background/80"
                   >
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-sm font-medium">
+                    <div className="mb-1 flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-foreground">
                         {resolveSenderName(msg.sender?.full_name, msg.sender?.email)}
                       </p>
                       <span className="text-xs text-muted-foreground">
@@ -546,12 +643,15 @@ const Dashboard = () => {
                   </Link>
                 ))
               ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  No messages yet
-                </p>
+                <div className="rounded-2xl border border-dashed border-border/70 bg-background/40 p-4 text-center">
+                  <p className="text-sm font-medium text-foreground">Written record is quiet right now</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Start the next update from Messaging Hub to keep the family record clear.
+                  </p>
+                </div>
               )}
             </div>
-            <Button variant="ghost" className="w-full mt-3" asChild>
+            <Button variant="ghost" className="mt-4 w-full rounded-2xl border border-transparent bg-background/40 hover:bg-background/70" asChild>
               <Link to="/dashboard/messages">View All Messages</Link>
             </Button>
           </motion.div>
@@ -562,11 +662,18 @@ const Dashboard = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="rounded-2xl border border-border bg-card p-5"
+              className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-5 shadow-[0_20px_45px_-34px_rgba(15,23,42,0.85)]"
             >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-display font-semibold">Your Children</h3>
-                <Users className="w-5 h-5 text-muted-foreground" />
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
+                    Family details
+                  </p>
+                  <h3 className="font-display font-semibold">Your Children</h3>
+                </div>
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/70 bg-background/70 text-primary">
+                  <Users className="h-5 w-5" />
+                </div>
               </div>
               <div className="space-y-3">
                 {children.length > 0 ? (
@@ -574,9 +681,9 @@ const Dashboard = () => {
                     <Link
                       key={child.id}
                       to="/dashboard/children"
-                      className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                      className="flex items-center gap-3 rounded-[22px] border border-border/70 bg-background/50 p-3.5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:bg-background/80"
                     >
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10 font-semibold text-primary">
                         {child.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
@@ -588,17 +695,18 @@ const Dashboard = () => {
                     </Link>
                   ))
                 ) : (
-                  <div className="text-center py-4">
-                    <p className="text-sm text-muted-foreground mb-3">
-                      Add your children's information
+                  <div className="rounded-2xl border border-dashed border-border/70 bg-background/40 px-4 py-5 text-center">
+                    <p className="text-sm font-medium text-foreground">No child profiles added yet</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Add your children's information so schedules, health details, and records stay anchored.
                     </p>
-                    <Button variant="outline" size="sm" asChild>
+                    <Button variant="outline" size="sm" className="mt-4 rounded-full" asChild>
                       <Link to="/dashboard/children">Add Child</Link>
                     </Button>
                   </div>
                 )}
               </div>
-              <Button variant="ghost" className="w-full mt-3" asChild>
+              <Button variant="ghost" className="mt-4 w-full rounded-2xl border border-transparent bg-background/40 hover:bg-background/70" asChild>
                 <Link to="/dashboard/children">Manage Child Info</Link>
               </Button>
             </motion.div>
@@ -609,22 +717,30 @@ const Dashboard = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.45 }}
-            className="rounded-2xl border border-border bg-card p-5"
+            className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-5 shadow-[0_20px_45px_-34px_rgba(15,23,42,0.85)]"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display font-semibold">Private Journal</h3>
-              <BookHeart className="w-5 h-5 text-[#21B0FE]" />
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
+                  Private record
+                </p>
+                <h3 className="font-display font-semibold">Private Journal</h3>
+              </div>
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#21B0FE]/20 bg-[#21B0FE]/10 text-[#21B0FE]">
+                <BookHeart className="h-5 w-5" />
+              </div>
             </div>
-            <div className="text-center py-3">
-              <p className="text-2xl font-bold text-[#21B0FE]">{journalCount}</p>
+            <div className="rounded-[22px] border border-[#21B0FE]/15 bg-[#21B0FE]/[0.07] px-4 py-5 text-center">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#21B0FE]/80">This month</p>
+              <p className="mt-3 text-3xl font-display font-bold text-[#21B0FE]">{journalCount}</p>
               <p className="text-sm text-muted-foreground">entries this month</p>
-              <p className="text-xs text-muted-foreground mt-2">
-                {journalCount > 0 
-                  ? "Great job staying grounded! 🌟" 
-                  : "Try journaling after exchanges"}
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                {journalCount > 0
+                  ? "Your private notes are ready when you need to review the month."
+                  : "Use the journal after exchanges or difficult conversations to keep a private record."}
               </p>
             </div>
-            <Button variant="ghost" className="w-full mt-3" asChild>
+            <Button variant="ghost" className="mt-4 w-full rounded-2xl border border-transparent bg-background/40 hover:bg-background/70" asChild>
               <Link to="/dashboard/journal">Open Journal</Link>
             </Button>
           </motion.div>

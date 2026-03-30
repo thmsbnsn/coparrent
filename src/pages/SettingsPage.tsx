@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { User, Bell, Shield, LogOut, Users, BellOff, Baby, Bug } from "lucide-react";
+import { User, Shield, LogOut, Users, Baby, Bug } from "lucide-react";
 import { useSearchParams, Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { MotionPermissionPrompt } from "@/components/feedback/MotionPermissionPrompt";
@@ -19,8 +19,6 @@ import { useProblemReport } from "@/components/feedback/useProblemReport";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { CoParentInvite } from "@/components/settings/CoParentInvite";
@@ -29,6 +27,7 @@ import { AccessCodeRedeemer } from "@/components/settings/AccessCodeRedeemer";
 import { ThirdPartyManager } from "@/components/settings/ThirdPartyManager";
 import { PreferencesSettings } from "@/components/settings/PreferencesSettings";
 import { ChildAccountControls } from "@/components/settings/ChildAccountControls";
+import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
 import { PasskeySetup } from "@/components/auth/PasskeySetup";
 import { RecoveryCodes } from "@/components/auth/RecoveryCodes";
@@ -38,7 +37,6 @@ import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { DataExportSection } from "@/components/settings/DataExportSection";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { useNotifications, NotificationPreferences } from "@/hooks/useNotifications";
 import { useSubscription } from "@/hooks/useSubscription";
 import { supabase } from "@/integrations/supabase/client";
 import { useFamily } from "@/contexts/FamilyContext";
@@ -79,14 +77,6 @@ const SettingsPage = () => {
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
   const { checkSubscription } = useSubscription();
-  const { 
-    preferences: notificationPrefs, 
-    permissionState, 
-    requestPermission, 
-    updatePreferences, 
-    toggleAllNotifications,
-    loading: notificationsLoading 
-  } = useNotifications();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [coParent, setCoParent] = useState<CoParentProfile | null>(null);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -371,133 +361,8 @@ const SettingsPage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="rounded-2xl border border-border bg-card p-6"
         >
-          <div className="flex items-center gap-3 mb-6">
-            <Bell className="w-5 h-5 text-primary" />
-            <h2 className="font-display font-semibold">Notifications</h2>
-          </div>
-
-          {/* Browser Permission */}
-          {permissionState !== "granted" && (
-            <div className="mb-6 p-4 rounded-lg bg-muted/50 border border-border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="font-medium">Enable Push Notifications</p>
-                  <p className="text-sm text-muted-foreground">Allow browser notifications to stay updated</p>
-                </div>
-                <Button variant="outline" size="sm" onClick={requestPermission}>
-                  Enable
-                </Button>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-4">
-            {/* Master Toggle */}
-            <div className="flex items-center justify-between p-4 rounded-lg bg-muted/30 border border-border">
-              <div className="flex items-center gap-3">
-                {notificationPrefs.enabled ? (
-                  <Bell className="w-5 h-5 text-primary" />
-                ) : (
-                  <BellOff className="w-5 h-5 text-muted-foreground" />
-                )}
-                <div>
-                  <p className="font-medium">All Notifications</p>
-                  <p className="text-sm text-muted-foreground">Turn all notifications on or off</p>
-                </div>
-              </div>
-              <Switch 
-                checked={notificationPrefs.enabled} 
-                onCheckedChange={(checked) => toggleAllNotifications(checked)}
-              />
-            </div>
-
-            <Separator />
-
-            {/* Individual notification toggles */}
-            <div className={`space-y-3 ${!notificationPrefs.enabled ? 'opacity-50 pointer-events-none' : ''}`}>
-              <div className="flex items-center space-x-3">
-                <Checkbox 
-                  id="schedule_changes"
-                  checked={notificationPrefs.schedule_changes}
-                  onCheckedChange={(checked) => updatePreferences({ schedule_changes: checked as boolean })}
-                />
-                <div className="grid gap-1.5 leading-none">
-                  <label htmlFor="schedule_changes" className="text-sm font-medium cursor-pointer">
-                    Schedule Changes
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    Get notified when the parenting schedule is updated
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Checkbox 
-                  id="new_messages"
-                  checked={notificationPrefs.new_messages}
-                  onCheckedChange={(checked) => updatePreferences({ new_messages: checked as boolean })}
-                />
-                <div className="grid gap-1.5 leading-none">
-                  <label htmlFor="new_messages" className="text-sm font-medium cursor-pointer">
-                    New Messages
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    Receive alerts for new messages from your co-parent
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Checkbox 
-                  id="upcoming_exchanges"
-                  checked={notificationPrefs.upcoming_exchanges}
-                  onCheckedChange={(checked) => updatePreferences({ upcoming_exchanges: checked as boolean })}
-                />
-                <div className="grid gap-1.5 leading-none">
-                  <label htmlFor="upcoming_exchanges" className="text-sm font-medium cursor-pointer">
-                    Upcoming Exchanges
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    Reminder before each custody exchange
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Checkbox 
-                  id="document_uploads"
-                  checked={notificationPrefs.document_uploads}
-                  onCheckedChange={(checked) => updatePreferences({ document_uploads: checked as boolean })}
-                />
-                <div className="grid gap-1.5 leading-none">
-                  <label htmlFor="document_uploads" className="text-sm font-medium cursor-pointer">
-                    Document Uploads
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    Get notified when documents are uploaded to the vault
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center space-x-3">
-                <Checkbox 
-                  id="child_info_updates"
-                  checked={notificationPrefs.child_info_updates}
-                  onCheckedChange={(checked) => updatePreferences({ child_info_updates: checked as boolean })}
-                />
-                <div className="grid gap-1.5 leading-none">
-                  <label htmlFor="child_info_updates" className="text-sm font-medium cursor-pointer">
-                    Child Info Updates
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    Get notified when child information is updated
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          <NotificationSettings />
         </motion.div>
 
         {/* Security Section */}

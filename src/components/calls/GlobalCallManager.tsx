@@ -70,6 +70,19 @@ export const GlobalCallManager = () => {
     );
   }, [profileId, sessions]);
 
+  const showActiveCallPanel = useMemo(() => {
+    if (!activeSession) {
+      return false;
+    }
+
+    return (
+      currentCallSessionId === activeSession.id ||
+      meetingState === "joining-meeting" ||
+      meetingState === "joined-meeting" ||
+      meetingState === "loading"
+    );
+  }, [activeSession, currentCallSessionId, meetingState]);
+
   const handleAcceptIncomingCall = useCallback(async () => {
     if (!incomingSession) {
       return;
@@ -111,11 +124,9 @@ export const GlobalCallManager = () => {
     <CallSessionLayer
       activeSession={activeSession}
       incomingSession={incomingSession}
-      isJoined={isJoined}
       isLocalAudioEnabled={isLocalAudioEnabled}
       isLocalVideoEnabled={isLocalVideoEnabled}
       localParticipant={localParticipant}
-      meetingState={meetingState}
       onAcceptIncoming={() => void handleAcceptIncomingCall()}
       onCancelOutgoing={() => void handleCancelOutgoingCall()}
       onDeclineIncoming={() => void handleDeclineIncomingCall()}
@@ -124,6 +135,7 @@ export const GlobalCallManager = () => {
       onToggleVideo={toggleVideo}
       outgoingSession={outgoingSession}
       remoteParticipant={remoteParticipant}
+      showActiveCallPanel={showActiveCallPanel || isJoined}
     />
   );
 };

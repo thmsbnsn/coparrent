@@ -18,6 +18,7 @@ describe("routeAccess", () => {
   it("keeps child accounts inside their allowed route set", () => {
     expect(isChildAllowedRoute("/dashboard/messages/thread-1")).toBe(true);
     expect(isChildAllowedRoute("/dashboard/expenses")).toBe(false);
+    expect(isChildAllowedRoute("/pwa-diagnostics")).toBe(true);
 
     expect(
       getProtectedRouteAccessDecision("/dashboard/expenses", {
@@ -93,6 +94,7 @@ describe("routeAccess", () => {
   it("requires active family scope only for registered family routes", () => {
     expect(requiresActiveFamilyScope("/dashboard/messages")).toBe(true);
     expect(requiresActiveFamilyScope("/dashboard/law-library")).toBe(false);
+    expect(requiresActiveFamilyScope("/pwa-diagnostics")).toBe(false);
 
     expect(
       getProtectedRouteAccessDecision("/dashboard/messages", {
@@ -106,6 +108,26 @@ describe("routeAccess", () => {
 
     expect(
       getProtectedRouteAccessDecision("/dashboard/law-library", {
+        isThirdParty: true,
+      }),
+    ).toEqual({
+      allowed: true,
+      redirectTo: null,
+      reason: "allowed",
+    });
+
+    expect(
+      getProtectedRouteAccessDecision("/pwa-diagnostics", {
+        isChildAccount: true,
+      }),
+    ).toEqual({
+      allowed: true,
+      redirectTo: null,
+      reason: "allowed",
+    });
+
+    expect(
+      getProtectedRouteAccessDecision("/pwa-diagnostics", {
         isThirdParty: true,
       }),
     ).toEqual({

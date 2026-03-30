@@ -69,7 +69,6 @@ const KidCenterPage = lazy(() => import("./pages/KidCenterPage"));
 const KidsHubPage = lazy(() => import("./pages/KidsHubPage"));
 const NurseNancyPage = lazy(() => import("./pages/NurseNancyPage"));
 const ColoringPagesPage = lazy(() => import("./pages/ColoringPagesPage"));
-const ChoreChartPage = lazy(() => import("./pages/ChoreChartPage"));
 const ActivitiesPage = lazy(() => import("./pages/ActivitiesPage"));
 const CreationsLibraryPage = lazy(() => import("./pages/CreationsLibraryPage"));
 const OfflinePage = lazy(() => import("./pages/OfflinePage"));
@@ -161,7 +160,7 @@ const App = () => (
                 <Route path="/dashboard/kids-hub" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Kids Hub"><KidsHubPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/kids-hub/nurse-nancy" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Nurse Nancy"><NurseNancyPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/kids-hub/coloring-pages" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Coloring Pages"><ColoringPagesPage /></RouteErrorBoundary></ProtectedRoute>} />
-                <Route path="/dashboard/kids-hub/chore-chart" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Chore Chart"><ChoreChartPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/kids-hub/chore-chart" element={<Navigate to="/dashboard/kids-hub" replace />} />
                 <Route path="/dashboard/kids-hub/activities" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Activities"><ActivitiesPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/kids-hub/creations" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Creations Library"><CreationsLibraryPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/kids-hub/*" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Kids Hub"><KidsHubPage /></RouteErrorBoundary></ProtectedRoute>} />
@@ -173,7 +172,7 @@ const App = () => (
                 <Route path="/offline" element={<RouteErrorBoundary routeName="Offline"><OfflinePage /></RouteErrorBoundary>} />
                 
                 {/* PWA Diagnostics (Internal QA) */}
-                <Route path="/pwa-diagnostics" element={<RouteErrorBoundary routeName="PWA Diagnostics"><PWADiagnosticsPage /></RouteErrorBoundary>} />
+                <Route path="/pwa-diagnostics" element={<ProtectedRoute><RouteErrorBoundary routeName="PWA Diagnostics"><PWADiagnosticsPage /></RouteErrorBoundary></ProtectedRoute>} />
                 
                 {/* 404 */}
                 <Route path="*" element={<NotFound />} />

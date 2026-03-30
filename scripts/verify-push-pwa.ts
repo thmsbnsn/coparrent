@@ -52,6 +52,11 @@ interface VerificationReport {
   timestamp: string;
   baseUrl: string;
   environment: string;
+  helpUrls: {
+    diagnostics: string;
+    manualChecklist: string;
+    notificationSettings: string;
+  };
   testerLabel: string;
   testerEmail: string;
   scenarios: ScenarioResult[];
@@ -61,6 +66,7 @@ const SUPABASE_URL_KEY = "VITE_SUPABASE_URL";
 const SUPABASE_ANON_KEY_KEY = "VITE_SUPABASE_PUBLISHABLE_KEY";
 const SUPABASE_PROJECT_REF_KEY = "VITE_SUPABASE_PROJECT_ID";
 const DEFAULT_TESTER_LABEL = "Parent A";
+const MANUAL_CHECKLIST_PATH = "docs/project/PUSH_PWA_DEVICE_VALIDATION_CHECKLIST.md";
 const execFile = promisify(execFileCallback);
 
 function logStep(step: string, details?: Record<string, unknown>): void {
@@ -339,6 +345,103 @@ function platformDisplayName(platform: PushPlatform): string {
     case "desktop-pwa":
       return "Desktop PWA";
   }
+}
+
+function getScenarioFollowUp(
+  scenario: ScenarioResult,
+  helpUrls: VerificationReport["helpUrls"],
+): string[] {
+  const baseSteps = [
+    `Open ${helpUrls.notificationSettings} on the target device to confirm notifications are enabled.`,
+    `Open ${helpUrls.diagnostics} on the same device/session and capture the current diagnostics state.`,
+  ];
+
+  if (scenario.status === "passed") {
+    return [
+      "Capture the received notification plus the diagnostics page for the same desktop session.",
+      "Attach the JSON report and markdown summary from this verifier run to the evidence package.",
+    ];
+  }
+
+  if (scenario.status === "pending_manual_confirmation") {
+    return [
+      ...baseSteps,
+      "Confirm the physical device received the targeted push notification and record whether tapping it opened the expected route.",
+      "Attach the JSON report and markdown summary from this verifier run to the evidence package.",
+    ];
+  }
+
+  if (scenario.details.reason === "missing_subscription") {
+    return [
+      ...baseSteps,
+      "Subscribe on the physical device first, then rerun this verifier so the platform-specific push can be targeted.",
+      `Use ${helpUrls.manualChecklist} for the exact device-specific evidence set before marking the pass complete.`,
+    ];
+  }
+
+  return [
+    ...baseSteps,
+    "Resolve the blocker noted below, then rerun the verifier before treating the platform as ready.",
+    `Use ${helpUrls.manualChecklist} for the exact device-specific evidence set before marking the pass complete.`,
+  ];
+}
+
+function buildMarkdownSummary(
+  report: VerificationReport,
+  jsonReportPath: string,
+): string {
+  const lines = [
+    "# Push/PWA Verification Summary",
+    "",
+    `- Timestamp: ${report.timestamp}`,
+    `- Base URL: ${report.baseUrl}`,
+    `- Environment: ${report.environment}`,
+    `- Tester: ${report.testerLabel} (${report.testerEmail})`,
+    `- JSON report: ${jsonReportPath}`,
+    `- Manual checklist: ${report.helpUrls.manualChecklist}`,
+    `- Notification settings route: ${report.helpUrls.notificationSettings}`,
+    `- Diagnostics route: ${report.helpUrls.diagnostics}`,
+    "",
+    "This summary is a verifier artifact, not proof that physical-device validation is complete.",
+    "A platform is only complete once a real device receives the notification and the evidence set is captured.",
+    "",
+    "## Scenario Results",
+  ];
+
+  for (const scenario of report.scenarios) {
+    lines.push("");
+    lines.push(`### ${platformDisplayName(scenario.platform)}`);
+    lines.push(`- Status: ${scenario.status}`);
+    lines.push(`- Started: ${scenario.startedAt}`);
+    lines.push(`- Completed: ${scenario.completedAt}`);
+
+    if (scenario.subscriptionIds.length > 0) {
+      lines.push(`- Subscription IDs: ${scenario.subscriptionIds.join(", ")}`);
+    }
+
+    if (scenario.screenshotPath) {
+      lines.push(`- Screenshot: ${scenario.screenshotPath}`);
+    }
+
+    for (const note of scenario.notes) {
+      lines.push(`- Note: ${note}`);
+    }
+
+    const detailEntries = Object.entries(scenario.details);
+    if (detailEntries.length > 0) {
+      lines.push("- Details:");
+      for (const [key, value] of detailEntries) {
+        lines.push(`  - ${key}: ${JSON.stringify(value)}`);
+      }
+    }
+
+    lines.push("- Follow-up:");
+    for (const step of getScenarioFollowUp(scenario, report.helpUrls)) {
+      lines.push(`  - ${step}`);
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
 }
 
 async function fetchProfileId(adminClient: ReturnType<typeof createSupabaseClient>, userId: string): Promise<string> {
@@ -734,6 +837,11 @@ async function run(): Promise<void> {
     timestamp: new Date().toISOString(),
     baseUrl,
     environment: `Push/PWA verification against ${baseUrl} and production Supabase backend ${projectRef}`,
+    helpUrls: {
+      diagnostics: new URL("/pwa-diagnostics", `${baseUrl}/`).toString(),
+      manualChecklist: MANUAL_CHECKLIST_PATH,
+      notificationSettings: new URL("/dashboard/notifications", `${baseUrl}/`).toString(),
+    },
     testerLabel: tester.label,
     testerEmail: tester.email,
     scenarios,
@@ -741,9 +849,12 @@ async function run(): Promise<void> {
 
   const reportPath = path.join(artifactDir, `push-pwa-${timestamp}-report.json`);
   await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, "utf8");
+  const summaryPath = path.join(artifactDir, `push-pwa-${timestamp}-summary.md`);
+  await writeFile(summaryPath, buildMarkdownSummary(report, reportPath), "utf8");
 
   logStep("Push/PWA verification completed", {
     reportPath,
+    summaryPath,
     scenarios: scenarios.map((scenario) => ({
       platform: scenario.platform,
       status: scenario.status,

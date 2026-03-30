@@ -26,6 +26,7 @@ const PROTECTED_ROUTE_RULES: readonly ProtectedRouteRule[] = [
   { path: "/onboarding", allowThirdParty: true, allowChild: false, familyScoped: false },
   { path: "/kids", allowThirdParty: false, allowChild: true, familyScoped: true },
   { path: "/admin", allowThirdParty: false, allowChild: false, familyScoped: false },
+  { path: "/pwa-diagnostics", allowThirdParty: true, allowChild: true, familyScoped: false },
 ] as const;
 
 export const PARENT_ONLY_ROUTES = PROTECTED_ROUTE_RULES.filter(

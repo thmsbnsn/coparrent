@@ -1,4 +1,4 @@
-import type { DailyParticipant, DailyMeetingState } from "@daily-co/daily-js";
+import type { DailyParticipant } from "@daily-co/daily-js";
 import type { CallSessionRow } from "@/lib/calls";
 import { ActiveCallPanel } from "@/components/calls/ActiveCallPanel";
 import { IncomingCallSheet } from "@/components/calls/IncomingCallSheet";
@@ -7,11 +7,9 @@ import { OutgoingCallSheet } from "@/components/calls/OutgoingCallSheet";
 interface CallSessionLayerProps {
   activeSession: CallSessionRow | null;
   incomingSession: CallSessionRow | null;
-  isJoined: boolean;
   isLocalAudioEnabled: boolean;
   isLocalVideoEnabled: boolean;
   localParticipant: DailyParticipant | null;
-  meetingState: DailyMeetingState;
   onAcceptIncoming: () => void;
   onCancelOutgoing: () => void;
   onDeclineIncoming: () => void;
@@ -20,16 +18,15 @@ interface CallSessionLayerProps {
   onToggleVideo: () => void;
   outgoingSession: CallSessionRow | null;
   remoteParticipant: DailyParticipant | null;
+  showActiveCallPanel: boolean;
 }
 
 export const CallSessionLayer = ({
   activeSession,
   incomingSession,
-  isJoined,
   isLocalAudioEnabled,
   isLocalVideoEnabled,
   localParticipant,
-  meetingState,
   onAcceptIncoming,
   onCancelOutgoing,
   onDeclineIncoming,
@@ -38,10 +35,13 @@ export const CallSessionLayer = ({
   onToggleVideo,
   outgoingSession,
   remoteParticipant,
+  showActiveCallPanel,
 }: CallSessionLayerProps) => {
+  const hasActiveCallPanel = Boolean(activeSession && showActiveCallPanel);
+
   return (
     <>
-      {incomingSession && (
+      {!hasActiveCallPanel && incomingSession && (
         <IncomingCallSheet
           open={Boolean(incomingSession)}
           session={incomingSession}
@@ -50,7 +50,8 @@ export const CallSessionLayer = ({
         />
       )}
 
-      {outgoingSession &&
+      {!hasActiveCallPanel &&
+        outgoingSession &&
         outgoingSession.status === "ringing" &&
         outgoingSession.initiator_profile_id && (
           <OutgoingCallSheet
@@ -60,7 +61,7 @@ export const CallSessionLayer = ({
           />
         )}
 
-      {activeSession && (meetingState === "joining-meeting" || isJoined) && (
+      {hasActiveCallPanel && activeSession && (
         <ActiveCallPanel
           callType={activeSession.call_type}
           isLocalAudioEnabled={isLocalAudioEnabled}

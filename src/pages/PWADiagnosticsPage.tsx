@@ -1,22 +1,12 @@
-import { useEffect, useState } from "react";
-import { Activity, Bell, Download, RefreshCw, ShieldCheck, Smartphone } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { Activity, Bell, Download, RefreshCw, ShieldCheck, Smartphone, Workflow } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-
-type NavigatorWithStandalone = Navigator & {
-  standalone?: boolean;
-};
-
-const detectStandalone = () => {
-  if (typeof window === "undefined") return false;
-  return (
-    window.matchMedia("(display-mode: standalone)").matches ||
-    (window.navigator as NavigatorWithStandalone).standalone === true
-  );
-};
+import { usePushNotifications } from "@/hooks/usePushNotifications";
 
 const getManifestHref = () => {
   if (typeof document === "undefined") return null;
@@ -24,18 +14,34 @@ const getManifestHref = () => {
 };
 
 const PWADiagnosticsPage = () => {
-  const [isStandalone, setIsStandalone] = useState(false);
   const [serviceWorkerState, setServiceWorkerState] = useState<"unsupported" | "missing" | "registered">("missing");
-  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">("unsupported");
   const [manifestHref, setManifestHref] = useState<string | null>(null);
+  const {
+    isSupported,
+    isSubscribed,
+    permission,
+    unsupportedReason,
+    isiOS,
+    isiOSPWA,
+    isPWA,
+    loading,
+  } = usePushNotifications();
+  const isAndroid = useMemo(() => {
+    if (typeof navigator === "undefined") return false;
+    return /android/i.test(navigator.userAgent);
+  }, []);
+
+  const environmentLabel = useMemo(() => {
+    if (isiOS && isiOSPWA) return "iOS PWA";
+    if (isiOS) return "iOS browser";
+    if (isAndroid && isPWA) return "Android PWA";
+    if (isAndroid) return "Android browser";
+    if (isPWA) return "Desktop PWA";
+    return "Desktop browser";
+  }, [isAndroid, isPWA, isiOS, isiOSPWA]);
 
   useEffect(() => {
-    setIsStandalone(detectStandalone());
     setManifestHref(getManifestHref());
-
-    if ("Notification" in window) {
-      setNotificationPermission(Notification.permission);
-    }
 
     if (!("serviceWorker" in navigator)) {
       setServiceWorkerState("unsupported");
@@ -59,12 +65,18 @@ const PWADiagnosticsPage = () => {
           </Badge>
           <h1 className="text-4xl font-display font-semibold">PWA diagnostics</h1>
           <p className="text-muted-foreground">
-            Quick checks for installability, notifications, and service-worker registration in the current browser session.
+            Quick checks for install mode, subscription readiness, notifications, and service-worker registration in the current browser session.
           </p>
           <div className="flex flex-wrap gap-3">
             <Button onClick={() => window.location.reload()}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh checks
+            </Button>
+            <Button asChild variant="secondary">
+              <Link to="/dashboard/notifications">
+                <Bell className="mr-2 h-4 w-4" />
+                Open notification settings
+              </Link>
             </Button>
             <Button variant="outline" onClick={() => window.open("/manifest.webmanifest", "_blank", "noopener,noreferrer")}>
               <Download className="mr-2 h-4 w-4" />
@@ -78,13 +90,13 @@ const PWADiagnosticsPage = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Smartphone className="h-5 w-5 text-primary" />
-                Install mode
+                Environment
               </CardTitle>
-              <CardDescription>Whether the app is running as an installed PWA.</CardDescription>
+              <CardDescription>How this browser session is currently running.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Badge variant={isStandalone ? "default" : "secondary"}>
-                {isStandalone ? "Standalone" : "Browser tab"}
+              <Badge variant={isPWA ? "default" : "secondary"}>
+                {environmentLabel}
               </Badge>
             </CardContent>
           </Card>
@@ -113,9 +125,37 @@ const PWADiagnosticsPage = () => {
               <CardDescription>Browser notification permission for this origin.</CardDescription>
             </CardHeader>
             <CardContent>
-              <Badge variant={notificationPermission === "granted" ? "default" : "secondary"}>
-                {notificationPermission}
+              <Badge variant={permission === "granted" ? "default" : "secondary"}>
+                {permission}
               </Badge>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Workflow className="h-5 w-5 text-primary" />
+                Push readiness
+              </CardTitle>
+              <CardDescription>Whether this session is ready for a real-device push check.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <Badge variant={isSupported ? "default" : "secondary"}>
+                  {isSupported ? "Supported" : "Unsupported"}
+                </Badge>
+                <Badge variant={isSubscribed ? "default" : "secondary"}>
+                  {loading ? "Checking subscription" : isSubscribed ? "Active subscription" : "No active subscription"}
+                </Badge>
+              </div>
+              {unsupportedReason && (
+                <p className="text-sm text-muted-foreground">{unsupportedReason}</p>
+              )}
+              {!unsupportedReason && (
+                <p className="text-sm text-muted-foreground">
+                  Use this page immediately before capturing evidence for the manual push/PWA pass.
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -132,6 +172,19 @@ const PWADiagnosticsPage = () => {
             </CardContent>
           </Card>
         </section>
+
+        <Card className="max-w-3xl">
+          <CardHeader>
+            <CardTitle>Evidence reminder</CardTitle>
+            <CardDescription>
+              This page is diagnostic only. Push/PWA validation is not complete until the target physical device actually receives the notification and the evidence package is saved.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="text-sm text-muted-foreground space-y-2">
+            <p>Capture this page and the notification-settings page on the same device/session.</p>
+            <p>Save the matching `verify-push-pwa` JSON and markdown artifacts for the same run.</p>
+          </CardContent>
+        </Card>
       </main>
       <Footer />
     </div>

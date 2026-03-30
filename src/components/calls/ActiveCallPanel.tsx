@@ -106,9 +106,9 @@ export const ActiveCallPanel = ({
   remoteParticipant,
 }: ActiveCallPanelProps) => {
   return (
-    <div className="fixed inset-x-0 bottom-0 top-0 z-50 bg-slate-950/95 px-4 py-6 text-white backdrop-blur-md sm:px-6">
-      <div className="mx-auto flex h-full w-full max-w-6xl flex-col gap-4">
-        <div className="flex items-center justify-between">
+    <div className="fixed inset-0 z-[120] bg-slate-950/95 text-white backdrop-blur-md">
+      <div className="mx-auto flex h-full w-full max-w-6xl min-h-0 flex-col gap-4 overflow-y-auto px-4 py-4 pb-32 sm:px-6 sm:py-6 sm:pb-36">
+        <div className="flex shrink-0 items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Live call</p>
             <h2 className="mt-1 text-2xl font-semibold">
@@ -120,46 +120,62 @@ export const ActiveCallPanel = ({
           </Badge>
         </div>
 
-        <div className={cn("grid flex-1 gap-4", callType === "video" ? "grid-cols-1 lg:grid-cols-[1.2fr_0.8fr]" : "grid-cols-1")}>
+        <div
+          className={cn(
+            "grid min-h-0 flex-1 gap-4",
+            callType === "video" ? "grid-cols-1 lg:grid-cols-[1.2fr_0.8fr]" : "grid-cols-1",
+          )}
+        >
           <MediaTile
-            className={cn("min-h-[18rem]", callType === "video" && "lg:min-h-[28rem]")}
+            className={cn("min-h-[16rem] sm:min-h-[18rem]", callType === "video" && "lg:min-h-[28rem]")}
             label={getDisplayName(remoteParticipant, "Other participant")}
             muted={false}
             participant={remoteParticipant}
           />
           <MediaTile
-            className={cn("min-h-[14rem]", callType === "video" ? "lg:min-h-[28rem]" : "hidden")}
+            className={cn(
+              "min-h-[10rem] sm:min-h-[14rem]",
+              callType === "video" ? "lg:min-h-[28rem]" : "hidden",
+            )}
             label="You"
             muted
             participant={localParticipant}
           />
         </div>
+      </div>
 
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="border-white/15 bg-white/5 text-white hover:bg-white/10"
-            onClick={onToggleAudio}
-          >
-            {isLocalAudioEnabled ? <Mic className="mr-2 h-4 w-4" /> : <MicOff className="mr-2 h-4 w-4" />}
-            {isLocalAudioEnabled ? "Mute mic" : "Unmute mic"}
-          </Button>
-          {callType === "video" && (
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[121] p-4 pt-0 sm:p-6 sm:pt-0">
+        <div className="pointer-events-auto mx-auto max-w-4xl rounded-3xl border border-white/10 bg-slate-900/90 p-3 shadow-2xl backdrop-blur-xl">
+          <div className="flex flex-wrap items-center justify-center gap-3 pb-[max(env(safe-area-inset-bottom),0px)]">
             <Button
               type="button"
               variant="outline"
-              className="border-white/15 bg-white/5 text-white hover:bg-white/10"
-              onClick={onToggleVideo}
+              className="min-w-[10rem] flex-1 border-white/15 bg-white/5 text-white hover:bg-white/10 sm:flex-initial"
+              onClick={onToggleAudio}
             >
-              {isLocalVideoEnabled ? <Video className="mr-2 h-4 w-4" /> : <VideoOff className="mr-2 h-4 w-4" />}
-              {isLocalVideoEnabled ? "Camera off" : "Camera on"}
+              {isLocalAudioEnabled ? <Mic className="mr-2 h-4 w-4" /> : <MicOff className="mr-2 h-4 w-4" />}
+              {isLocalAudioEnabled ? "Mute mic" : "Unmute mic"}
             </Button>
-          )}
-          <Button type="button" className="bg-red-500 text-white hover:bg-red-400" onClick={onEnd}>
-            <PhoneOff className="mr-2 h-4 w-4" />
-            End call
-          </Button>
+            {callType === "video" && (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-w-[10rem] flex-1 border-white/15 bg-white/5 text-white hover:bg-white/10 sm:flex-initial"
+                onClick={onToggleVideo}
+              >
+                {isLocalVideoEnabled ? <Video className="mr-2 h-4 w-4" /> : <VideoOff className="mr-2 h-4 w-4" />}
+                {isLocalVideoEnabled ? "Camera off" : "Camera on"}
+              </Button>
+            )}
+            <Button
+              type="button"
+              className="min-w-[10rem] flex-1 bg-red-500 text-white hover:bg-red-400 sm:flex-initial"
+              onClick={onEnd}
+            >
+              <PhoneOff className="mr-2 h-4 w-4" />
+              End call
+            </Button>
+          </div>
         </div>
       </div>
     </div>

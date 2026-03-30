@@ -237,6 +237,8 @@ export const ProblemReportProvider = ({ children }: { children: ReactNode }) => 
   const floatingButtonVisible =
     fallbackButtonVisible &&
     !routePath.startsWith("/dashboard/messages");
+  const reserveFloatingSpace =
+    floatingButtonVisible && !modalOpen && isMobileViewport;
 
   const motionPrompt = (
     <MotionPermissionPrompt
@@ -264,10 +266,21 @@ export const ProblemReportProvider = ({ children }: { children: ReactNode }) => 
     >
       {children}
 
+      {reserveFloatingSpace && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none h-[calc(5.5rem+env(safe-area-inset-bottom))] sm:hidden"
+          data-testid="problem-report-floating-spacer"
+        />
+      )}
+
       {floatingButtonVisible && !modalOpen && (
-        <div className="pointer-events-none fixed right-4 z-40 [bottom:calc(1rem+env(safe-area-inset-bottom))]">
+        <div
+          className="pointer-events-none fixed right-4 z-40 max-w-[calc(100vw-2rem)] [bottom:calc(1rem+env(safe-area-inset-bottom))] sm:right-6"
+          data-testid="problem-report-floating-launcher"
+        >
           <Button
-            className="pointer-events-auto h-12 rounded-full px-4 shadow-lg"
+            className="pointer-events-auto h-12 rounded-full px-4 shadow-[0_18px_36px_-18px_rgba(15,23,42,0.88)]"
             onClick={() => openReportModal("manual")}
             size="sm"
             type="button"

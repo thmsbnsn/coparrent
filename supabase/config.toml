@@ -1,5 +1,10 @@
 project_id = "jnxtskcpwzuxyxjzqrkv"
 
+# Browser/client entrypoints should default to verify_jwt=true.
+# The verify_jwt=false entries below are intentional operational, webhook,
+# scheduler, or maintenance endpoints and should be reviewed as posture
+# exceptions during deployment confirmation.
+
 [functions.send-coparent-invite]
 verify_jwt = true
 
@@ -26,9 +31,11 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.exchange-reminders]
+# Scheduler / cron-style reminder job.
 verify_jwt = false
 
 [functions.sports-event-reminders]
+# Scheduler / cron-style reminder job.
 verify_jwt = false
 
 [functions.ai-schedule-suggest]
@@ -41,6 +48,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.stripe-webhook]
+# External Stripe-signed webhook endpoint.
 verify_jwt = false
 
 [functions.login-notification]
@@ -62,18 +70,22 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.daily-webhook]
+# External Daily-signed webhook endpoint.
 verify_jwt = false
 
 [functions.apply-daily-calling-schema]
+# Manual operational/maintenance endpoint.
 verify_jwt = false
 
 [functions.accept-invite]
 verify_jwt = true
 
 [functions.repair-invitations-schema]
+# Manual operational/maintenance endpoint.
 verify_jwt = false
 
 [functions.health]
+# Intentional unauthenticated health probe endpoint.
 verify_jwt = false
 
 [functions.nurse-nancy-chat]

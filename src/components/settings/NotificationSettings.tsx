@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Link } from "react-router-dom";
 import { useNotifications } from "@/hooks/useNotifications";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 import { useToast } from "@/hooks/use-toast";
@@ -165,11 +166,19 @@ export const NotificationSettings = () => {
             </div>
           )}
 
-          {isSupported && isSubscribed && (
-            <Button variant="outline" size="sm" onClick={handleTestNotification}>
-              Send Test Notification
+          <div className="flex flex-wrap gap-2">
+            {isSupported && isSubscribed && (
+              <Button variant="outline" size="sm" onClick={handleTestNotification}>
+                Send Test Notification
+              </Button>
+            )}
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/pwa-diagnostics">Open PWA diagnostics</Link>
             </Button>
-          )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Use PWA diagnostics on the same device/session before capturing push-validation evidence.
+          </p>
         </div>
 
         {/* Email Notifications */}

@@ -205,7 +205,7 @@ const KidCenterPage = () => {
                 </div>
                 <div className="rounded-2xl border bg-card/70 p-4">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Also available</p>
-                  <p className="mt-2 text-sm font-medium">Coloring pages, chore charts, and Nurse Nancy in Kids Hub</p>
+                  <p className="mt-2 text-sm font-medium">Coloring pages, saved creations, and Nurse Nancy in Kids Hub</p>
                 </div>
               </div>
             </div>
@@ -342,7 +342,7 @@ const KidCenterPage = () => {
               </div>
               <CardTitle className="text-lg mt-3">Need the full Kids Hub?</CardTitle>
               <CardDescription className="text-sm">
-                Open the broader hub for coloring pages, chore charts, Nurse Nancy, and your saved creations.
+                Open the broader hub for coloring pages, Nurse Nancy, and your saved creations.
               </CardDescription>
             </CardHeader>
             <CardContent>
