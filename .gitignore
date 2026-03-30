@@ -27,6 +27,11 @@ dist-ssr
 tester-accounts.local.md
 tester-accounts.local.yaml
 
+# Local environment files
+.env
+.env.*
+!.env.example
+
 # Local workspace artifacts
 _(2).env
 env.txt
@@ -35,3 +40,12 @@ dev-dist/
 output/
 tmp/
 supabase/.temp/
+
+# Secret-bearing local artifacts
+.codex/
+.materials/
+docs/acquisition/
+.materials/stripe_backup_code.txt
+docs/acquisition/diligence/evidence/
+docs/acquisition/internal/
+docs/acquisition/outreach/
