@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node --experimental-strip-types scripts/run-vite-build.mjs",
     "build:dev": "vite build --mode development",
-    "lint": "eslint .",
+    "lint": "eslint src scripts supabase/functions",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -17,6 +17,7 @@
     "verify:ai-runtime": "node --experimental-strip-types scripts/verify-ai-runtime.ts",
     "verify:daily-calls": "node --experimental-strip-types scripts/verify-daily-calls.ts",
     "verify:push-pwa": "node --experimental-strip-types scripts/verify-push-pwa.ts",
+    "verify:preview-smoke": "node --experimental-strip-types scripts/verify-preview-smoke.ts",
     "verify": "npm run lint && npm run test && npm run build"
   },
   "dependencies": {

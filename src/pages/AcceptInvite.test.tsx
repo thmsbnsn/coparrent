@@ -147,6 +147,22 @@ describe("AcceptInvite", () => {
     expect(rendered.textContent).toContain("Invitation Expired");
   });
 
+  it("falls back to deferred validation when invitation lookup errors", async () => {
+    rpc.mockResolvedValue({
+      data: null,
+      error: {
+        message: "column i.relationship does not exist",
+      },
+    });
+
+    const rendered = await renderAcceptInvite("/accept-invite?token=fallback-token&type=third_party");
+
+    expect(rendered.textContent).toContain("Family Invitation");
+    expect(rendered.textContent).toContain("Create Account to Accept");
+    expect(rendered.textContent).toContain("Invite details could not be loaded up front.");
+    expect(rendered.textContent).not.toContain("Invalid Invitation");
+  });
+
   it("stores the pending token and routes unauthenticated users to signup", async () => {
     rpc.mockResolvedValue({
       data: [defaultInvitation],
@@ -187,7 +203,7 @@ describe("AcceptInvite", () => {
 
       if (fnName === "accept_coparent_invitation") {
         return {
-          data: { success: true },
+          data: { success: true, family_id: "family-1" },
           error: null,
         };
       }
@@ -239,7 +255,7 @@ describe("AcceptInvite", () => {
 
       if (fnName === "accept_third_party_invitation") {
         return {
-          data: { success: true },
+          data: { success: true, family_id: "family-1" },
           error: null,
         };
       }
@@ -312,5 +328,57 @@ describe("AcceptInvite", () => {
         title: "Email mismatch",
       }),
     );
+  });
+
+  it("surfaces an explicit failure when the invitation is missing family scope", async () => {
+    mockedUseAuth.mockReturnValue({
+      user: {
+        id: "user-5",
+        email: "invitee@example.com",
+      },
+      loading: false,
+    } as never);
+
+    rpc.mockImplementation(async (fnName: string) => {
+      if (fnName === "get_invitation_by_token") {
+        return {
+          data: [
+            {
+              ...defaultInvitation,
+              family_id: null,
+            },
+          ],
+          error: null,
+        };
+      }
+
+      if (fnName === "accept_coparent_invitation") {
+        return {
+          data: {
+            success: false,
+            code: "FAMILY_ID_REQUIRED",
+            error: "Invitation is missing family_id",
+          },
+          error: null,
+        };
+      }
+
+      throw new Error(`Unexpected rpc call: ${fnName}`);
+    });
+
+    const rendered = await renderAcceptInvite("/accept-invite?token=missing-family-token");
+    const button = getButtonByText(rendered, "Accept & Link Accounts");
+
+    await act(async () => {
+      button.click();
+      await flushPromises();
+    });
+
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Invitation setup incomplete",
+      }),
+    );
+    expect(rendered.textContent).not.toContain("dashboard-page");
   });
 });

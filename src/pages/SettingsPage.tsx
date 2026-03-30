@@ -47,7 +47,6 @@ interface Profile {
   id: string;
   full_name: string | null;
   email: string | null;
-  co_parent_id: string | null;
   trial_started_at: string | null;
   trial_ends_at: string | null;
   subscription_status: string | null;
@@ -117,7 +116,7 @@ const SettingsPage = () => {
       // Fetch profile
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, full_name, email, co_parent_id, trial_started_at, trial_ends_at, subscription_status, subscription_tier")
+        .select("id, full_name, email, trial_started_at, trial_ends_at, subscription_status, subscription_tier")
         .eq("user_id", user.id)
         .single();
 

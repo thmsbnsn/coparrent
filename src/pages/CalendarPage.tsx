@@ -24,10 +24,11 @@ import { useScheduleRequests } from "@/hooks/useScheduleRequests";
 import { useSchedulePersistence } from "@/hooks/useSchedulePersistence";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useSportsEvents, CalendarSportsEvent } from "@/hooks/useSportsEvents";
+import { useFamily } from "@/contexts/FamilyContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { ViewOnlyBadge } from "@/components/ui/ViewOnlyBadge";
+import { toast } from "sonner";
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -70,11 +71,11 @@ const getParentForDate = (date: Date, config: ScheduleConfig | null): "A" | "B" 
 
 const CalendarPage = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const { permissions, isThirdParty, isChildAccount, loading: roleLoading } = usePermissions();
+  const { activeFamilyId, loading: familyLoading, profileId } = useFamily();
+  const { permissions, isThirdParty, isChildAccount } = usePermissions();
   const { createRequest } = useScheduleRequests();
   const { scheduleConfig, loading: scheduleLoading, saving, saveSchedule } = useSchedulePersistence();
-  const { events: sportsEvents, getEventsForDate, hasEventsOnDate, loading: sportsLoading } = useSportsEvents();
+  const { getEventsForDate, hasEventsOnDate } = useSportsEvents();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<"calendar" | "court">("calendar");
   const [showWizard, setShowWizard] = useState(false);
@@ -87,37 +88,66 @@ const CalendarPage = () => {
   const [sportsEventListEvents, setSportsEventListEvents] = useState<CalendarSportsEvent[]>([]);
   const [userProfile, setUserProfile] = useState<{ full_name: string | null; email: string | null } | null>(null);
   const [coParent, setCoParent] = useState<{ full_name: string | null; email: string | null } | null>(null);
+  const [exportScopeError, setExportScopeError] = useState<string | null>(null);
 
-  // Fetch user profile and co-parent info
   useEffect(() => {
     const fetchProfiles = async () => {
-      if (!user) return;
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, co_parent_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (profile) {
-        setUserProfile({ full_name: profile.full_name, email: profile.email });
-
-        if (profile.co_parent_id) {
-          const { data: coParentData } = await supabase
-            .from("profiles")
-            .select("full_name, email")
-            .eq("id", profile.co_parent_id)
-            .maybeSingle();
-
-          if (coParentData) {
-            setCoParent(coParentData);
-          }
-        }
+      if (familyLoading) {
+        return;
       }
+
+      if (!activeFamilyId || !profileId) {
+        setUserProfile(null);
+        setCoParent(null);
+        setExportScopeError("Select an active family before syncing the calendar.");
+        return;
+      }
+
+      setExportScopeError(null);
+
+      const { data: familyAdults, error } = await supabase
+        .from("family_members")
+        .select("profile_id, profiles:profile_id(full_name, email)")
+        .eq("family_id", activeFamilyId)
+        .eq("status", "active")
+        .in("role", ["parent", "guardian"]);
+
+      if (error) {
+        console.error("Error fetching family identities for export:", error);
+        setUserProfile(null);
+        setCoParent(null);
+        setExportScopeError("Unable to resolve the active family's parent identities.");
+        return;
+      }
+
+      const currentAdult = (familyAdults ?? []).find((adult) => adult.profile_id === profileId);
+      const otherAdult = (familyAdults ?? []).find((adult) => adult.profile_id !== profileId);
+      const currentProfileRecord = Array.isArray(currentAdult?.profiles) ? currentAdult.profiles[0] : currentAdult?.profiles;
+      const otherProfileRecord = Array.isArray(otherAdult?.profiles) ? otherAdult.profiles[0] : otherAdult?.profiles;
+
+      if (!currentProfileRecord) {
+        setUserProfile(null);
+        setCoParent(null);
+        setExportScopeError("Unable to resolve your parent profile in the active family.");
+        return;
+      }
+
+      setUserProfile({
+        full_name: currentProfileRecord.full_name,
+        email: currentProfileRecord.email,
+      });
+      setCoParent(
+        otherProfileRecord
+          ? {
+              full_name: otherProfileRecord.full_name,
+              email: otherProfileRecord.email,
+            }
+          : null,
+      );
     };
 
-    fetchProfiles();
-  }, [user]);
+    void fetchProfiles();
+  }, [activeFamilyId, familyLoading, profileId]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -153,6 +183,20 @@ const CalendarPage = () => {
     setShowChangeRequest(true);
   };
 
+  const handleOpenExportDialog = () => {
+    if (familyLoading) {
+      toast.error("Family scope is still loading. Try again in a moment.");
+      return;
+    }
+
+    if (!activeFamilyId || exportScopeError) {
+      toast.error(exportScopeError || "Select an active family before syncing the calendar.");
+      return;
+    }
+
+    setShowExportDialog(true);
+  };
+
   const handleScheduleChangeRequest = async (
     request: Omit<ScheduleChangeRequestData, "id" | "status" | "createdAt" | "fromParent">
   ) => {
@@ -166,8 +210,7 @@ const CalendarPage = () => {
 
     if (result) {
       setShowChangeRequest(false);
-      // Navigate to messages to show the request
-      navigate("/messages");
+      navigate(result.messageDestination);
     }
   };
 
@@ -216,7 +259,7 @@ const CalendarPage = () => {
                 <Printer className="w-4 h-4 mr-2" />
                 Print
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowExportDialog(true)}>
+              <Button variant="outline" size="sm" onClick={handleOpenExportDialog}>
                 <Calendar className="w-4 h-4 mr-2" />
                 Sync Calendar
               </Button>

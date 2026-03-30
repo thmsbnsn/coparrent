@@ -11,7 +11,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Users, 
@@ -27,7 +27,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFamily } from "@/contexts/FamilyContext";
 import { supabase } from "@/integrations/supabase/client";
+import { ensureFamilyChildLinksSynced, fetchFamilyChildIds } from "@/lib/familyScope";
 import { cn } from "@/lib/utils";
 
 interface OnboardingItem {
@@ -61,22 +63,21 @@ export function OnboardingStatus({
   className,
 }: OnboardingStatusProps) {
   const { user } = useAuth();
-  const navigate = useNavigate();
+  const { activeFamilyId, loading: familyLoading } = useFamily();
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<OnboardingItem[]>([]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || familyLoading) return;
 
     const checkOnboardingStatus = async () => {
       setLoading(true);
       
       try {
-        // Fetch profile with co_parent_id
         const { data: profile } = await supabase
           .from("profiles")
-          .select("id, co_parent_id, full_name, account_role")
+          .select("id, account_role")
           .eq("user_id", user.id)
           .maybeSingle();
 
@@ -85,27 +86,9 @@ export function OnboardingStatus({
           return;
         }
 
-        // Check for children
-        const { count: childCount } = await supabase
-          .from("parent_children")
-          .select("*", { count: "exact", head: true })
-          .eq("parent_id", profile.id);
-
-        // Check for pending invitations
-        const { count: pendingInvites } = await supabase
-          .from("invitations")
-          .select("*", { count: "exact", head: true })
-          .eq("inviter_id", profile.id)
-          .eq("status", "pending");
-
-        const hasChildren = (childCount || 0) > 0;
-        const hasCoParent = !!profile.co_parent_id;
-        const hasRole = !!profile.account_role;
-        const hasPendingInvite = (pendingInvites || 0) > 0;
-
         const newItems: OnboardingItem[] = [];
+        const hasRole = !!profile.account_role;
 
-        // Check role setup
         if (!hasRole) {
           newItems.push({
             id: "role",
@@ -118,7 +101,44 @@ export function OnboardingStatus({
           });
         }
 
-        // Check children
+        if (!activeFamilyId) {
+          newItems.push({
+            id: "family",
+            title: "Finish family setup",
+            description: "Select or create an active family before continuing with onboarding.",
+            icon: Users,
+            complete: false,
+            action: { label: "Set Up Family", href: "/dashboard/families/new" },
+            severity: "required",
+          });
+
+          setItems(newItems);
+          return;
+        }
+
+        await ensureFamilyChildLinksSynced(activeFamilyId);
+
+        const [familyChildIds, adultCountResult, pendingInviteResult] = await Promise.all([
+          fetchFamilyChildIds(activeFamilyId),
+          supabase
+            .from("family_members")
+            .select("*", { count: "exact", head: true })
+            .eq("family_id", activeFamilyId)
+            .eq("status", "active")
+            .in("role", ["parent", "guardian"]),
+          supabase
+            .from("invitations")
+            .select("*", { count: "exact", head: true })
+            .eq("family_id", activeFamilyId)
+            .eq("status", "pending")
+            .eq("invitation_type", "co_parent"),
+        ]);
+
+        const childCount = familyChildIds.length;
+        const hasChildren = childCount > 0;
+        const hasCoParent = (adultCountResult.count || 0) > 1;
+        const hasPendingInvite = (pendingInviteResult.count || 0) > 0;
+
         if (!hasChildren) {
           newItems.push({
             id: "children",
@@ -141,7 +161,6 @@ export function OnboardingStatus({
           });
         }
 
-        // Check co-parent
         if (!hasCoParent) {
           if (hasPendingInvite) {
             newItems.push({
@@ -185,7 +204,7 @@ export function OnboardingStatus({
     };
 
     checkOnboardingStatus();
-  }, [user]);
+  }, [activeFamilyId, familyLoading, user]);
 
   // Calculate progress
   const completedCount = items.filter(i => i.complete).length;

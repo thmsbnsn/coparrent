@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFamily } from '@/contexts/FamilyContext';
 import { toast } from 'sonner';
 import { 
   getMutationKey, 
@@ -14,6 +15,7 @@ export type Difficulty = 'simple' | 'medium' | 'detailed';
 
 export interface ColoringPage {
   id: string;
+  family_id: string | null;
   user_id: string;
   document_id: string | null;
   prompt: string;
@@ -31,8 +33,23 @@ interface GenerateResult {
   message?: string;
 }
 
+async function imageToBlob(imageUrl: string): Promise<Blob> {
+  if (imageUrl.startsWith('data:')) {
+    const response = await fetch(imageUrl);
+    return await response.blob();
+  }
+
+  const response = await fetch(imageUrl);
+  if (!response.ok) {
+    throw new Error(`Unable to fetch generated image: ${response.status}`);
+  }
+
+  return await response.blob();
+}
+
 export const useColoringPages = () => {
   const { user } = useAuth();
+  const { activeFamilyId, profileId } = useFamily();
   const { createCreation } = useCreations();
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -43,10 +60,11 @@ export const useColoringPages = () => {
   // History state
   const [history, setHistory] = useState<ColoringPage[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const scopeError = activeFamilyId ? null : 'Select an active family before using Coloring Pages.';
 
   // Fetch history on mount
   useEffect(() => {
-    if (!user) {
+    if (!user || !activeFamilyId) {
       setHistory([]);
       setLoadingHistory(false);
       return;
@@ -58,6 +76,7 @@ export const useColoringPages = () => {
         const { data, error } = await supabase
           .from('coloring_pages')
           .select('*')
+          .eq('family_id', activeFamilyId)
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(50);
@@ -79,7 +98,7 @@ export const useColoringPages = () => {
     };
 
     fetchHistory();
-  }, [user]);
+  }, [activeFamilyId, user]);
 
   // Add new page to history after generation
   const addToHistory = useCallback((page: ColoringPage) => {
@@ -108,6 +127,12 @@ export const useColoringPages = () => {
     setCurrentPageId(null);
 
     try {
+      if (!activeFamilyId) {
+        setErrorState({ code: 'FAMILY_SCOPE_REQUIRED', message: 'Select a family to continue' });
+        toast.error('Select a family before generating a coloring page');
+        return false;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         toast.error('Session expired. Please sign in again.');
@@ -115,7 +140,7 @@ export const useColoringPages = () => {
       }
 
       const response = await supabase.functions.invoke('generate-coloring-page', {
-        body: { prompt, difficulty },
+        body: { familyId: activeFamilyId, prompt, difficulty },
       });
 
       const result: GenerateResult = response.data;
@@ -149,6 +174,7 @@ export const useColoringPages = () => {
         // Add to history
         if (result.coloringPageId) {
           addToHistory({
+            family_id: activeFamilyId,
             id: result.coloringPageId,
             user_id: user.id,
             document_id: null,
@@ -173,7 +199,7 @@ export const useColoringPages = () => {
       setGenerating(false);
       releaseMutationLock(mutationKey);
     }
-  }, [user, addToHistory]);
+  }, [activeFamilyId, user, addToHistory]);
 
   const saveToVault = useCallback(async (
     imageUrl: string,
@@ -181,8 +207,8 @@ export const useColoringPages = () => {
     difficulty: Difficulty,
     coloringPageId?: string
   ): Promise<boolean> => {
-    if (!user) {
-      toast.error('Please sign in to save');
+    if (!user || !profileId || !activeFamilyId) {
+      toast.error('Select an active family before saving to the Document Vault');
       return false;
     }
 
@@ -195,32 +221,19 @@ export const useColoringPages = () => {
     setSaving(true);
 
     try {
-      // Get user profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!profile) {
-        toast.error('Profile not found');
-        return false;
-      }
-
-      // Convert base64 to blob
-      const base64Data = imageUrl.replace(/^data:image\/\w+;base64,/, '');
-      const binaryData = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-      const blob = new Blob([binaryData], { type: 'image/png' });
+      const blob = await imageToBlob(imageUrl);
+      const contentType = blob.type || 'image/png';
+      const fileExtension = contentType.split('/')[1] || 'png';
 
       // Generate unique filename
-      const fileName = `coloring-${crypto.randomUUID()}.png`;
+      const fileName = `coloring-${crypto.randomUUID()}.${fileExtension}`;
       const filePath = `${user.id}/${fileName}`;
 
       // Upload to documents bucket
       const { error: uploadError } = await supabase.storage
         .from('documents')
         .upload(filePath, blob, {
-          contentType: 'image/png',
+          contentType,
         });
 
       if (uploadError) throw uploadError;
@@ -232,13 +245,14 @@ export const useColoringPages = () => {
       const { data: doc, error: docError } = await supabase
         .from('documents')
         .insert({
+          family_id: activeFamilyId,
           title,
           description,
           file_path: filePath,
-          file_name: `${prompt.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '-')}-coloring-page.png`,
-          file_type: 'image/png',
+          file_name: `${prompt.slice(0, 30).replace(/[^a-zA-Z0-9]/g, '-')}-coloring-page.${fileExtension}`,
+          file_type: contentType,
           file_size: blob.size,
-          uploaded_by: profile.id,
+          uploaded_by: profileId,
           category: 'other', // Using 'other' as category, UI will show as "CoParrent Creations"
         })
         .select()
@@ -251,7 +265,8 @@ export const useColoringPages = () => {
         await supabase
           .from('coloring_pages')
           .update({ document_id: doc.id })
-          .eq('id', coloringPageId);
+          .eq('id', coloringPageId)
+          .eq('family_id', activeFamilyId);
         
         // Update history
         setHistory(prev => prev.map(p => 
@@ -262,7 +277,7 @@ export const useColoringPages = () => {
       // Log access
       await supabase.from('document_access_logs').insert({
         document_id: doc.id,
-        accessed_by: profile.id,
+        accessed_by: profileId,
         action: 'upload',
         user_agent: navigator.userAgent,
       });
@@ -277,7 +292,7 @@ export const useColoringPages = () => {
       setSaving(false);
       releaseMutationLock(mutationKey);
     }
-  }, [user]);
+  }, [activeFamilyId, profileId, user]);
 
   // Save to unified Creations library
   const saveToCreations = useCallback(async (
@@ -299,10 +314,16 @@ export const useColoringPages = () => {
     setSaving(true);
 
     try {
+      if (!activeFamilyId) {
+        toast.error('Select an active family before saving to the Creations Library');
+        return false;
+      }
+
       // First create the coloring_page_details record
       const { data: detail, error: detailError } = await supabase
         .from('coloring_page_details')
         .insert({
+          family_id: activeFamilyId,
           owner_user_id: user.id,
           prompt,
           difficulty,
@@ -338,7 +359,7 @@ export const useColoringPages = () => {
       setSaving(false);
       releaseMutationLock(mutationKey);
     }
-  }, [user, createCreation]);
+  }, [activeFamilyId, user, createCreation]);
 
   const downloadPNG = useCallback((imageUrl: string, prompt: string) => {
     try {
@@ -359,6 +380,7 @@ export const useColoringPages = () => {
   return {
     generating,
     saving,
+    scopeError,
     currentImage,
     currentPageId,
     errorState,

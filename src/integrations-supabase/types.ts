@@ -66,6 +66,7 @@ export type Database = {
           created_at: string
           duration: string | null
           energy_level: string | null
+          family_id: string | null
           id: string
           learning_goals: Json | null
           materials: Json | null
@@ -82,6 +83,7 @@ export type Database = {
           created_at?: string
           duration?: string | null
           energy_level?: string | null
+          family_id?: string | null
           id?: string
           learning_goals?: Json | null
           materials?: Json | null
@@ -98,6 +100,7 @@ export type Database = {
           created_at?: string
           duration?: string | null
           energy_level?: string | null
+          family_id?: string | null
           id?: string
           learning_goals?: Json | null
           materials?: Json | null
@@ -205,6 +208,7 @@ export type Database = {
       activity_folders: {
         Row: {
           created_at: string
+          family_id: string | null
           id: string
           name: string
           updated_at: string
@@ -212,6 +216,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          family_id?: string | null
           id?: string
           name: string
           updated_at?: string
@@ -219,6 +224,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          family_id?: string | null
           id?: string
           name?: string
           updated_at?: string
@@ -230,6 +236,7 @@ export type Database = {
         Row: {
           activity_id: string
           created_at: string
+          family_id: string | null
           id: string
           owner_user_id: string
           permission: string
@@ -238,6 +245,7 @@ export type Database = {
         Insert: {
           activity_id: string
           created_at?: string
+          family_id?: string | null
           id?: string
           owner_user_id: string
           permission?: string
@@ -246,6 +254,7 @@ export type Database = {
         Update: {
           activity_id?: string
           created_at?: string
+          family_id?: string | null
           id?: string
           owner_user_id?: string
           permission?: string
@@ -1340,6 +1349,7 @@ export type Database = {
         Row: {
           created_at: string
           difficulty: string
+          family_id: string | null
           id: string
           image_url: string | null
           owner_user_id: string
@@ -1350,6 +1360,7 @@ export type Database = {
         Insert: {
           created_at?: string
           difficulty?: string
+          family_id?: string | null
           id?: string
           image_url?: string | null
           owner_user_id: string
@@ -1360,6 +1371,7 @@ export type Database = {
         Update: {
           created_at?: string
           difficulty?: string
+          family_id?: string | null
           id?: string
           image_url?: string | null
           owner_user_id?: string
@@ -1374,6 +1386,7 @@ export type Database = {
           created_at: string
           difficulty: string
           document_id: string | null
+          family_id: string | null
           id: string
           image_url: string | null
           prompt: string
@@ -1383,6 +1396,7 @@ export type Database = {
           created_at?: string
           difficulty: string
           document_id?: string | null
+          family_id?: string | null
           id?: string
           image_url?: string | null
           prompt: string
@@ -1392,6 +1406,7 @@ export type Database = {
           created_at?: string
           difficulty?: string
           document_id?: string | null
+          family_id?: string | null
           id?: string
           image_url?: string | null
           prompt?: string
@@ -1410,6 +1425,7 @@ export type Database = {
       creation_folders: {
         Row: {
           created_at: string
+          family_id: string | null
           id: string
           name: string
           owner_user_id: string
@@ -1417,6 +1433,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          family_id?: string | null
           id?: string
           name: string
           owner_user_id: string
@@ -1424,6 +1441,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          family_id?: string | null
           id?: string
           name?: string
           owner_user_id?: string
@@ -1435,6 +1453,7 @@ export type Database = {
         Row: {
           created_at: string
           creation_id: string
+          family_id: string | null
           id: string
           owner_user_id: string
           permission: string
@@ -1443,6 +1462,7 @@ export type Database = {
         Insert: {
           created_at?: string
           creation_id: string
+          family_id?: string | null
           id?: string
           owner_user_id: string
           permission?: string
@@ -1451,6 +1471,7 @@ export type Database = {
         Update: {
           created_at?: string
           creation_id?: string
+          family_id?: string | null
           id?: string
           owner_user_id?: string
           permission?: string
@@ -1477,6 +1498,7 @@ export type Database = {
         Row: {
           created_at: string
           detail_id: string
+          family_id: string | null
           folder_id: string | null
           id: string
           meta: Json | null
@@ -1490,6 +1512,7 @@ export type Database = {
         Insert: {
           created_at?: string
           detail_id: string
+          family_id?: string | null
           folder_id?: string | null
           id?: string
           meta?: Json | null
@@ -1503,6 +1526,7 @@ export type Database = {
         Update: {
           created_at?: string
           detail_id?: string
+          family_id?: string | null
           folder_id?: string | null
           id?: string
           meta?: Json | null
@@ -1946,6 +1970,7 @@ export type Database = {
           created_at: string
           duration_minutes: number | null
           energy_level: string | null
+          family_id: string | null
           folder_id: string | null
           id: string
           indoor_outdoor: string | null
@@ -1966,6 +1991,7 @@ export type Database = {
           created_at?: string
           duration_minutes?: number | null
           energy_level?: string | null
+          family_id?: string | null
           folder_id?: string | null
           id?: string
           indoor_outdoor?: string | null
@@ -1986,6 +2012,7 @@ export type Database = {
           created_at?: string
           duration_minutes?: number | null
           energy_level?: string | null
+          family_id?: string | null
           folder_id?: string | null
           id?: string
           indoor_outdoor?: string | null
@@ -3487,6 +3514,7 @@ export type Database = {
         Args: {
           p_child_ids?: string[]
           p_expires_at?: string
+          p_family_id: string
           p_invitee_email: string
           p_relationship?: string
         }

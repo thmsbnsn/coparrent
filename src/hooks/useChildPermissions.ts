@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFamily } from "@/contexts/FamilyContext";
+import { ensureFamilyChildLinksSynced, fetchFamilyChildIds } from "@/lib/familyScope";
 import { useToast } from "@/hooks/use-toast";
 
 export interface ChildPermissionData {
@@ -36,30 +38,43 @@ interface ChildProfileRow {
 
 export const useChildPermissions = () => {
   const { user } = useAuth();
+  const { activeFamilyId, loading: familyLoading } = useFamily();
   const { toast } = useToast();
   const [childAccounts, setChildAccounts] = useState<ChildAccountInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scopeError, setScopeError] = useState<string | null>(null);
 
   const fetchChildAccounts = useCallback(async () => {
     if (!user) {
+      setChildAccounts([]);
+      setScopeError(null);
       setLoading(false);
       return;
     }
 
-    try {
-      // Get parent's profile
-      const { data: parentProfile } = await supabase
-        .from("profiles")
-        .select("id, co_parent_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
+    if (familyLoading) {
+      return;
+    }
 
-      if (!parentProfile) {
-        setLoading(false);
+    if (!activeFamilyId) {
+      setChildAccounts([]);
+      setScopeError("Select an active family before managing child accounts.");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setScopeError(null);
+
+    try {
+      await ensureFamilyChildLinksSynced(activeFamilyId);
+      const childIds = await fetchFamilyChildIds(activeFamilyId);
+
+      if (childIds.length === 0) {
+        setChildAccounts([]);
         return;
       }
 
-      // Get child accounts linked to this family
       const { data: childProfiles } = await supabase
         .from("profiles")
         .select(`
@@ -73,17 +88,9 @@ export const useChildPermissions = () => {
           )
         `)
         .eq("account_role", "child")
-        .not("linked_child_id", "is", null);
+        .in("linked_child_id", childIds);
 
       if (childProfiles) {
-        // Filter to only children in this parent's family
-        const { data: parentChildren } = await supabase
-          .from("parent_children")
-          .select("child_id")
-          .eq("parent_id", parentProfile.id);
-
-        const childIds = parentChildren?.map((pc) => pc.child_id) || [];
-
         const familyChildAccounts = (childProfiles as ChildProfileRow[])
           .filter((cp) => cp.linked_child_id && childIds.includes(cp.linked_child_id))
           .map((cp) => ({
@@ -113,10 +120,11 @@ export const useChildPermissions = () => {
       }
     } catch (error) {
       console.error("Error fetching child accounts:", error);
+      setScopeError("Unable to load child accounts for the active family.");
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [activeFamilyId, familyLoading, user]);
 
   useEffect(() => {
     void fetchChildAccounts();
@@ -127,6 +135,24 @@ export const useChildPermissions = () => {
     permission: keyof Omit<ChildPermissionData, "id" | "child_profile_id" | "parent_profile_id">,
     value: boolean
   ) => {
+    if (!activeFamilyId) {
+      toast({
+        title: "Family scope required",
+        description: "Select an active family before updating child permissions.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!childAccounts.some((account) => account.profile_id === childProfileId)) {
+      toast({
+        title: "Child account unavailable",
+        description: "That child account is not part of the active family.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
     try {
       const { error } = await supabase
         .from("child_permissions")
@@ -167,6 +193,24 @@ export const useChildPermissions = () => {
   };
 
   const toggleLoginEnabled = async (childProfileId: string, enabled: boolean) => {
+    if (!activeFamilyId) {
+      toast({
+        title: "Family scope required",
+        description: "Select an active family before changing child login access.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    if (!childAccounts.some((account) => account.profile_id === childProfileId)) {
+      toast({
+        title: "Child account unavailable",
+        description: "That child account is not part of the active family.",
+        variant: "destructive",
+      });
+      return false;
+    }
+
     try {
       const { error } = await supabase
         .from("profiles")
@@ -206,6 +250,7 @@ export const useChildPermissions = () => {
   return {
     childAccounts,
     loading,
+    scopeError,
     updatePermission,
     toggleLoginEnabled,
     refetch: fetchChildAccounts,

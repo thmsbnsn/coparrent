@@ -7,12 +7,13 @@
  * @see src/contexts/FamilyContext.tsx for role source of truth
  */
 
-import { Navigate, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { useChildAccount } from "@/hooks/useChildAccount";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { getProtectedRouteAccessDecision } from "@/lib/routeAccess";
+import { Button } from "@/components/ui/button";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -32,7 +33,7 @@ interface ProtectedRouteProps {
 export const ProtectedRoute = ({ children, requireParent }: ProtectedRouteProps) => {
   const { user, loading: authLoading } = useAuth();
   // Role is scoped to active family via useFamilyRole
-  const { isThirdParty, isChild, loading: roleLoading } = useFamilyRole();
+  const { activeFamilyId, isThirdParty, isChild, loading: roleLoading } = useFamilyRole();
   const { isChildAccount, loading: childLoading } = useChildAccount();
   const location = useLocation();
 
@@ -45,11 +46,38 @@ export const ProtectedRoute = ({ children, requireParent }: ProtectedRouteProps)
   }
 
   const accessDecision = getProtectedRouteAccessDecision(location.pathname, {
+    activeFamilyId,
     requireParent,
     isThirdParty,
     isChild,
     isChildAccount,
   });
+
+  if (accessDecision.reason === "missing_active_family") {
+    const blockedRoleLabel = isChild || isChildAccount || isThirdParty
+      ? "Ask a parent or guardian to select the active family before opening this route."
+      : "Select or create an active family before opening this route.";
+
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-md w-full rounded-2xl border border-border bg-card p-6 text-center space-y-4">
+          <div className="space-y-2">
+            <h1 className="text-xl font-semibold">Active family required</h1>
+            <p className="text-sm text-muted-foreground">
+              This route is family-scoped and cannot render without an active family.
+            </p>
+            <p className="text-sm text-muted-foreground">{blockedRoleLabel}</p>
+          </div>
+
+          {!isChild && !isChildAccount && (
+            <Button asChild>
+              <Link to="/onboarding">Open onboarding</Link>
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   if (!accessDecision.allowed && accessDecision.redirectTo) {
     return <Navigate to={accessDecision.redirectTo} replace />;

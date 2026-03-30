@@ -19,6 +19,7 @@ import {
   Zap,
   Palette,
   Eye,
+  RotateCcw,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -93,7 +94,7 @@ const ChatMessage = ({ message, onSave }: {
         {message.activityData && message.activityData.type === "activity" && onSave && (
           <Button
             size="sm"
-            className="mt-3 gap-2"
+            className="mt-3 w-full gap-2 sm:w-auto"
             onClick={() => onSave(message.activityData!)}
           >
             <Save className="h-4 w-4" />
@@ -334,10 +335,13 @@ const ActivityDetailDialog = ({
 };
 
 const ActivitiesContent = () => {
+  const ANY_AGE_VALUE = "any-age";
+  const ANY_ENERGY_VALUE = "any-energy";
   const navigate = useNavigate();
   const [inputValue, setInputValue] = useState("");
-  const [childAge, setChildAge] = useState<string>("");
-  const [energyLevel, setEnergyLevel] = useState<string>("");
+  const [childAge, setChildAge] = useState<string>(ANY_AGE_VALUE);
+  const [energyLevel, setEnergyLevel] = useState<string>(ANY_ENERGY_VALUE);
+  const [activeTab, setActiveTab] = useState<"generate" | "saved">("generate");
   const [selectedActivity, setSelectedActivity] = useState<GeneratedActivity | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
@@ -351,6 +355,7 @@ const ActivitiesContent = () => {
     chatMessages,
     loading,
     generating,
+    scopeError,
     selectedFolder,
     setSelectedFolder,
     fetchFolders,
@@ -362,6 +367,8 @@ const ActivitiesContent = () => {
     deleteActivity,
     clearChat,
   } = useActivityGenerator();
+
+  const hasActiveFilters = childAge !== ANY_AGE_VALUE || energyLevel !== ANY_ENERGY_VALUE;
 
   // Initialize
   useEffect(() => {
@@ -380,8 +387,8 @@ const ActivitiesContent = () => {
     setInputValue("");
     
     await sendMessage(message, {
-      childAge: childAge ? parseInt(childAge) : undefined,
-      energyLevel: energyLevel || undefined,
+      childAge: childAge !== ANY_AGE_VALUE ? parseInt(childAge, 10) : undefined,
+      energyLevel: energyLevel !== ANY_ENERGY_VALUE ? energyLevel : undefined,
     });
   };
 
@@ -393,8 +400,10 @@ const ActivitiesContent = () => {
   };
 
   const handleSaveActivity = async (data: AIResponse) => {
-    await saveActivity(data);
-    fetchActivities();
+    const saved = await saveActivity(data);
+    if (saved) {
+      fetchActivities();
+    }
   };
 
   const handleCreateFolder = async () => {
@@ -402,6 +411,11 @@ const ActivitiesContent = () => {
     await createFolder(newFolderName.trim());
     setNewFolderName("");
     setFolderDialogOpen(false);
+  };
+
+  const handleResetFilters = () => {
+    setChildAge(ANY_AGE_VALUE);
+    setEnergyLevel(ANY_ENERGY_VALUE);
   };
 
   const handleExport = (activity: GeneratedActivity) => {
@@ -437,7 +451,7 @@ const ActivitiesContent = () => {
       </div>
 
       {/* Main Content with Tabs */}
-      <Tabs defaultValue="generate" className="flex-1 flex flex-col overflow-hidden">
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "generate" | "saved")} className="flex-1 flex flex-col overflow-hidden">
         <div className="border-b px-4">
           <TabsList className="h-12">
             <TabsTrigger value="generate" className="gap-2">
@@ -455,42 +469,82 @@ const ActivitiesContent = () => {
         <TabsContent value="generate" className="flex-1 flex flex-col overflow-hidden m-0">
           <div className="flex-1 flex flex-col p-4 overflow-hidden">
             {/* Context inputs */}
-            <div className="flex flex-wrap gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground">Age:</label>
-                <Select value={childAge} onValueChange={setChildAge}>
-                  <SelectTrigger className="w-24 h-9">
-                    <SelectValue placeholder="Any" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Any</SelectItem>
-                    {[2,3,4,5,6,7,8,9,10,11,12].map(age => (
-                      <SelectItem key={age} value={age.toString()}>{age} yrs</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-muted-foreground">Energy:</label>
-                <Select value={energyLevel} onValueChange={setEnergyLevel}>
-                  <SelectTrigger className="w-28 h-9">
-                    <SelectValue placeholder="Any" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">Any</SelectItem>
-                    <SelectItem value="calm">Calm</SelectItem>
-                    <SelectItem value="moderate">Moderate</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="mb-4 rounded-xl border bg-muted/20 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap gap-3">
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-muted-foreground">Age:</label>
+                    <Select value={childAge} onValueChange={setChildAge}>
+                      <SelectTrigger className="w-24 h-9">
+                        <SelectValue placeholder="Any" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ANY_AGE_VALUE}>Any</SelectItem>
+                        {[2,3,4,5,6,7,8,9,10,11,12].map(age => (
+                          <SelectItem key={age} value={age.toString()}>{age} yrs</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-muted-foreground">Energy:</label>
+                    <Select value={energyLevel} onValueChange={setEnergyLevel}>
+                      <SelectTrigger className="w-28 h-9">
+                        <SelectValue placeholder="Any" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ANY_ENERGY_VALUE}>Any</SelectItem>
+                        <SelectItem value="calm">Calm</SelectItem>
+                        <SelectItem value="moderate">Moderate</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {chatMessages.length > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearChat}>
+                    Clear Chat
+                  </Button>
+                )}
               </div>
 
-              {chatMessages.length > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearChat}>
-                  Clear Chat
-                </Button>
-              )}
+                {hasActiveFilters && (
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    {childAge !== ANY_AGE_VALUE && (
+                      <Badge variant="secondary">Age {childAge}</Badge>
+                    )}
+                  {energyLevel !== ANY_ENERGY_VALUE && (
+                    <Badge variant="secondary" className="capitalize">{energyLevel} energy</Badge>
+                  )}
+                  <Button variant="ghost" size="sm" className="h-7 gap-1 px-2 text-xs" onClick={handleResetFilters}>
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Reset filters
+                  </Button>
+                  </div>
+                )}
+
+                <div className="mt-3 rounded-lg border border-dashed bg-background/80 p-3">
+                  <p className="text-sm font-medium">Best results come from one clear request.</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge variant="outline" className="gap-1">
+                      <Users className="h-3 w-3" />
+                      Age or stage
+                    </Badge>
+                    <Badge variant="outline" className="gap-1">
+                      <ChevronRight className="h-3 w-3" />
+                      Mood or energy
+                    </Badge>
+                    <Badge variant="outline" className="gap-1">
+                      <Palette className="h-3 w-3" />
+                      Materials on hand
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Example: “Need something calm for a 7-year-old after school with only paper, tape, and markers.”
+                  </p>
+                </div>
             </div>
 
             {/* Chat area */}
@@ -514,7 +568,7 @@ const ActivitiesContent = () => {
                           key={suggestion}
                           variant="outline"
                           size="sm"
-                          className="text-xs"
+                          className="h-auto whitespace-normal px-3 py-2 text-left text-xs"
                           onClick={() => setInputValue(suggestion)}
                         >
                           {suggestion}
@@ -571,6 +625,9 @@ const ActivitiesContent = () => {
                 <Send className="h-4 w-4" />
               </Button>
             </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Press Enter to send. Save the good ideas so they show up in your library tab.
+            </p>
           </div>
         </TabsContent>
 
@@ -617,13 +674,61 @@ const ActivitiesContent = () => {
 
             {/* Activities grid */}
             <div className="flex-1 p-4 overflow-auto">
-              {activities.length === 0 ? (
+              <div className="mb-4 space-y-3 md:hidden">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium">Folders</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2"
+                    onClick={() => setFolderDialogOpen(true)}
+                  >
+                    <FolderPlus className="h-4 w-4" />
+                    New Folder
+                  </Button>
+                </div>
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  <Button
+                    variant={selectedFolder === null ? "secondary" : "outline"}
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => { setSelectedFolder(null); fetchActivities(); }}
+                  >
+                    All Activities
+                  </Button>
+                  {folders.map(folder => (
+                    <Button
+                      key={folder.id}
+                      variant={selectedFolder === folder.id ? "secondary" : "outline"}
+                      size="sm"
+                      className="shrink-0"
+                      onClick={() => { setSelectedFolder(folder.id); fetchActivities(folder.id); }}
+                    >
+                      {folder.name}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              {scopeError ? (
+                <div className="text-center py-12">
+                  <Folder className="h-12 w-12 text-amber-600/60 mx-auto mb-4" />
+                  <h3 className="font-medium mb-2">Active family required</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {scopeError}
+                  </p>
+                </div>
+              ) : activities.length === 0 ? (
                 <div className="text-center py-12">
                   <Folder className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
                   <h3 className="font-medium mb-2">No activities yet</h3>
                   <p className="text-sm text-muted-foreground">
                     Generate an activity and save it to see it here.
                   </p>
+                  <Button className="mt-4 gap-2" onClick={() => setActiveTab("generate")}>
+                    <Sparkles className="h-4 w-4" />
+                    Generate one now
+                  </Button>
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

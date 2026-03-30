@@ -1,6 +1,67 @@
-// Edge function to generate court-ready expense reports
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { strictCors, getCorsHeaders } from "../_shared/cors.ts";
+
+interface ReportRequest {
+  family_id?: string;
+  dateRange?: {
+    start?: string;
+    end?: string;
+  };
+}
+
+interface ParticipantProfileRow {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+}
+
+interface FamilyAdultRow {
+  profile_id: string | null;
+  role: string | null;
+  profiles?: ParticipantProfileRow | ParticipantProfileRow[] | null;
+}
+
+interface ExpenseRow {
+  id: string;
+  created_by: string;
+  category: string;
+  amount: number;
+  description: string;
+  expense_date: string;
+  split_percentage: number;
+  notes: string | null;
+  receipt_path: string | null;
+  creator?: ParticipantProfileRow | ParticipantProfileRow[] | null;
+  child?: { id: string; name: string } | { id: string; name: string }[] | null;
+}
+
+interface ReimbursementExpenseRow {
+  id: string;
+  description: string;
+  family_id: string | null;
+}
+
+interface ReimbursementRow {
+  id: string;
+  expense_id: string;
+  requester_id: string;
+  recipient_id: string;
+  amount: number;
+  status: string;
+  message: string | null;
+  response_message: string | null;
+  created_at: string;
+  responded_at: string | null;
+  expense?: ReimbursementExpenseRow | ReimbursementExpenseRow[] | null;
+  requester?: ParticipantProfileRow | ParticipantProfileRow[] | null;
+}
+
+interface ReportParticipant {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+  role: string | null;
+}
 
 interface Expense {
   id: string;
@@ -11,8 +72,8 @@ interface Expense {
   split_percentage: number;
   notes: string | null;
   receipt_path: string | null;
-  creator?: { full_name: string | null; email: string | null };
-  child?: { name: string };
+  creator?: ReportParticipant | null;
+  child?: { id: string; name: string } | null;
 }
 
 interface ReimbursementRequest {
@@ -23,56 +84,85 @@ interface ReimbursementRequest {
   response_message: string | null;
   created_at: string;
   responded_at: string | null;
-  expense?: Expense;
-  requester?: { full_name: string | null; email: string | null };
+  expense?: { description: string } | null;
+  requester?: ReportParticipant | null;
 }
 
 interface ReportData {
   expenses: Expense[];
   reimbursementRequests: ReimbursementRequest[];
-  profile: { full_name: string | null; email: string | null };
-  coParent: { full_name: string | null; email: string | null } | null;
+  reportingParent: ReportParticipant;
+  otherParent: ReportParticipant | null;
   dateRange: { start: string; end: string };
   children: { id: string; name: string }[];
 }
 
+const ACTIVE_PARENT_ROLES = ["parent", "guardian"] as const;
+
 const CATEGORY_LABELS: Record<string, string> = {
-  medical: 'Medical/Health',
-  education: 'Education/School',
-  childcare: 'Childcare',
-  clothing: 'Clothing',
-  activities: 'Activities/Sports',
-  food: 'Food/Groceries',
-  transportation: 'Transportation',
-  entertainment: 'Entertainment',
-  other: 'Other',
+  medical: "Medical/Health",
+  education: "Education/School",
+  childcare: "Childcare",
+  clothing: "Clothing",
+  activities: "Activities/Sports",
+  food: "Food/Groceries",
+  transportation: "Transportation",
+  entertainment: "Entertainment",
+  other: "Other",
 };
 
-// HTML escape function to prevent XSS
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const asSingle = <T>(value: T | T[] | null | undefined): T | null => {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+};
+
+const uniqueIds = (values: Array<string | null | undefined>) =>
+  [...new Set(values.filter((value): value is string => Boolean(value)))];
+
+function jsonResponse(
+  body: Record<string, unknown>,
+  corsHeaders: Record<string, string>,
+  status = 200,
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
 function escapeHtml(text: string | null | undefined): string {
-  if (text == null) return '';
-  const str = String(text);
-  const htmlEscapes: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-    '/': '&#x2F;',
-    '`': '&#x60;',
-    '=': '&#x3D;'
-  };
-  return str.replace(/[&<>"'`=/]/g, (char) => htmlEscapes[char] || char);
+  if (text == null) return "";
+
+  return String(text).replace(/[&<>"'`=/]/g, (char) => {
+    const replacements: Record<string, string> = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+      "/": "&#x2F;",
+      "`": "&#x60;",
+      "=": "&#x3D;",
+    };
+
+    return replacements[char] || char;
+  });
 }
 
 function formatDate(dateStr: string): string {
   try {
     const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return escapeHtml(dateStr);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    if (Number.isNaN(date.getTime())) return escapeHtml(dateStr);
+
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
     });
   } catch {
     return escapeHtml(dateStr);
@@ -81,37 +171,50 @@ function formatDate(dateStr: string): string {
 
 function formatCurrency(amount: number): string {
   const num = Number(amount);
-  if (isNaN(num)) return '$0.00';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
+  if (Number.isNaN(num)) return "$0.00";
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
   }).format(num);
 }
 
 function generateHTML(data: ReportData): string {
-  const { expenses, reimbursementRequests, profile, coParent, dateRange, children } = data;
-  
-  // Calculate totals
-  const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
-  const myExpenses = expenses.filter(e => e.creator?.email === profile.email);
-  const coParentExpenses = expenses.filter(e => e.creator?.email !== profile.email);
-  const myTotal = myExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-  const coParentTotal = coParentExpenses.reduce((sum, e) => sum + Number(e.amount), 0);
-  
-  // Category breakdown
-  const categoryTotals: Record<string, number> = {};
-  expenses.forEach(e => {
-    categoryTotals[e.category] = (categoryTotals[e.category] || 0) + Number(e.amount);
-  });
-  
-  // Reimbursement summary
-  const approvedReimbursements = reimbursementRequests.filter(r => r.status === 'approved' || r.status === 'paid');
-  const pendingReimbursements = reimbursementRequests.filter(r => r.status === 'pending');
-  const rejectedReimbursements = reimbursementRequests.filter(r => r.status === 'rejected');
+  const { expenses, reimbursementRequests, reportingParent, otherParent, dateRange, children } = data;
 
-  // Escape all user-controlled data
-  const safeProfileName = escapeHtml(profile.full_name || profile.email || 'Unknown');
-  const safeCoParentName = escapeHtml(coParent?.full_name || coParent?.email || 'Not linked');
+  const totalExpenses = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+  const reportingParentExpenses = expenses.filter(
+    (expense) => expense.creator?.id === reportingParent.id,
+  );
+  const otherParentExpenses = expenses.filter(
+    (expense) => expense.creator?.id !== reportingParent.id,
+  );
+  const reportingParentTotal = reportingParentExpenses.reduce(
+    (sum, expense) => sum + Number(expense.amount),
+    0,
+  );
+  const otherParentTotal = otherParentExpenses.reduce(
+    (sum, expense) => sum + Number(expense.amount),
+    0,
+  );
+
+  const categoryTotals: Record<string, number> = {};
+  expenses.forEach((expense) => {
+    categoryTotals[expense.category] = (categoryTotals[expense.category] || 0) + Number(expense.amount);
+  });
+
+  const approvedReimbursements = reimbursementRequests.filter(
+    (request) => request.status === "approved" || request.status === "paid",
+  );
+  const pendingReimbursements = reimbursementRequests.filter((request) => request.status === "pending");
+  const rejectedReimbursements = reimbursementRequests.filter((request) => request.status === "rejected");
+
+  const safeReportingParentName = escapeHtml(
+    reportingParent.full_name || reportingParent.email || "Unknown",
+  );
+  const safeOtherParentName = escapeHtml(
+    otherParent?.full_name || otherParent?.email || "No other active parent or guardian",
+  );
 
   return `
 <!DOCTYPE html>
@@ -119,7 +222,7 @@ function generateHTML(data: ReportData): string {
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';">
-  <title>Co-Parenting Expense Report</title>
+  <title>CoParrent Expense Report</title>
   <style>
     * {
       margin: 0;
@@ -302,32 +405,31 @@ function generateHTML(data: ReportData): string {
 </head>
 <body>
   <div class="header">
-    <h1>Co-Parenting Expense Report</h1>
-    <div class="subtitle">Shared Child-Related Expenses</div>
-    <div class="date-range">${formatDate(dateRange.start)} — ${formatDate(dateRange.end)}</div>
+    <h1>CoParrent Expense Report</h1>
+    <div class="subtitle">Shared child-related expenses</div>
+    <div class="date-range">${formatDate(dateRange.start)} - ${formatDate(dateRange.end)}</div>
   </div>
 
   <div class="section">
-    <h2 class="section-title">Parties Involved</h2>
+    <h2 class="section-title">Parents or Guardians</h2>
     <div class="parties-grid">
       <div class="party-box">
-        <h4>Parent 1 (Report Generator)</h4>
-        <div class="name">${safeProfileName}</div>
+        <h4>Report Generated By</h4>
+        <div class="name">${safeReportingParentName}</div>
       </div>
       <div class="party-box">
-        <h4>Parent 2 (Co-Parent)</h4>
-        <div class="name">${safeCoParentName}</div>
+        <h4>Other Active Parent/Guardian</h4>
+        <div class="name">${safeOtherParentName}</div>
       </div>
     </div>
-    
     ${children.length > 0 ? `
     <div style="margin-top: 15px;">
       <h4 style="color: #666; font-size: 10pt; margin-bottom: 8px;">CHILDREN</h4>
       <div class="children-list">
-        ${children.map(c => `<span class="child-badge">${escapeHtml(c.name)}</span>`).join('')}
+        ${children.map((child) => `<span class="child-badge">${escapeHtml(child.name)}</span>`).join("")}
       </div>
     </div>
-    ` : ''}
+    ` : ""}
   </div>
 
   <div class="section">
@@ -338,12 +440,12 @@ function generateHTML(data: ReportData): string {
         <div class="value">${formatCurrency(totalExpenses)}</div>
       </div>
       <div class="summary-box">
-        <div class="label">${safeProfileName} Expenses</div>
-        <div class="value">${formatCurrency(myTotal)}</div>
+        <div class="label">${safeReportingParentName} Expenses</div>
+        <div class="value">${formatCurrency(reportingParentTotal)}</div>
       </div>
       <div class="summary-box">
-        <div class="label">${safeCoParentName} Expenses</div>
-        <div class="value">${formatCurrency(coParentTotal)}</div>
+        <div class="label">${safeOtherParentName} Expenses</div>
+        <div class="value">${formatCurrency(otherParentTotal)}</div>
       </div>
     </div>
   </div>
@@ -352,13 +454,14 @@ function generateHTML(data: ReportData): string {
     <h2 class="section-title">Expenses by Category</h2>
     <div class="category-breakdown">
       ${Object.entries(categoryTotals)
-        .sort(([, a], [, b]) => b - a)
-        .map(([cat, total]) => `
+        .sort(([, left], [, right]) => right - left)
+        .map(([category, total]) => `
           <div class="category-item">
-            <span>${escapeHtml(CATEGORY_LABELS[cat] || cat)}</span>
+            <span>${escapeHtml(CATEGORY_LABELS[category] || category)}</span>
             <span class="amount">${formatCurrency(total)}</span>
           </div>
-        `).join('')}
+        `)
+        .join("")}
     </div>
   </div>
 
@@ -377,19 +480,19 @@ function generateHTML(data: ReportData): string {
         </tr>
       </thead>
       <tbody>
-        ${expenses.map(e => `
+        ${expenses.map((expense) => `
           <tr>
-            <td>${formatDate(e.expense_date)}</td>
+            <td>${formatDate(expense.expense_date)}</td>
             <td>
-              ${escapeHtml(e.description)}
-              ${e.receipt_path ? '<span class="receipt-indicator">📎</span>' : ''}
+              ${escapeHtml(expense.description)}
+              ${expense.receipt_path ? '<span class="receipt-indicator">[Receipt]</span>' : ""}
             </td>
-            <td>${escapeHtml(CATEGORY_LABELS[e.category] || e.category)}</td>
-            <td>${escapeHtml(e.child?.name) || '—'}</td>
-            <td>${escapeHtml(e.creator?.full_name || e.creator?.email) || '—'}</td>
-            <td style="text-align: right;" class="amount">${formatCurrency(e.amount)}</td>
+            <td>${escapeHtml(CATEGORY_LABELS[expense.category] || expense.category)}</td>
+            <td>${escapeHtml(expense.child?.name) || "-"}</td>
+            <td>${escapeHtml(expense.creator?.full_name || expense.creator?.email) || "-"}</td>
+            <td style="text-align: right;" class="amount">${formatCurrency(expense.amount)}</td>
           </tr>
-        `).join('')}
+        `).join("")}
       </tbody>
       <tfoot>
         <tr style="font-weight: 600; background: #f0f9ff;">
@@ -403,7 +506,6 @@ function generateHTML(data: ReportData): string {
 
   <div class="section">
     <h2 class="section-title">Reimbursement History (${reimbursementRequests.length} requests)</h2>
-    
     <div class="summary-grid" style="margin-bottom: 15px;">
       <div class="summary-box">
         <div class="label">Approved/Paid</div>
@@ -418,7 +520,6 @@ function generateHTML(data: ReportData): string {
         <div class="value">${rejectedReimbursements.length}</div>
       </div>
     </div>
-    
     ${reimbursementRequests.length > 0 ? `
     <table>
       <thead>
@@ -431,31 +532,27 @@ function generateHTML(data: ReportData): string {
         </tr>
       </thead>
       <tbody>
-        ${reimbursementRequests.map(r => `
+        ${reimbursementRequests.map((request) => `
           <tr>
-            <td>${formatDate(r.created_at)}</td>
-            <td>${escapeHtml(r.expense?.description) || 'Unknown'}</td>
-            <td>${escapeHtml(r.requester?.full_name || r.requester?.email) || '—'}</td>
-            <td style="text-align: right;" class="amount">${formatCurrency(r.amount)}</td>
+            <td>${formatDate(request.created_at)}</td>
+            <td>${escapeHtml(request.expense?.description) || "Unknown"}</td>
+            <td>${escapeHtml(request.requester?.full_name || request.requester?.email) || "-"}</td>
+            <td style="text-align: right;" class="amount">${formatCurrency(request.amount)}</td>
             <td>
-              <span class="status-badge status-${escapeHtml(r.status)}">${escapeHtml(r.status.toUpperCase())}</span>
+              <span class="status-badge status-${escapeHtml(request.status)}">${escapeHtml(request.status.toUpperCase())}</span>
             </td>
           </tr>
-        `).join('')}
+        `).join("")}
       </tbody>
     </table>
     ` : '<div class="no-data">No reimbursement requests in this period</div>'}
   </div>
 
   <div class="footer">
-    <p>This report was generated on ${new Date().toLocaleString('en-US', { 
-      dateStyle: 'full', 
-      timeStyle: 'short' 
-    })}</p>
-    <p style="margin-top: 5px;">Generated by CoParrent • Court-Ready Documentation</p>
+    <p>This report was generated on ${new Date().toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" })}</p>
+    <p style="margin-top: 5px;">Generated by CoParrent</p>
     <p style="margin-top: 10px; font-size: 8pt; color: #999;">
-      This document is provided for informational purposes. All expenses listed have been self-reported 
-      by the parties involved. Receipt attachments are indicated with 📎 and stored securely.
+      This document reflects expense and reimbursement records stored for the selected family in CoParrent.
     </p>
   </div>
 </body>
@@ -464,109 +561,329 @@ function generateHTML(data: ReportData): string {
 }
 
 Deno.serve(async (req) => {
-  // Strict CORS validation
   const corsResponse = strictCors(req);
   if (corsResponse) return corsResponse;
-  
+
   const corsHeaders = getCorsHeaders(req);
 
   try {
-    // Authenticate user
-    const authHeader = req.headers.get('Authorization');
+    const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      console.log('[generate-expense-report] Missing authorization header');
-      return new Response(
-        JSON.stringify({ error: 'Authentication required', code: 'AUTH_REQUIRED' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      return jsonResponse(
+        { error: "Authentication required", code: "AUTH_REQUIRED" },
+        corsHeaders,
+        401,
       );
     }
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: { headers: { Authorization: authHeader } },
-      }
-    );
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      console.log('[generate-expense-report] Invalid token:', authError?.message);
-      return new Response(
-        JSON.stringify({ error: 'Invalid authentication token', code: 'INVALID_TOKEN' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Get user's profile to verify access
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, co_parent_id')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (profileError || !profile) {
-      console.log('[generate-expense-report] Profile not found:', profileError?.message);
-      return new Response(
-        JSON.stringify({ error: 'Profile not found', code: 'PROFILE_NOT_FOUND' }),
-        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Parse and validate request body
-    const data: ReportData = await req.json();
-    
-    // Validate required fields
-    if (!data.dateRange?.start || !data.dateRange?.end) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid date range', code: 'INVALID_INPUT' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Validate expenses array
-    if (!Array.isArray(data.expenses)) {
-      data.expenses = [];
-    }
-
-    // Validate reimbursement requests array
-    if (!Array.isArray(data.reimbursementRequests)) {
-      data.reimbursementRequests = [];
-    }
-
-    // Validate children array
-    if (!Array.isArray(data.children)) {
-      data.children = [];
-    }
-
-    // Log metadata only (no sensitive data)
-    console.log('[generate-expense-report] Generating report:', {
-      userId: user.id,
-      profileId: profile.id,
-      expenseCount: data.expenses.length,
-      reimbursementCount: data.reimbursementRequests.length,
-      childCount: data.children.length,
-      dateRange: data.dateRange,
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
     });
-    
-    const html = generateHTML(data);
-    
+
+    const accessToken = authHeader.replace("Bearer ", "");
+    const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(accessToken);
+    if (authError || !authData.user) {
+      return jsonResponse(
+        { error: "Invalid authentication token", code: "INVALID_TOKEN" },
+        corsHeaders,
+        401,
+      );
+    }
+
+    const body = (await req.json()) as ReportRequest;
+    const familyId = body.family_id?.trim() ?? "";
+    const startDate = body.dateRange?.start ?? "";
+    const endDate = body.dateRange?.end ?? "";
+
+    if (!familyId) {
+      return jsonResponse(
+        { error: "family_id is required", code: "FAMILY_ID_REQUIRED" },
+        corsHeaders,
+        400,
+      );
+    }
+
+    if (!DATE_PATTERN.test(startDate) || !DATE_PATTERN.test(endDate)) {
+      return jsonResponse(
+        { error: "Invalid date range", code: "INVALID_DATE_RANGE" },
+        corsHeaders,
+        400,
+      );
+    }
+
+    if (new Date(`${startDate}T00:00:00.000Z`) > new Date(`${endDate}T23:59:59.999Z`)) {
+      return jsonResponse(
+        { error: "Invalid date range", code: "INVALID_DATE_RANGE" },
+        corsHeaders,
+        400,
+      );
+    }
+
+    const { data: callerMembership, error: membershipError } = await supabaseAdmin
+      .from("family_members")
+      .select("profile_id, role, status")
+      .eq("family_id", familyId)
+      .eq("user_id", authData.user.id)
+      .eq("status", "active")
+      .maybeSingle<{ profile_id: string | null; role: string | null; status: string | null }>();
+
+    if (membershipError) {
+      throw membershipError;
+    }
+
+    if (!callerMembership?.profile_id) {
+      return jsonResponse(
+        { error: "You are not authorized for this family", code: "FAMILY_ACCESS_DENIED" },
+        corsHeaders,
+        403,
+      );
+    }
+
+    if (!ACTIVE_PARENT_ROLES.includes((callerMembership.role ?? "") as typeof ACTIVE_PARENT_ROLES[number])) {
+      return jsonResponse(
+        { error: "Only parents or guardians can generate expense reports", code: "FAMILY_ROLE_REQUIRED" },
+        corsHeaders,
+        403,
+      );
+    }
+
+    const { data: familyAdults, error: adultsError } = await supabaseAdmin
+      .from("family_members")
+      .select(`
+        profile_id,
+        role,
+        profiles!family_members_profile_id_fkey (
+          id,
+          full_name,
+          email
+        )
+      `)
+      .eq("family_id", familyId)
+      .eq("status", "active")
+      .in("role", [...ACTIVE_PARENT_ROLES]);
+
+    if (adultsError) {
+      throw adultsError;
+    }
+
+    const participants = ((familyAdults ?? []) as FamilyAdultRow[])
+      .map((adult) => {
+        const profile = asSingle(adult.profiles);
+        if (!adult.profile_id || !profile) {
+          return null;
+        }
+
+        return {
+          id: adult.profile_id,
+          full_name: profile.full_name,
+          email: profile.email,
+          role: adult.role ?? null,
+        } as ReportParticipant;
+      })
+      .filter((participant): participant is ReportParticipant => participant !== null);
+
+    const reportingParent =
+      participants.find((participant) => participant.id === callerMembership.profile_id) ?? null;
+
+    if (!reportingParent) {
+      return jsonResponse(
+        { error: "Unable to resolve the caller profile for this family", code: "FAMILY_PROFILE_REQUIRED" },
+        corsHeaders,
+        403,
+      );
+    }
+
+    const otherParent = participants.find((participant) => participant.id !== reportingParent.id) ?? null;
+    const parentProfileIds = participants.map((participant) => participant.id);
+
+    const { data: expenseRows, error: expenseError } = await supabaseAdmin
+      .from("expenses")
+      .select(`
+        id,
+        created_by,
+        category,
+        amount,
+        description,
+        expense_date,
+        split_percentage,
+        notes,
+        receipt_path,
+        creator:profiles!fk_created_by (
+          id,
+          full_name,
+          email
+        ),
+        child:children (
+          id,
+          name
+        )
+      `)
+      .eq("family_id", familyId)
+      .gte("expense_date", startDate)
+      .lte("expense_date", endDate)
+      .order("expense_date", { ascending: false });
+
+    if (expenseError) {
+      throw expenseError;
+    }
+
+    const expenses = ((expenseRows ?? []) as ExpenseRow[]).map((expense) => {
+      const creator = asSingle(expense.creator);
+      const child = asSingle(expense.child);
+
+      return {
+        id: expense.id,
+        category: expense.category,
+        amount: expense.amount,
+        description: expense.description,
+        expense_date: expense.expense_date,
+        split_percentage: expense.split_percentage,
+        notes: expense.notes,
+        receipt_path: expense.receipt_path,
+        creator: creator
+          ? {
+              id: creator.id,
+              full_name: creator.full_name,
+              email: creator.email,
+              role: null,
+            }
+          : null,
+        child: child
+          ? {
+              id: child.id,
+              name: child.name,
+            }
+          : null,
+      } satisfies Expense;
+    });
+
+    const reportRangeStart = `${startDate}T00:00:00.000Z`;
+    const reportRangeEnd = `${endDate}T23:59:59.999Z`;
+
+    const { data: reimbursementRows, error: reimbursementError } = await supabaseAdmin
+      .from("reimbursement_requests")
+      .select(`
+        id,
+        expense_id,
+        requester_id,
+        recipient_id,
+        amount,
+        status,
+        message,
+        response_message,
+        created_at,
+        responded_at,
+        expense:expenses (
+          id,
+          description,
+          family_id
+        ),
+        requester:profiles!fk_requester (
+          id,
+          full_name,
+          email
+        )
+      `)
+      .gte("created_at", reportRangeStart)
+      .lte("created_at", reportRangeEnd)
+      .order("created_at", { ascending: false });
+
+    if (reimbursementError) {
+      throw reimbursementError;
+    }
+
+    const reimbursementRequests = ((reimbursementRows ?? []) as ReimbursementRow[])
+      .map((request) => {
+        const expense = asSingle(request.expense);
+        const requester = asSingle(request.requester);
+        return { request, expense, requester };
+      })
+      .filter(
+        ({ request, expense }) =>
+          expense?.family_id === familyId &&
+          parentProfileIds.includes(request.requester_id) &&
+          parentProfileIds.includes(request.recipient_id),
+      )
+      .map(({ request, expense, requester }) => ({
+        id: request.id,
+        amount: request.amount,
+        status: request.status,
+        message: request.message,
+        response_message: request.response_message,
+        created_at: request.created_at,
+        responded_at: request.responded_at,
+        expense: expense ? { description: expense.description } : null,
+        requester: requester
+          ? {
+              id: requester.id,
+              full_name: requester.full_name,
+              email: requester.email,
+              role: null,
+            }
+          : null,
+      } satisfies ReimbursementRequest));
+
+    const { data: parentChildLinks, error: parentChildError } = await supabaseAdmin
+      .from("parent_children")
+      .select("child_id")
+      .in("parent_id", parentProfileIds);
+
+    if (parentChildError) {
+      throw parentChildError;
+    }
+
+    const childIds = uniqueIds((parentChildLinks ?? []).map((row) => row.child_id));
+    let children: Array<{ id: string; name: string }> = [];
+
+    if (childIds.length > 0) {
+      const { data: childRows, error: childError } = await supabaseAdmin
+        .from("children")
+        .select("id, name")
+        .in("id", childIds)
+        .order("name", { ascending: true });
+
+      if (childError) {
+        throw childError;
+      }
+
+      children = (childRows ?? []) as Array<{ id: string; name: string }>;
+    }
+
+    console.log("[generate-expense-report] Generating report", {
+      userId: authData.user.id,
+      familyId,
+      reportingProfileId: reportingParent.id,
+      expenseCount: expenses.length,
+      reimbursementCount: reimbursementRequests.length,
+      childCount: children.length,
+      dateRange: { start: startDate, end: endDate },
+    });
+
+    const html = generateHTML({
+      expenses,
+      reimbursementRequests,
+      reportingParent,
+      otherParent,
+      dateRange: { start: startDate, end: endDate },
+      children,
+    });
+
     return new Response(html, {
       headers: {
         ...corsHeaders,
-        'Content-Type': 'text/html; charset=utf-8',
-        'X-Content-Type-Options': 'nosniff',
+        "Content-Type": "text/html; charset=utf-8",
+        "X-Content-Type-Options": "nosniff",
       },
     });
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[generate-expense-report] Error:', errorMessage);
-    return new Response(
-      JSON.stringify({ error: 'Failed to generate report', code: 'INTERNAL_ERROR' }),
-      { 
-        status: 500, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.error("[generate-expense-report] Error:", errorMessage);
+    return jsonResponse(
+      { error: "Failed to generate report", code: "INTERNAL_ERROR" },
+      corsHeaders,
+      500,
     );
   }
 });

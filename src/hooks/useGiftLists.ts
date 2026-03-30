@@ -2,16 +2,35 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFamilyRole } from "./useFamilyRole";
 import { useToast } from "./use-toast";
-import { handleError, ERROR_MESSAGES } from "@/lib/errorMessages";
+import { handleError } from "@/lib/errorMessages";
 import { 
   getMutationKey, 
   acquireMutationLock, 
   releaseMutationLock 
 } from "@/lib/mutations";
+import type { Database } from "@/integrations-supabase/types";
+
+type GiftListInsert = Database["public"]["Tables"]["gift_lists"]["Insert"];
+type GiftItemInsert = Database["public"]["Tables"]["gift_items"]["Insert"];
+
+const GIFT_LIST_SCOPE_ERROR = "Gift lists require an active family.";
+const GIFT_ITEM_SCOPE_ERROR = "Gift items require an active family.";
+
+const showMissingFamilyScopeToast = (
+  toast: ReturnType<typeof useToast>["toast"],
+  description: string,
+) => {
+  toast({
+    title: "Active family required",
+    description,
+    variant: "destructive",
+  });
+};
 
 export interface GiftList {
   id: string;
   child_id: string;
+  family_id: string | null;
   primary_parent_id: string;
   occasion_type: string;
   custom_occasion_name: string | null;
@@ -59,6 +78,11 @@ interface GiftItemRow extends GiftItem {
     full_name: string | null;
     email: string | null;
   }[] | null;
+  gift_lists?: {
+    family_id: string | null;
+  } | {
+    family_id: string | null;
+  }[] | null;
 }
 
 export type OccasionType = "birthday" | "christmas" | "holiday" | "custom";
@@ -82,13 +106,22 @@ export const GIFT_CATEGORIES: { value: GiftCategory; label: string }[] = [
 
 export const useGiftLists = (childId?: string) => {
   const { toast } = useToast();
-  const { profileId, primaryParentId, isParent, loading: roleLoading } = useFamilyRole();
+  const { activeFamilyId, profileId, isParent, loading: roleLoading } = useFamilyRole();
   
   const [giftLists, setGiftLists] = useState<GiftList[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scopeError, setScopeError] = useState<string | null>(null);
 
   const fetchGiftLists = useCallback(async () => {
-    if (!primaryParentId) return;
+    if (!activeFamilyId) {
+      setGiftLists([]);
+      setScopeError(GIFT_LIST_SCOPE_ERROR);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setScopeError(null);
 
     try {
       let query = supabase
@@ -97,7 +130,7 @@ export const useGiftLists = (childId?: string) => {
           *,
           children!gift_lists_child_id_fkey (name)
         `)
-        .eq("primary_parent_id", primaryParentId)
+        .eq("family_id", activeFamilyId)
         .order("event_date", { ascending: true, nullsFirst: false });
 
       if (childId) {
@@ -134,10 +167,11 @@ export const useGiftLists = (childId?: string) => {
       setGiftLists(listsWithCounts);
     } catch (error) {
       handleError(error, { feature: 'Gifts', action: 'fetchLists' });
+      setGiftLists([]);
     } finally {
       setLoading(false);
     }
-  }, [primaryParentId, childId]);
+  }, [activeFamilyId, childId]);
 
   const createGiftList = async (data: {
     child_id: string;
@@ -146,7 +180,14 @@ export const useGiftLists = (childId?: string) => {
     event_date?: string;
     allow_multiple_claims?: boolean;
   }) => {
-    if (!primaryParentId) return null;
+    if (!activeFamilyId) {
+      showMissingFamilyScopeToast(toast, GIFT_LIST_SCOPE_ERROR);
+      return null;
+    }
+
+    if (!profileId) {
+      return null;
+    }
 
     // Guard against double-submits
     const mutationKey = getMutationKey("createGiftList", data.child_id, data.occasion_type);
@@ -155,12 +196,19 @@ export const useGiftLists = (childId?: string) => {
     }
 
     try {
+      const insertPayload: GiftListInsert = {
+        allow_multiple_claims: data.allow_multiple_claims ?? false,
+        child_id: data.child_id,
+        custom_occasion_name: data.custom_occasion_name ?? null,
+        event_date: data.event_date ?? null,
+        family_id: activeFamilyId,
+        occasion_type: data.occasion_type,
+        primary_parent_id: profileId,
+      };
+
       const { data: newList, error } = await supabase
         .from("gift_lists")
-        .insert({
-          ...data,
-          primary_parent_id: primaryParentId,
-        })
+        .insert(insertPayload)
         .select()
         .single();
 
@@ -190,6 +238,11 @@ export const useGiftLists = (childId?: string) => {
     listId: string,
     updates: Partial<GiftList>
   ) => {
+    if (!activeFamilyId) {
+      showMissingFamilyScopeToast(toast, GIFT_LIST_SCOPE_ERROR);
+      return false;
+    }
+
     // Guard against double-submits
     const mutationKey = getMutationKey("updateGiftList", listId);
     if (!acquireMutationLock(mutationKey)) {
@@ -197,10 +250,17 @@ export const useGiftLists = (childId?: string) => {
     }
 
     try {
+      const {
+        family_id: _ignoredFamilyId,
+        primary_parent_id: _ignoredPrimaryParentId,
+        ...allowedUpdates
+      } = updates;
+
       const { error } = await supabase
         .from("gift_lists")
-        .update(updates)
-        .eq("id", listId);
+        .update(allowedUpdates)
+        .eq("id", listId)
+        .eq("family_id", activeFamilyId);
 
       if (error) throw error;
 
@@ -225,6 +285,11 @@ export const useGiftLists = (childId?: string) => {
   };
 
   const deleteGiftList = async (listId: string) => {
+    if (!activeFamilyId) {
+      showMissingFamilyScopeToast(toast, GIFT_LIST_SCOPE_ERROR);
+      return false;
+    }
+
     // Guard against double-submits
     const mutationKey = getMutationKey("deleteGiftList", listId);
     if (!acquireMutationLock(mutationKey)) {
@@ -235,7 +300,8 @@ export const useGiftLists = (childId?: string) => {
       const { error } = await supabase
         .from("gift_lists")
         .delete()
-        .eq("id", listId);
+        .eq("id", listId)
+        .eq("family_id", activeFamilyId);
 
       if (error) throw error;
 
@@ -260,16 +326,17 @@ export const useGiftLists = (childId?: string) => {
   };
 
   useEffect(() => {
-    if (!roleLoading && primaryParentId) {
-      fetchGiftLists();
+    if (!roleLoading) {
+      void fetchGiftLists();
     }
-  }, [roleLoading, primaryParentId, fetchGiftLists]);
+  }, [roleLoading, fetchGiftLists]);
 
   return {
     giftLists,
     loading: loading || roleLoading,
     isParent,
     profileId,
+    scopeError,
     createGiftList,
     updateGiftList,
     deleteGiftList,
@@ -279,22 +346,40 @@ export const useGiftLists = (childId?: string) => {
 
 export const useGiftItems = (listId: string) => {
   const { toast } = useToast();
-  const { profileId, isParent, loading: roleLoading } = useFamilyRole();
+  const { activeFamilyId, profileId, isParent, loading: roleLoading } = useFamilyRole();
   
   const [items, setItems] = useState<GiftItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scopeError, setScopeError] = useState<string | null>(null);
 
   const fetchItems = useCallback(async () => {
-    if (!listId) return;
+    if (!listId) {
+      setItems([]);
+      setScopeError(null);
+      setLoading(false);
+      return;
+    }
+
+    if (!activeFamilyId) {
+      setItems([]);
+      setScopeError(GIFT_ITEM_SCOPE_ERROR);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setScopeError(null);
 
     try {
       const { data, error } = await supabase
         .from("gift_items")
         .select(`
           *,
-          claimer:profiles!gift_items_claimed_by_fkey (full_name, email)
+          claimer:profiles!gift_items_claimed_by_fkey (full_name, email),
+          gift_lists!inner (family_id)
         `)
         .eq("gift_list_id", listId)
+        .eq("gift_lists.family_id", activeFamilyId)
         .order("created_at", { ascending: true });
 
       if (error) throw error;
@@ -309,10 +394,11 @@ export const useGiftItems = (listId: string) => {
       setItems(formattedItems);
     } catch (error) {
       handleError(error, { feature: 'Gifts', action: 'fetchItems' });
+      setItems([]);
     } finally {
       setLoading(false);
     }
-  }, [listId]);
+  }, [activeFamilyId, listId]);
 
   const addItem = async (data: {
     title: string;
@@ -322,6 +408,11 @@ export const useGiftItems = (listId: string) => {
     parent_only_notes?: string;
     link?: string;
   }) => {
+    if (!activeFamilyId) {
+      showMissingFamilyScopeToast(toast, GIFT_ITEM_SCOPE_ERROR);
+      return null;
+    }
+
     if (!profileId) return null;
 
     // Guard against double-submits
@@ -331,13 +422,20 @@ export const useGiftItems = (listId: string) => {
     }
 
     try {
+      const insertPayload: GiftItemInsert = {
+        category: data.category ?? "other",
+        created_by: profileId,
+        gift_list_id: listId,
+        link: data.link ?? null,
+        notes: data.notes ?? null,
+        parent_only_notes: data.parent_only_notes ?? null,
+        suggested_age_range: data.suggested_age_range ?? null,
+        title: data.title,
+      };
+
       const { data: newItem, error } = await supabase
         .from("gift_items")
-        .insert({
-          ...data,
-          gift_list_id: listId,
-          created_by: profileId,
-        })
+        .insert(insertPayload)
         .select()
         .single();
 
@@ -364,6 +462,11 @@ export const useGiftItems = (listId: string) => {
   };
 
   const updateItem = async (itemId: string, updates: Partial<GiftItem>) => {
+    if (!activeFamilyId) {
+      showMissingFamilyScopeToast(toast, GIFT_ITEM_SCOPE_ERROR);
+      return false;
+    }
+
     // Guard against double-submits
     const mutationKey = getMutationKey("updateGiftItem", itemId);
     if (!acquireMutationLock(mutationKey)) {
@@ -374,7 +477,8 @@ export const useGiftItems = (listId: string) => {
       const { error } = await supabase
         .from("gift_items")
         .update(updates)
-        .eq("id", itemId);
+        .eq("id", itemId)
+        .eq("gift_list_id", listId);
 
       if (error) throw error;
 
@@ -394,6 +498,11 @@ export const useGiftItems = (listId: string) => {
   };
 
   const claimItem = async (itemId: string) => {
+    if (!activeFamilyId) {
+      showMissingFamilyScopeToast(toast, GIFT_ITEM_SCOPE_ERROR);
+      return false;
+    }
+
     if (!profileId) return false;
 
     // Guard against double-submits (race condition on claims)
@@ -414,7 +523,8 @@ export const useGiftItems = (listId: string) => {
           claimed_by: profileId,
           claimed_at: new Date().toISOString(),
         })
-        .eq("id", itemId);
+        .eq("id", itemId)
+        .eq("gift_list_id", listId);
 
       if (error) throw error;
 
@@ -439,6 +549,11 @@ export const useGiftItems = (listId: string) => {
   };
 
   const unclaimItem = async (itemId: string) => {
+    if (!activeFamilyId) {
+      showMissingFamilyScopeToast(toast, GIFT_ITEM_SCOPE_ERROR);
+      return false;
+    }
+
     // Guard against double-submits
     const mutationKey = getMutationKey("unclaimGiftItem", itemId);
     if (!acquireMutationLock(mutationKey)) {
@@ -453,7 +568,8 @@ export const useGiftItems = (listId: string) => {
           claimed_by: null,
           claimed_at: null,
         })
-        .eq("id", itemId);
+        .eq("id", itemId)
+        .eq("gift_list_id", listId);
 
       if (error) throw error;
 
@@ -478,6 +594,11 @@ export const useGiftItems = (listId: string) => {
   };
 
   const markPurchased = async (itemId: string, purchased: boolean) => {
+    if (!activeFamilyId) {
+      showMissingFamilyScopeToast(toast, GIFT_ITEM_SCOPE_ERROR);
+      return false;
+    }
+
     // Guard against double-submits
     const mutationKey = getMutationKey("markPurchased", itemId);
     if (!acquireMutationLock(mutationKey)) {
@@ -491,7 +612,8 @@ export const useGiftItems = (listId: string) => {
           purchased,
           status: purchased ? "purchased" : "claimed",
         })
-        .eq("id", itemId);
+        .eq("id", itemId)
+        .eq("gift_list_id", listId);
 
       if (error) throw error;
 
@@ -518,6 +640,11 @@ export const useGiftItems = (listId: string) => {
   };
 
   const deleteItem = async (itemId: string) => {
+    if (!activeFamilyId) {
+      showMissingFamilyScopeToast(toast, GIFT_ITEM_SCOPE_ERROR);
+      return false;
+    }
+
     // Guard against double-submits
     const mutationKey = getMutationKey("deleteGiftItem", itemId);
     if (!acquireMutationLock(mutationKey)) {
@@ -528,7 +655,8 @@ export const useGiftItems = (listId: string) => {
       const { error } = await supabase
         .from("gift_items")
         .delete()
-        .eq("id", itemId);
+        .eq("id", itemId)
+        .eq("gift_list_id", listId);
 
       if (error) throw error;
 
@@ -553,16 +681,17 @@ export const useGiftItems = (listId: string) => {
   };
 
   useEffect(() => {
-    if (!roleLoading && listId) {
-      fetchItems();
+    if (!roleLoading) {
+      void fetchItems();
     }
-  }, [roleLoading, listId, fetchItems]);
+  }, [roleLoading, fetchItems]);
 
   return {
     items,
     loading: loading || roleLoading,
     isParent,
     profileId,
+    scopeError,
     addItem,
     updateItem,
     claimItem,

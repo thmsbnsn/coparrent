@@ -2,13 +2,16 @@ import { describe, expect, it } from "vitest";
 import {
   canThirdPartyAccessRoute,
   getProtectedRouteAccessDecision,
+  isKnownProtectedRoute,
   isChildAllowedRoute,
   isParentOnlyRoute,
+  requiresActiveFamilyScope,
 } from "@/lib/routeAccess";
 
 describe("routeAccess", () => {
   it("matches nested parent-only routes", () => {
     expect(isParentOnlyRoute("/dashboard/settings/security")).toBe(true);
+    expect(isParentOnlyRoute("/dashboard/families/new")).toBe(true);
     expect(isParentOnlyRoute("/dashboard/messages/thread-1")).toBe(false);
   });
 
@@ -18,6 +21,7 @@ describe("routeAccess", () => {
 
     expect(
       getProtectedRouteAccessDecision("/dashboard/expenses", {
+        activeFamilyId: "family-1",
         isChildAccount: true,
       }),
     ).toEqual({
@@ -33,6 +37,7 @@ describe("routeAccess", () => {
 
     expect(
       getProtectedRouteAccessDecision("/dashboard/settings", {
+        activeFamilyId: "family-1",
         isThirdParty: true,
       }),
     ).toEqual({
@@ -45,6 +50,7 @@ describe("routeAccess", () => {
   it("enforces requireParent even on otherwise allowed routes", () => {
     expect(
       getProtectedRouteAccessDecision("/dashboard/messages", {
+        activeFamilyId: "family-1",
         isThirdParty: true,
         requireParent: true,
       }),
@@ -58,9 +64,49 @@ describe("routeAccess", () => {
   it("allows parent-scoped users through protected routes", () => {
     expect(
       getProtectedRouteAccessDecision("/dashboard/expenses", {
+        activeFamilyId: "family-1",
         isThirdParty: false,
         isChild: false,
         isChildAccount: false,
+      }),
+    ).toEqual({
+      allowed: true,
+      redirectTo: null,
+      reason: "allowed",
+    });
+  });
+
+  it("fails closed for unknown protected routes", () => {
+    expect(isKnownProtectedRoute("/dashboard/not-registered")).toBe(false);
+
+    expect(
+      getProtectedRouteAccessDecision("/dashboard/not-registered", {
+        activeFamilyId: "family-1",
+      }),
+    ).toEqual({
+      allowed: false,
+      redirectTo: "/dashboard",
+      reason: "route_not_registered",
+    });
+  });
+
+  it("requires active family scope only for registered family routes", () => {
+    expect(requiresActiveFamilyScope("/dashboard/messages")).toBe(true);
+    expect(requiresActiveFamilyScope("/dashboard/law-library")).toBe(false);
+
+    expect(
+      getProtectedRouteAccessDecision("/dashboard/messages", {
+        isThirdParty: false,
+      }),
+    ).toEqual({
+      allowed: false,
+      redirectTo: null,
+      reason: "missing_active_family",
+    });
+
+    expect(
+      getProtectedRouteAccessDecision("/dashboard/law-library", {
+        isThirdParty: true,
       }),
     ).toEqual({
       allowed: true,

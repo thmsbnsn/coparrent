@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { buildAppUrl } from "../_shared/appUrl.ts";
+import { getCorsHeaders, strictCors } from "../_shared/cors.ts";
 import {
   calculateLeaveByTime,
   estimateDistance,
@@ -13,11 +14,6 @@ import {
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 type SupabaseServiceClient = ReturnType<typeof createClient>;
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
 
 // Reminder intervals in minutes before event start
 const REMINDER_INTERVALS = [
@@ -44,6 +40,7 @@ interface SportsEvent {
 }
 
 interface ActivityInfo {
+  family_id: string;
   name: string;
   sport_type: string;
   child_id: string;
@@ -52,6 +49,7 @@ interface ActivityInfo {
 }
 
 interface ActivityRow {
+  family_id: string | null;
   id: string;
   name: string;
   sport_type: string;
@@ -59,6 +57,38 @@ interface ActivityRow {
   primary_parent_id: string;
   children: { id: string; name: string } | null;
 }
+
+interface FamilyReminderRecipientRow {
+  profile_id: string;
+}
+
+const parseDateOnly = (value: string): Date => {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+const getFamilyReminderRecipients = async (
+  supabase: SupabaseServiceClient,
+  familyId: string,
+): Promise<string[]> => {
+  const { data, error } = await supabase
+    .from("family_members")
+    .select("profile_id")
+    .eq("family_id", familyId)
+    .eq("status", "active")
+    .in("role", ["parent", "guardian"]);
+
+  if (error) {
+    console.error("Error fetching family reminder recipients:", error);
+    return [];
+  }
+
+  return [...new Set(
+    ((data ?? []) as FamilyReminderRecipientRow[])
+      .map((row) => row.profile_id)
+      .filter((profileId): profileId is string => Boolean(profileId)),
+  )];
+};
 
 const getEmailHtml = (
   recipientName: string,
@@ -189,7 +219,7 @@ const getEmailHtml = (
           <p style="margin: 0 0 8px; color: #92400e; font-weight: 600; font-size: 18px;">
             ${eventTypeEmoji} ${event.title}
           </p>
-          <p style="margin: 8px 0; color: #333;"><strong>📅 Date:</strong> ${new Date(event.event_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+          <p style="margin: 8px 0; color: #333;"><strong>📅 Date:</strong> ${parseDateOnly(event.event_date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
           <p style="margin: 8px 0; color: #333;"><strong>⏰ Time:</strong> ${event.start_time}${event.end_time ? ` - ${event.end_time}` : ''}</p>
           ${locationDisplay}
           ${responsibilityDisplay}
@@ -217,10 +247,12 @@ const getEmailHtml = (
 };
 
 const handler = async (req: Request): Promise<Response> => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+  const corsResponse = strictCors(req);
+  if (corsResponse) {
+    return corsResponse;
   }
 
+  const corsHeaders = getCorsHeaders(req);
   console.log("Sports event reminders function triggered at:", new Date().toISOString());
 
   try {
@@ -261,7 +293,7 @@ const handler = async (req: Request): Promise<Response> => {
     const { data: activities } = await supabase
       .from("child_activities")
       .select(`
-        id, name, sport_type, child_id, primary_parent_id,
+        id, family_id, name, sport_type, child_id, primary_parent_id,
         children:child_id (id, name)
       `)
       .in("id", activityIds);
@@ -269,6 +301,7 @@ const handler = async (req: Request): Promise<Response> => {
     const activitiesMap = new Map<string, ActivityInfo>();
     for (const activity of (activities || []) as ActivityRow[]) {
       activitiesMap.set(activity.id, {
+        family_id: activity.family_id ?? "",
         name: activity.name,
         sport_type: activity.sport_type,
         child_id: activity.child_id,
@@ -281,10 +314,15 @@ const handler = async (req: Request): Promise<Response> => {
     for (const event of events) {
       const activity = activitiesMap.get(event.activity_id);
       if (!activity) continue;
+      if (!activity.family_id) {
+        console.warn(`Skipping sports reminder for activity ${event.activity_id} because family_id is missing`);
+        results.skipped++;
+        continue;
+      }
 
       // Parse event datetime
       const [hours, minutes] = event.start_time.split(':').map(Number);
-      const eventDateTime = new Date(event.event_date);
+      const eventDateTime = parseDateOnly(event.event_date);
       eventDateTime.setHours(hours, minutes, 0, 0);
 
       // Check each reminder interval
@@ -303,30 +341,19 @@ const handler = async (req: Request): Promise<Response> => {
           // Get equipment list
           const equipment = getRequiredEquipment(event.equipment_needed);
 
-          // Get parents to notify
-          const parentsToNotify: { id: string; responsibility: string | null }[] = [];
-
-          // Always notify primary parent
-          parentsToNotify.push({ id: activity.primary_parent_id, responsibility: null });
-
-          // Get co-parent
-          const { data: primaryProfile } = await supabase
-            .from("profiles")
-            .select("co_parent_id")
-            .eq("id", activity.primary_parent_id)
-            .single();
-
-          if (primaryProfile?.co_parent_id) {
-            parentsToNotify.push({ id: primaryProfile.co_parent_id, responsibility: null });
-          }
-
-          // Update responsibilities
-          for (const parent of parentsToNotify) {
-            parent.responsibility = getParentResponsibility(
-              parent.id,
+          const parentsToNotify = (await getFamilyReminderRecipients(supabase, activity.family_id)).map((parentId) => ({
+            id: parentId,
+            responsibility: getParentResponsibility(
+              parentId,
               event.dropoff_parent_id,
               event.pickup_parent_id,
-            );
+            ),
+          }));
+
+          if (parentsToNotify.length === 0) {
+            console.warn(`No active family reminder recipients found for sports activity ${activity.id}`);
+            results.skipped++;
+            continue;
           }
 
           // Send notifications to each parent

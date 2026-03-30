@@ -20,6 +20,7 @@ const IMAGE_MODEL_CANDIDATES = [
 ];
 
 interface GenerateRequest {
+  familyId: string;
   prompt: string;
   difficulty: "simple" | "medium" | "detailed";
 }
@@ -199,10 +200,14 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const body: GenerateRequest = await req.json();
+    const { familyId, prompt, difficulty } = body;
 
     // Use aiGuard for auth, role, and plan enforcement
     // Requires parent role and premium access
-    const guardResult = await aiGuard(req, "analyze", supabaseUrl, supabaseServiceKey);
+    const guardResult = await aiGuard(req, "analyze", supabaseUrl, supabaseServiceKey, {
+      familyId,
+    });
 
     if (!guardResult.allowed) {
       const statusCode = guardResult.statusCode || 403;
@@ -237,10 +242,6 @@ serve(async (req) => {
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    // Parse request
-    const body: GenerateRequest = await req.json();
-    const { prompt, difficulty } = body;
 
     if (!prompt || !difficulty) {
       return new Response(
@@ -329,6 +330,7 @@ Style requirements:
     const { data: coloringPage, error: insertError } = await serviceClient
       .from("coloring_pages")
       .insert({
+        family_id: familyId,
         user_id: userId,
         prompt,
         difficulty,

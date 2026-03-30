@@ -270,10 +270,22 @@ const ChildAccountCard = ({
 };
 
 export const ChildAccountControls = () => {
-  const { childAccounts, loading, updatePermission, toggleLoginEnabled } = useChildPermissions();
+  const { childAccounts, loading, scopeError, updatePermission, toggleLoginEnabled } = useChildPermissions();
 
   if (loading) {
     return <LoadingSpinner message="Loading child accounts..." />;
+  }
+
+  if (scopeError) {
+    return (
+      <Card className="border-dashed border-amber-500/40 bg-amber-50/40 dark:bg-amber-900/10">
+        <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+          <AlertTriangle className="mb-4 h-12 w-12 text-amber-600" />
+          <h3 className="mb-2 text-lg font-medium">Family Scope Required</h3>
+          <p className="max-w-md text-sm text-muted-foreground">{scopeError}</p>
+        </CardContent>
+      </Card>
+    );
   }
 
   if (childAccounts.length === 0) {

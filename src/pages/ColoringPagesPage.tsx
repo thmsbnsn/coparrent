@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Sparkles, Palette, Download, FileText, Printer, Save, AlertCircle, Info, History, FolderOpen, ChevronDown } from "lucide-react";
+import { ArrowLeft, Sparkles, Palette, Download, FileText, Printer, Save, AlertCircle, Info, History, FolderOpen } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,6 +26,8 @@ const EXAMPLE_PROMPTS = [
   "Space rocket flying past planets and stars",
   "Farm animals having a picnic",
   "Princess castle with rainbow and clouds",
+  "Dinosaurs playing soccer in a sunny field",
+  "A treehouse village connected by rope bridges",
 ];
 
 const DIFFICULTY_INFO = {
@@ -42,6 +44,7 @@ const ColoringPagesContent = () => {
   const {
     generating,
     saving,
+    scopeError,
     currentImage,
     currentPageId,
     errorState,
@@ -64,6 +67,11 @@ const ColoringPagesContent = () => {
 
   const handleExampleClick = (example: string) => {
     setPrompt(example);
+  };
+
+  const handleSurprisePrompt = () => {
+    const randomPrompt = EXAMPLE_PROMPTS[Math.floor(Math.random() * EXAMPLE_PROMPTS.length)];
+    setPrompt(randomPrompt);
   };
 
   const handleExportPDF = async () => {
@@ -128,6 +136,14 @@ const ColoringPagesContent = () => {
       </div>
 
       {/* Error State */}
+      {scopeError && (
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Active family required</AlertTitle>
+          <AlertDescription>{scopeError}</AlertDescription>
+        </Alert>
+      )}
+
       {errorState && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -172,15 +188,47 @@ const ColoringPagesContent = () => {
           <CardContent className="space-y-6">
             {/* Prompt Input */}
             <div className="space-y-2">
-              <Label htmlFor="prompt">What should the coloring page show?</Label>
-              <Input
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="prompt">What should the coloring page show?</Label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1 px-2 text-xs"
+                  onClick={handleSurprisePrompt}
+                  disabled={generating}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  Surprise me
+                </Button>
+              </div>
+              <Textarea
                 id="prompt"
-                placeholder="e.g., A friendly unicorn in a garden of flowers"
+                placeholder="e.g., A friendly unicorn in a flower garden with butterflies and a rainbow"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 disabled={generating}
-                onKeyDown={(e) => e.key === "Enter" && handleGenerate()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                    e.preventDefault();
+                    void handleGenerate();
+                  }
+                }}
+                rows={4}
+                className="min-h-28 resize-y"
               />
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <p>Best prompts include a subject, a setting, and the style or mood you want.</p>
+                <span>{prompt.trim().length} characters</span>
+              </div>
+              <div className="rounded-lg border border-dashed bg-muted/40 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Prompt formula</p>
+                <p className="mt-1 text-sm">
+                  Subject + scene + a few playful details.
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Example: “A friendly dragon reading in a treehouse library with lanterns and vines.”
+                </p>
+              </div>
             </div>
 
             {/* Example Prompts */}
@@ -192,11 +240,11 @@ const ColoringPagesContent = () => {
                     key={index}
                     variant="outline"
                     size="sm"
-                    className="text-xs h-7"
+                    className="h-auto whitespace-normal px-3 py-2 text-left text-xs"
                     onClick={() => handleExampleClick(example)}
                     disabled={generating}
                   >
-                    {example.length > 25 ? example.slice(0, 25) + "..." : example}
+                    {example}
                   </Button>
                 ))}
               </div>
@@ -249,6 +297,9 @@ const ColoringPagesContent = () => {
                 </>
               )}
             </Button>
+            <p className="text-xs text-muted-foreground">
+              Tip: press <span className="font-medium">Ctrl+Enter</span> or <span className="font-medium">Cmd+Enter</span> to generate after you finish the prompt.
+            </p>
 
             {/* Privacy Note */}
             <div className="flex items-start gap-2 p-3 bg-muted/50 rounded-lg">
@@ -321,6 +372,15 @@ const ColoringPagesContent = () => {
                 animate={{ opacity: 1, y: 0 }}
                 className="mt-4 space-y-3"
               >
+                <div className="rounded-lg border bg-muted/40 p-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Generated Prompt</p>
+                  <p className="mt-1 text-sm">{prompt}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge variant="secondary">{DIFFICULTY_INFO[difficulty].label}</Badge>
+                    <Badge variant="outline">{DIFFICULTY_INFO[difficulty].ages}</Badge>
+                  </div>
+                </div>
+
                 {/* Save Options */}
                 <div className="grid grid-cols-2 gap-2">
                   <Button
@@ -418,11 +478,19 @@ const ColoringPagesContent = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ColoringPageGallery
-                pages={history}
-                loading={loadingHistory}
-                onDownloadPNG={downloadPNG}
-              />
+              {scopeError ? (
+                <div className="py-12 text-center">
+                  <History className="mx-auto mb-4 h-12 w-12 text-amber-600/60" />
+                  <h3 className="mb-2 font-medium">Active family required</h3>
+                  <p className="text-sm text-muted-foreground">{scopeError}</p>
+                </div>
+              ) : (
+                <ColoringPageGallery
+                  pages={history}
+                  loading={loadingHistory}
+                  onDownloadPNG={downloadPNG}
+                />
+              )}
             </CardContent>
           </Card>
         </TabsContent>

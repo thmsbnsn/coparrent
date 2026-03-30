@@ -14,7 +14,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   DollarSign, Plus, Search, Calendar, Filter,
   Receipt, CheckCircle, XCircle, Clock, Download,
-  Trash2, Send, Eye, FileText, Users, TrendingUp, AlertCircle
+  Trash2, Send, FileText, AlertCircle
 } from "lucide-react";
 import { resolveChildName, resolvePersonName } from "@/lib/displayResolver";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -57,6 +57,7 @@ import { PermissionButton } from "@/components/ui/PermissionButton";
 import { useExpenses, EXPENSE_CATEGORIES, Expense, ReimbursementRequest } from "@/hooks/useExpenses";
 import { useChildren } from "@/hooks/useChildren";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useFamily } from "@/contexts/FamilyContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format, parseISO, startOfMonth, endOfMonth, isWithinInterval, subMonths } from "date-fns";
@@ -68,6 +69,7 @@ function ExpensesPageContent() {
     reimbursementRequests,
     loading, 
     profile,
+    reimbursementRecipientId,
     addExpense, 
     deleteExpense,
     requestReimbursement,
@@ -78,6 +80,7 @@ function ExpensesPageContent() {
   } = useExpenses();
   const { children } = useChildren();
   const { permissions } = usePermissions();
+  const { activeFamilyId } = useFamily();
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
@@ -309,52 +312,19 @@ function ExpensesPageContent() {
   };
 
   const generateCourtReport = async () => {
+    if (!activeFamilyId) {
+      toast.error("Select an active family before generating a court report.");
+      return;
+    }
+
     setIsGeneratingReport(true);
     
     try {
-      // Get profile details
-      const { data: profileData } = await supabase
-        .from('profiles')
-        .select('id, full_name, email, co_parent_id')
-        .eq('id', profile?.id)
-        .maybeSingle();
-      
-      let coParentData = null;
-      if (profileData?.co_parent_id) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('id, full_name, email')
-          .eq('id', profileData.co_parent_id)
-          .maybeSingle();
-        coParentData = data;
-      }
-
-      // Filter expenses by date range
-      const startDate = parseISO(reportStartDate);
-      const endDate = parseISO(reportEndDate);
-      
-      const filteredForReport = expenses.filter(e => {
-        const expDate = parseISO(e.expense_date);
-        return expDate >= startDate && expDate <= endDate;
-      });
-
-      // Filter reimbursements by date range
-      const filteredReimbursements = reimbursementRequests.filter(r => {
-        const reqDate = parseISO(r.created_at);
-        return reqDate >= startDate && reqDate <= endDate;
-      });
-
-      const reportData = {
-        expenses: filteredForReport,
-        reimbursementRequests: filteredReimbursements,
-        profile: profileData || { full_name: null, email: null },
-        coParent: coParentData,
-        dateRange: { start: reportStartDate, end: reportEndDate },
-        children: children.map(c => ({ id: c.id, name: c.name })),
-      };
-
       const { data: htmlContent, error } = await supabase.functions.invoke('generate-expense-report', {
-        body: reportData,
+        body: {
+          family_id: activeFamilyId,
+          dateRange: { start: reportStartDate, end: reportEndDate },
+        },
       });
 
       if (error) throw error;
@@ -430,10 +400,14 @@ function ExpensesPageContent() {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4"
+          className="rounded-3xl border border-border bg-gradient-to-br from-[#21B0FE]/10 via-background to-emerald-500/10 p-5 sm:p-6"
         >
-          <div>
-            <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-5">
+            <div className="space-y-3">
+              <div className="inline-flex rounded-full bg-[#21B0FE]/10 px-3 py-1 text-xs font-medium text-[#21B0FE]">
+                {permissions.isViewOnly ? "View-only finance record" : "Expense tracking and reimbursements"}
+              </div>
+              <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
                 <DollarSign className="h-7 w-7 text-[#21B0FE]" />
                 Shared Expenses
@@ -441,20 +415,38 @@ function ExpensesPageContent() {
               {permissions.isViewOnly && (
                 <ViewOnlyBadge reason={permissions.viewOnlyReason || undefined} />
               )}
+              </div>
+              <p className="max-w-2xl text-sm text-muted-foreground sm:text-base">
+                {permissions.isViewOnly
+                  ? "Review the shared expense record, reimbursement history, and export-ready summaries."
+                  : "Track costs, request reimbursements, attach receipts, and keep the money trail organized for both parents."}
+              </p>
             </div>
-            <p className="text-muted-foreground mt-1">
-              {permissions.isViewOnly 
-                ? "View shared expense records"
-                : "Track costs, request reimbursements, and export reports"}
-            </p>
-          </div>
-          
-          <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-2xl border bg-card/80 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Your total</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">${totals.myTotal.toFixed(2)}</p>
+              </div>
+              <div className="rounded-2xl border bg-card/80 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Other parent/guardian</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">${totals.otherFamilyTotal.toFixed(2)}</p>
+              </div>
+              <div className="rounded-2xl border bg-card/80 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Pending to you</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">${totals.pendingToMe.toFixed(2)}</p>
+              </div>
+              <div className="rounded-2xl border bg-card/80 p-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Total tracked</p>
+                <p className="mt-2 text-lg font-semibold text-foreground">${totals.grandTotal.toFixed(2)}</p>
+              </div>
+            </div>
+
+            <div className="grid w-full grid-cols-1 gap-2 sm:w-auto sm:grid-cols-3">
             <Dialog open={isReportDialogOpen} onOpenChange={setIsReportDialogOpen}>
               <DialogTrigger asChild>
                 <PermissionButton 
                   variant="outline" 
-                  className="border-primary/50 text-primary hover:bg-primary/10"
+                  className="w-full border-primary/50 text-primary hover:bg-primary/10"
                   hasPermission={permissions.canManageExpenses}
                   deniedMessage="Only parents can generate court reports"
                 >
@@ -522,7 +514,7 @@ function ExpensesPageContent() {
               </DialogContent>
             </Dialog>
             
-            <Button variant="outline" onClick={exportToCSV}>
+            <Button variant="outline" onClick={exportToCSV} className="w-full">
               <Download className="h-4 w-4 mr-2" />
               CSV
             </Button>
@@ -532,7 +524,7 @@ function ExpensesPageContent() {
             }}>
               <DialogTrigger asChild>
                 <PermissionButton 
-                  className="bg-[#21B0FE] hover:bg-[#21B0FE]/90"
+                  className="w-full bg-[#21B0FE] hover:bg-[#21B0FE]/90"
                   hasPermission={permissions.canManageExpenses}
                   deniedMessage="Only parents can add expenses"
                 >
@@ -695,56 +687,7 @@ function ExpensesPageContent() {
               </DialogContent>
             </Dialog>
           </div>
-        </motion.div>
-
-        {/* Stats */}
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="grid grid-cols-2 md:grid-cols-4 gap-4"
-        >
-          <Card className="bg-gradient-to-br from-[#21B0FE]/10 to-transparent border-[#21B0FE]/20">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                <TrendingUp className="h-4 w-4" />
-                Your Expenses
-              </div>
-              <div className="text-2xl font-bold text-[#21B0FE]">${totals.myTotal.toFixed(2)}</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-br from-purple-500/10 to-transparent border-purple-500/20">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                <Users className="h-4 w-4" />
-                Co-Parent Expenses
-              </div>
-              <div className="text-2xl font-bold text-purple-600">${totals.coParentTotal.toFixed(2)}</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-br from-yellow-500/10 to-transparent border-yellow-500/20">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                <Clock className="h-4 w-4" />
-                Pending to You
-              </div>
-              <div className="text-2xl font-bold text-yellow-600">${totals.pendingToMe.toFixed(2)}</div>
-              {totals.pendingRequestsToMe.length > 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {totals.pendingRequestsToMe.length} request(s)
-                </p>
-              )}
-            </CardContent>
-          </Card>
-          <Card className="bg-gradient-to-br from-green-500/10 to-transparent border-green-500/20">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                <DollarSign className="h-4 w-4" />
-                Total Tracked
-              </div>
-              <div className="text-2xl font-bold text-green-600">${totals.grandTotal.toFixed(2)}</div>
-            </CardContent>
-          </Card>
+          </div>
         </motion.div>
 
         {/* Expense Charts */}
@@ -805,45 +748,53 @@ function ExpensesPageContent() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="flex flex-col sm:flex-row gap-3"
+          className="rounded-2xl border bg-card p-4"
         >
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search expenses..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="mb-3 space-y-1">
+            <p className="text-sm font-medium text-foreground">Find an expense fast</p>
+            <p className="text-sm text-muted-foreground">
+              Search the log or narrow it by category and month before you export.
+            </p>
           </div>
-          <Select value={filterCategory} onValueChange={setFilterCategory}>
-            <SelectTrigger className="w-[180px]">
-              <Filter className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {EXPENSE_CATEGORIES.map((cat) => (
-                <SelectItem key={cat.value} value={cat.value}>
-                  {cat.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterMonth} onValueChange={setFilterMonth}>
-            <SelectTrigger className="w-[180px]">
-              <Calendar className="h-4 w-4 mr-2" />
-              <SelectValue placeholder="Month" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Time</SelectItem>
-              {uniqueMonths.map((month) => (
-                <SelectItem key={month} value={month}>
-                  {format(parseISO(`${month}-01`), 'MMMM yyyy')}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search expenses..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger className="w-full">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {EXPENSE_CATEGORIES.map((cat) => (
+                  <SelectItem key={cat.value} value={cat.value}>
+                    {cat.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={filterMonth} onValueChange={setFilterMonth}>
+              <SelectTrigger className="w-full">
+                <Calendar className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Month" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Time</SelectItem>
+                {uniqueMonths.map((month) => (
+                  <SelectItem key={month} value={month}>
+                    {format(parseISO(`${month}-01`), 'MMMM yyyy')}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </motion.div>
 
         {/* Expenses List */}
@@ -867,6 +818,15 @@ function ExpensesPageContent() {
                   ? "Start tracking shared expenses to request reimbursements and export reports."
                   : "Try adjusting your filters."}
               </p>
+              {expenses.length === 0 && !permissions.isViewOnly && (
+                <Button
+                  className="mt-4 bg-[#21B0FE] hover:bg-[#21B0FE]/90"
+                  onClick={() => setIsAddOpen(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Your First Expense
+                </Button>
+              )}
             </motion.div>
           ) : (
             <AnimatePresence>
@@ -897,7 +857,7 @@ function ExpensesPageContent() {
                               )}
                               {!isMyExpense && (
                                 <Badge className="bg-purple-100 text-purple-700 dark:bg-purple-900/30">
-                                  Co-parent
+                                  Other parent/guardian
                                 </Badge>
                               )}
                             </div>
@@ -928,7 +888,7 @@ function ExpensesPageContent() {
                               <>
                                 {pendingRequest ? (
                                   getStatusBadge('pending')
-                                ) : expense.split_percentage < 100 && profile?.co_parent_id && (
+                                ) : expense.split_percentage < 100 && reimbursementRecipientId && (
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -953,7 +913,7 @@ function ExpensesPageContent() {
                               </>
                             )}
                             
-                            {/* Show request status for co-parent expenses */}
+                            {/* Show request status for other active-family parent/guardian expenses */}
                             {!isMyExpense && pendingRequest && (
                               <div className="text-right">
                                 {getStatusBadge(pendingRequest.status)}
@@ -993,7 +953,7 @@ function ExpensesPageContent() {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Based on {100 - (reimbursementExpense?.split_percentage || 50)}% co-parent share
+                  Based on {100 - (reimbursementExpense?.split_percentage || 50)}% other parent/guardian share
                 </p>
               </div>
               <div className="space-y-2">

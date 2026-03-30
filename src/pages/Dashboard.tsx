@@ -8,7 +8,7 @@
  * LAW 2: Summary cards answer "what's happening today" before detail
  * LAW 3: Ownership uses parent-a semantic tokens for user distinction
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Calendar, MessageSquare, Users, ArrowRight, Clock, BookHeart, DollarSign } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -27,6 +27,8 @@ import { useRealtimeChildren } from "@/hooks/useRealtimeChildren";
 import { DashboardCallWidget } from "@/components/calls/DashboardCallWidget";
 import { BlogDashboardCard } from "@/components/dashboard/BlogDashboardCard";
 import { resolveSenderName } from "@/lib/displayResolver";
+import { fetchFamilyParentProfiles, type FamilyParentProfile } from "@/lib/familyScope";
+import { canAccessProtectedRoute } from "@/lib/routeAccess";
 import type { Tables } from "@/integrations/supabase/types";
 
 type Profile = Tables<"profiles">;
@@ -43,8 +45,8 @@ interface RecentMessage {
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const { isParent, profileId: activeProfileId } = useFamilyRole();
-  const { children: realtimeChildren, loading: childrenLoading } = useRealtimeChildren();
+  const { isParent, isThirdParty, profileId: activeProfileId, activeFamilyId } = useFamilyRole();
+  const { children: realtimeChildren } = useRealtimeChildren();
   const { loading: callableMembersLoading, members: callableMembers } = useCallableFamilyMembers();
   const {
     activeSession,
@@ -53,11 +55,12 @@ const Dashboard = () => {
     sessions,
   } = useCallSessions(null);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [coParent, setCoParent] = useState<Profile | null>(null);
+  const [otherParent, setOtherParent] = useState<FamilyParentProfile | null>(null);
   const [messages, setMessages] = useState<RecentMessage[]>([]);
   const [schedule, setSchedule] = useState<CustodySchedule | null>(null);
   const [loading, setLoading] = useState(true);
   const [journalCount, setJournalCount] = useState(0);
+  const requestVersionRef = useRef(0);
 
   // Map children with age
   const children = realtimeChildren.map(child => ({
@@ -68,99 +71,123 @@ const Dashboard = () => {
   }));
 
   const fetchDashboardData = useCallback(async () => {
-    if (!user) return;
+    const requestVersion = ++requestVersionRef.current;
+
+    if (!user || !activeProfileId || !activeFamilyId) {
+      if (requestVersion === requestVersionRef.current) {
+        setProfile(null);
+        setOtherParent(null);
+        setMessages([]);
+        setSchedule(null);
+        setJournalCount(0);
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
 
     try {
-      // Fetch user's profile
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("user_id", user.id)
-        .maybeSingle();
+      const startOfMonth = new Date();
+      startOfMonth.setDate(1);
+      startOfMonth.setHours(0, 0, 0, 0);
 
-      setProfile(profileData);
-
-      // Fetch co-parent if linked
-      if (profileData?.co_parent_id) {
-        const { data: coParentData } = await supabase
+      const [
+        profileRes,
+        familyParentProfiles,
+        threadsRes,
+        scheduleRes,
+        journalRes,
+      ] = await Promise.all([
+        supabase
           .from("profiles")
           .select("*")
-          .eq("id", profileData.co_parent_id)
-          .maybeSingle();
-        setCoParent(coParentData);
-      }
-
-      // Fetch recent thread messages if profile exists
-      if (profileData) {
-        // Get threads where user is a participant
-        const { data: threads } = await supabase
+          .eq("id", activeProfileId)
+          .maybeSingle(),
+        fetchFamilyParentProfiles(activeFamilyId),
+        supabase
           .from("message_threads")
           .select("id")
-          .or(`participant_a_id.eq.${profileData.id},participant_b_id.eq.${profileData.id},thread_type.eq.family_channel`);
-
-        if (threads && threads.length > 0) {
-          const threadIds = threads.map(t => t.id);
-          const { data: messagesData } = await supabase
-            .from("thread_messages")
-            .select("*")
-            .in("thread_id", threadIds)
-            .order("created_at", { ascending: false })
-            .limit(3);
-
-          if (messagesData && messagesData.length > 0) {
-            const senderIds = [...new Set(messagesData.map(m => m.sender_id))];
-            const { data: senderProfiles } = await supabase
-              .from("profiles")
-              .select("*")
-              .in("id", senderIds);
-
-            const messagesWithSenders: RecentMessage[] = messagesData.map(msg => ({
-              id: msg.id,
-              thread_id: msg.thread_id,
-              content: msg.content,
-              created_at: msg.created_at,
-              sender_id: msg.sender_id,
-              sender: senderProfiles?.find(p => p.id === msg.sender_id)
-            }));
-            setMessages(messagesWithSenders);
-          }
-        }
-      }
-
-      // Fetch custody schedule if profile exists
-      if (profileData) {
-        const { data: scheduleData } = await supabase
+          .eq("family_id", activeFamilyId),
+        supabase
           .from("custody_schedules")
           .select("*")
-          .or(`parent_a_id.eq.${profileData.id},parent_b_id.eq.${profileData.id}`)
-          .maybeSingle();
-        setSchedule(scheduleData);
-
-        // Fetch journal entry count for this month
-        const startOfMonth = new Date();
-        startOfMonth.setDate(1);
-        startOfMonth.setHours(0, 0, 0, 0);
-        
-        const { count } = await supabase
+          .eq("family_id", activeFamilyId)
+          .maybeSingle(),
+        supabase
           .from("journal_entries")
           .select("*", { count: 'exact', head: true })
           .eq("user_id", user.id)
-          .gte("created_at", startOfMonth.toISOString());
-        
-        setJournalCount(count || 0);
+          .gte("created_at", startOfMonth.toISOString()),
+      ]);
+
+      if (requestVersion !== requestVersionRef.current) {
+        return;
       }
+
+      setProfile(profileRes.data ?? null);
+      setOtherParent(familyParentProfiles.find((familyParent) => familyParent.profileId !== activeProfileId) ?? null);
+      setSchedule(scheduleRes.data ?? null);
+      setJournalCount(journalRes.count || 0);
+
+      const threadIds = (threadsRes.data ?? []).map((thread) => thread.id);
+      if (threadIds.length === 0) {
+        setMessages([]);
+        return;
+      }
+
+      const { data: messagesData } = await supabase
+        .from("thread_messages")
+        .select("*")
+        .in("thread_id", threadIds)
+        .order("created_at", { ascending: false })
+        .limit(3);
+
+      if (requestVersion !== requestVersionRef.current) {
+        return;
+      }
+
+      if (!messagesData || messagesData.length === 0) {
+        setMessages([]);
+        return;
+      }
+
+      const senderIds = [...new Set(messagesData.map((message) => message.sender_id))];
+      const { data: senderProfiles } = await supabase
+        .from("profiles")
+        .select("*")
+        .in("id", senderIds);
+
+      if (requestVersion !== requestVersionRef.current) {
+        return;
+      }
+
+      const messagesWithSenders: RecentMessage[] = messagesData.map((message) => ({
+        id: message.id,
+        thread_id: message.thread_id,
+        content: message.content,
+        created_at: message.created_at,
+        sender_id: message.sender_id,
+        sender: senderProfiles?.find((senderProfile) => senderProfile.id === message.sender_id),
+      }));
+      setMessages(messagesWithSenders);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
+      if (requestVersion === requestVersionRef.current) {
+        setMessages([]);
+        setSchedule(null);
+        setOtherParent(null);
+      }
     } finally {
-      setLoading(false);
+      if (requestVersion === requestVersionRef.current) {
+        setLoading(false);
+      }
     }
-  }, [user]);
+  }, [activeFamilyId, activeProfileId, user]);
 
   useEffect(() => {
-    if (user) {
-      void fetchDashboardData();
-    }
-  }, [user, fetchDashboardData]);
+    void fetchDashboardData();
+  }, [fetchDashboardData]);
 
   // Check if today is an exchange day based on schedule pattern
   const isExchangeDay = () => {
@@ -237,6 +264,15 @@ const Dashboard = () => {
     [createCall],
   );
 
+  const canAccessRoute = useCallback(
+    (pathname: string) =>
+      canAccessProtectedRoute(pathname, {
+        activeFamilyId,
+        isThirdParty,
+      }),
+    [activeFamilyId, isThirdParty],
+  );
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -272,13 +308,16 @@ const Dashboard = () => {
       href: "/dashboard/expenses",
       icon: DollarSign,
     },
-  ];
+  ].filter((link) => canAccessRoute(link.href));
+
+  const canAccessChildrenRoute = canAccessRoute("/dashboard/children");
+  const canAccessSettingsRoute = canAccessRoute("/dashboard/settings");
 
   const heroTitle = getFirstName() ? `${getGreeting()}, ${getFirstName()}` : "Your co-parenting dashboard";
-  const heroEyebrow = coParent ? "Family connected" : "Finish setup";
-  const heroDescription = coParent
+  const heroEyebrow = otherParent ? "Family connected" : "Finish setup";
+  const heroDescription = otherParent
     ? "Check the plan, review recent communication, and jump into the next task without digging through the full app."
-    : "You have the workspace ready. Link your co-parent, add the schedule, and keep the important records in one place.";
+    : "You have the workspace ready. Add another parent or guardian, set the schedule, and keep the important records in one place.";
   const statusCards = [
     {
       label: "Children",
@@ -401,9 +440,9 @@ const Dashboard = () => {
                 {schedule ? (isExchangeDay() ? "Exchange day" : "Schedule active") : "Set up your schedule"}
               </p>
               <p className="text-sm text-parent-a/70 mt-2">
-                {coParent
-                  ? `Co-parent: ${coParent.full_name || coParent.email}`
-                  : "Link with your co-parent to get started"}
+                {otherParent
+                  ? `Other parent/guardian: ${otherParent.fullName || "Connected"}`
+                  : "Add another parent or guardian to get started"}
               </p>
             </div>
             <div className="p-4 rounded-xl bg-muted border border-border">
@@ -455,18 +494,22 @@ const Dashboard = () => {
               <Clock className="w-5 h-5 text-muted-foreground" />
             </div>
             <div className="space-y-3">
-              {coParent ? (
+              {otherParent ? (
                 <p className="text-sm text-muted-foreground">
                   Set up your custody schedule to see upcoming exchanges.
                 </p>
               ) : (
                 <div className="text-center py-4">
                   <p className="text-sm text-muted-foreground mb-3">
-                    Link with your co-parent to manage exchanges
+                    {canAccessSettingsRoute
+                      ? "Add another parent or guardian to manage exchanges"
+                      : "A parent or guardian needs to finish family setup before exchanges can appear"}
                   </p>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to="/dashboard/settings">Set Up</Link>
-                  </Button>
+                  {canAccessSettingsRoute && (
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to="/dashboard/settings">Set Up</Link>
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -514,50 +557,52 @@ const Dashboard = () => {
           </motion.div>
 
           {/* Children Quick Access */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="rounded-2xl border border-border bg-card p-5"
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-display font-semibold">Your Children</h3>
-              <Users className="w-5 h-5 text-muted-foreground" />
-            </div>
-            <div className="space-y-3">
-              {children.length > 0 ? (
-                children.map((child) => (
-                  <Link
-                    key={child.id}
-                    to="/dashboard/children"
-                    className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
-                  >
-                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
-                      {child.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{child.name}</p>
-                      {child.age !== null && (
-                        <p className="text-xs text-muted-foreground">{child.age} years old</p>
-                      )}
-                    </div>
-                  </Link>
-                ))
-              ) : (
-                <div className="text-center py-4">
-                  <p className="text-sm text-muted-foreground mb-3">
-                    Add your children's information
-                  </p>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link to="/dashboard/children">Add Child</Link>
-                  </Button>
-                </div>
-              )}
-            </div>
-            <Button variant="ghost" className="w-full mt-3" asChild>
-              <Link to="/dashboard/children">Manage Child Info</Link>
-            </Button>
-          </motion.div>
+          {canAccessChildrenRoute && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="rounded-2xl border border-border bg-card p-5"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-display font-semibold">Your Children</h3>
+                <Users className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <div className="space-y-3">
+                {children.length > 0 ? (
+                  children.map((child) => (
+                    <Link
+                      key={child.id}
+                      to="/dashboard/children"
+                      className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold">
+                        {child.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{child.name}</p>
+                        {child.age !== null && (
+                          <p className="text-xs text-muted-foreground">{child.age} years old</p>
+                        )}
+                      </div>
+                    </Link>
+                  ))
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Add your children's information
+                    </p>
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to="/dashboard/children">Add Child</Link>
+                    </Button>
+                  </div>
+                )}
+              </div>
+              <Button variant="ghost" className="w-full mt-3" asChild>
+                <Link to="/dashboard/children">Manage Child Info</Link>
+              </Button>
+            </motion.div>
+          )}
 
           {/* Journal Quick Access */}
           <motion.div

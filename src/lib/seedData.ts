@@ -95,10 +95,17 @@ export const seedSchedule = async (): Promise<SeedResult> => {
       return { success: false, message: "Must be logged in to seed data" };
     }
 
-    // Get current user's profile
+    const activeFamilyId = localStorage.getItem(`coparrent.activeFamily.${user.user.id}`);
+    if (!activeFamilyId) {
+      return {
+        success: false,
+        message: "Select an active family with two parents or guardians before creating a demo schedule.",
+      };
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
-      .select("id, co_parent_id")
+      .select("id")
       .eq("user_id", user.user.id)
       .single();
 
@@ -106,11 +113,25 @@ export const seedSchedule = async (): Promise<SeedResult> => {
       return { success: false, message: "Profile not found" };
     }
 
-    // Need a co-parent for schedule
-    if (!profile.co_parent_id) {
+    const { data: familyAdults, error: adultsError } = await supabase
+      .from("family_members")
+      .select("profile_id")
+      .eq("family_id", activeFamilyId)
+      .eq("status", "active")
+      .in("role", ["parent", "guardian"]);
+
+    if (adultsError) {
+      console.error("Failed to resolve family adults for demo schedule:", adultsError);
+      return { success: false, message: "Failed to resolve the active family" };
+    }
+
+    const otherAdultProfileId =
+      (familyAdults || []).find((adult) => adult.profile_id !== profile.id)?.profile_id ?? null;
+
+    if (!otherAdultProfileId) {
       return { 
         success: false, 
-        message: "Need a linked co-parent to create a schedule. Invite a co-parent first." 
+        message: "Need another active parent or guardian in the selected family to create a demo schedule."
       };
     }
 
@@ -118,8 +139,9 @@ export const seedSchedule = async (): Promise<SeedResult> => {
     const { data: schedule, error } = await supabase
       .from("custody_schedules")
       .insert({
+        family_id: activeFamilyId,
         parent_a_id: profile.id,
-        parent_b_id: profile.co_parent_id,
+        parent_b_id: otherAdultProfileId,
         pattern: "2-2-3",
         start_date: new Date().toISOString().split("T")[0],
         exchange_time: "18:00",

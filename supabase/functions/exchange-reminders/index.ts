@@ -7,17 +7,6 @@ import { buildAppUrl } from "../_shared/appUrl.ts";
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 type SupabaseServiceClient = ReturnType<typeof createClient>;
 
-interface UpcomingExchange {
-  schedule_id: string;
-  parent_a_id: string;
-  parent_b_id: string;
-  exchange_date: string;
-  exchange_time: string | null;
-  exchange_location: string | null;
-  child_ids: string[];
-  pattern: string;
-}
-
 // Reminder intervals in minutes with preference keys
 const REMINDER_INTERVALS = [
   { minutes: 1440, label: "24 hours", prefKey: "exchange_reminder_24h" },
@@ -164,6 +153,7 @@ const handler = async (req: Request): Promise<Response> => {
       .from("custody_schedules")
       .select(`
         id,
+        family_id,
         parent_a_id,
         parent_b_id,
         start_date,
@@ -182,8 +172,21 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Process each schedule to find upcoming exchanges
     for (const schedule of (schedules ?? []) as ScheduleRow[]) {
+      if (!schedule.family_id) {
+        console.warn(`Skipping schedule ${schedule.id} because family_id is missing`);
+        results.skipped++;
+        continue;
+      }
+
       // Calculate next exchange date based on pattern
       const exchanges = calculateUpcomingExchanges(schedule, now);
+      const reminderRecipients = await getFamilyReminderRecipients(supabase, schedule.family_id);
+
+      if (reminderRecipients.length === 0) {
+        console.warn(`No active family reminder recipients found for schedule ${schedule.id}`);
+        results.skipped++;
+        continue;
+      }
 
       for (const exchange of exchanges) {
         // Check each reminder interval
@@ -198,8 +201,8 @@ const handler = async (req: Request): Promise<Response> => {
             // Get child names
             const childNames = await getChildNames(supabase, schedule.child_ids || []);
 
-            // Send to both parents
-            for (const parentId of [schedule.parent_a_id, schedule.parent_b_id]) {
+            // Send to active family parents/guardians only
+            for (const parentId of reminderRecipients) {
               const result = await sendExchangeReminder(
                 supabase,
                 parentId,
@@ -249,6 +252,7 @@ interface ExchangeDate {
 }
 
 interface ScheduleRow {
+  family_id: string | null;
   id: string;
   parent_a_id: string;
   parent_b_id: string;
@@ -263,12 +267,44 @@ interface ChildNameRow {
   name: string;
 }
 
+interface FamilyReminderRecipientRow {
+  profile_id: string;
+}
+
+const parseDateOnly = (value: string): Date => {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(year, month - 1, day);
+};
+
+async function getFamilyReminderRecipients(
+  supabase: SupabaseServiceClient,
+  familyId: string,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("family_members")
+    .select("profile_id")
+    .eq("family_id", familyId)
+    .eq("status", "active")
+    .in("role", ["parent", "guardian"]);
+
+  if (error) {
+    console.error("Error fetching family reminder recipients:", error);
+    return [];
+  }
+
+  return [...new Set(
+    ((data ?? []) as FamilyReminderRecipientRow[])
+      .map((row) => row.profile_id)
+      .filter((profileId): profileId is string => Boolean(profileId)),
+  )];
+}
+
 function calculateUpcomingExchanges(
   schedule: ScheduleRow,
   now: Date
 ): ExchangeDate[] {
   const exchanges: ExchangeDate[] = [];
-  const startDate = new Date(schedule.start_date);
+  const startDate = parseDateOnly(schedule.start_date);
   const pattern = schedule.pattern;
 
   // Calculate days between exchanges based on pattern

@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFamily } from "@/contexts/FamilyContext";
 import { useCreations } from "@/hooks/useCreations";
 
 // ============= Type Exports =============
@@ -42,6 +43,7 @@ export interface AIResponse {
 
 export interface GeneratedActivity {
   id: string;
+  family_id: string | null;
   user_id: string;
   folder_id: string | null;
   title: string;
@@ -66,6 +68,7 @@ export interface GeneratedActivity {
 
 export interface ActivityFolder {
   id: string;
+  family_id: string | null;
   user_id: string;
   name: string;
   created_at: string;
@@ -90,6 +93,7 @@ export interface UseActivityGeneratorReturn {
   folders: ActivityFolder[];
   activities: GeneratedActivity[];
   chatMessages: ChatMessage[];
+  scopeError: string | null;
   
   // Loading states
   loading: boolean;
@@ -121,6 +125,7 @@ export interface UseActivityGeneratorReturn {
  */
 export const useActivityGenerator = (): UseActivityGeneratorReturn => {
   const { user } = useAuth();
+  const { activeFamilyId } = useFamily();
   const { toast } = useToast();
   const { createCreation } = useCreations();
   
@@ -139,17 +144,30 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
   
   // Legacy state
   const [lastResult, setLastResult] = useState<AIResponse | null>(null);
+  const missingFamilyScopeMessage = "Select an active family before using saved activities.";
+  const scopeError = activeFamilyId ? null : missingFamilyScopeMessage;
 
   // ============= Folder Operations =============
   
   const fetchFolders = useCallback(async () => {
-    if (!user) return;
+    if (!user) {
+      setFolders([]);
+      return;
+    }
+
+    if (!activeFamilyId) {
+      setFolders([]);
+      setSelectedFolder(null);
+      setLoading(false);
+      return;
+    }
     
     setLoading(true);
     try {
       const { data, error: fetchError } = await supabase
         .from("activity_folders")
         .select("*")
+        .eq("family_id", activeFamilyId)
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
@@ -160,15 +178,20 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [activeFamilyId, user]);
 
   const createFolder = useCallback(async (name: string): Promise<ActivityFolder | null> => {
     if (!user) return null;
+
+    if (!activeFamilyId) {
+      toast({ title: "Active family required", description: missingFamilyScopeMessage, variant: "destructive" });
+      return null;
+    }
     
     try {
       const { data, error: insertError } = await supabase
         .from("activity_folders")
-        .insert({ user_id: user.id, name })
+        .insert({ family_id: activeFamilyId, user_id: user.id, name })
         .select()
         .single();
 
@@ -181,14 +204,20 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
       toast({ title: "Error", description: "Failed to create folder.", variant: "destructive" });
       return null;
     }
-  }, [user, toast]);
+  }, [activeFamilyId, missingFamilyScopeMessage, user, toast]);
 
   const deleteFolder = useCallback(async (id: string): Promise<boolean> => {
+    if (!activeFamilyId) {
+      toast({ title: "Active family required", description: missingFamilyScopeMessage, variant: "destructive" });
+      return false;
+    }
+
     try {
       const { error: deleteError } = await supabase
         .from("activity_folders")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .eq("family_id", activeFamilyId);
 
       if (deleteError) throw deleteError;
       
@@ -200,18 +229,28 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
       toast({ title: "Error", description: "Failed to delete folder.", variant: "destructive" });
       return false;
     }
-  }, [selectedFolder, toast]);
+  }, [activeFamilyId, missingFamilyScopeMessage, selectedFolder, toast]);
 
   // ============= Activity Operations =============
 
   const fetchActivities = useCallback(async (folderId?: string) => {
-    if (!user) return;
+    if (!user) {
+      setActivities([]);
+      return;
+    }
+
+    if (!activeFamilyId) {
+      setActivities([]);
+      setLoading(false);
+      return;
+    }
     
     setLoading(true);
     try {
       let query = supabase
         .from("generated_activities")
         .select("*")
+        .eq("family_id", activeFamilyId)
         .eq("user_id", user.id)
         .order("created_at", { ascending: false });
 
@@ -240,14 +279,20 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [activeFamilyId, user]);
 
   const saveActivity = useCallback(async (data: AIResponse, folderId?: string): Promise<GeneratedActivity | null> => {
     if (!user) return null;
+
+    if (!activeFamilyId) {
+      toast({ title: "Active family required", description: missingFamilyScopeMessage, variant: "destructive" });
+      return null;
+    }
     
     try {
-      // Save to legacy generated_activities table for backward compatibility
+      let detailId: string | null = null;
       const insertData = {
+        family_id: activeFamilyId,
         user_id: user.id,
         folder_id: folderId || selectedFolder || null,
         title: data.title,
@@ -272,12 +317,11 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
 
       if (insertError) throw insertError;
       
-      // Also save to unified creations system
       try {
-        // Create activity_details record
         const { data: detail, error: detailError } = await supabase
           .from('activity_details')
           .insert([{
+            family_id: activeFamilyId,
             owner_user_id: user.id,
             activity_type: (data.type || 'activity') as string,
             age_range: data.age_range || null,
@@ -293,22 +337,42 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
           .select()
           .single();
 
-        if (!detailError && detail) {
-          // Create creations index entry
-          await createCreation({
-            type: 'activity',
-            title: data.title,
-            detail_id: detail.id,
-            meta: {
-              age_range: data.age_range,
-              duration_minutes: data.duration_minutes,
-              energy_level: data.energy_level,
-            },
-          });
+        if (detailError || !detail) {
+          throw detailError ?? new Error("Failed to create activity details.");
+        }
+
+        detailId = detail.id;
+
+        const creation = await createCreation({
+          type: 'activity',
+          title: data.title,
+          detail_id: detail.id,
+          meta: {
+            age_range: data.age_range,
+            duration_minutes: data.duration_minutes,
+            energy_level: data.energy_level,
+          },
+        });
+
+        if (!creation) {
+          throw new Error("Failed to save to the Creations Library.");
         }
       } catch (creationErr) {
-        // Log but don't fail the save - legacy table is primary
-        console.warn('Failed to save to unified creations:', creationErr);
+        if (detailId) {
+          await supabase
+            .from("activity_details")
+            .delete()
+            .eq("id", detailId)
+            .eq("family_id", activeFamilyId);
+        }
+
+        await supabase
+          .from("generated_activities")
+          .delete()
+          .eq("id", saved.id)
+          .eq("family_id", activeFamilyId);
+
+        throw creationErr;
       }
       
       toast({ title: "Activity saved!", description: `"${data.title}" saved to your collection.` });
@@ -317,14 +381,20 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
       toast({ title: "Error", description: "Failed to save activity.", variant: "destructive" });
       return null;
     }
-  }, [user, selectedFolder, toast, createCreation]);
+  }, [activeFamilyId, createCreation, missingFamilyScopeMessage, selectedFolder, toast, user]);
 
   const deleteActivity = useCallback(async (id: string): Promise<boolean> => {
+    if (!activeFamilyId) {
+      toast({ title: "Active family required", description: missingFamilyScopeMessage, variant: "destructive" });
+      return false;
+    }
+
     try {
       const { error: deleteError } = await supabase
         .from("generated_activities")
         .delete()
-        .eq("id", id);
+        .eq("id", id)
+        .eq("family_id", activeFamilyId);
 
       if (deleteError) throw deleteError;
       
@@ -335,11 +405,20 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
       toast({ title: "Error", description: "Failed to delete activity.", variant: "destructive" });
       return false;
     }
-  }, [toast]);
+  }, [activeFamilyId, missingFamilyScopeMessage, toast]);
 
   // ============= Chat & AI Generation =============
 
   const sendMessage = useCallback(async (message: string, options?: GenerateOptions) => {
+    if (!activeFamilyId) {
+      setError("Select a family before generating an activity.");
+      setChatMessages(prev => [...prev, {
+        role: "assistant",
+        content: "Select a family before generating an activity.",
+      }]);
+      return;
+    }
+
     setGenerating(true);
     setError(null);
 
@@ -349,6 +428,7 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
     try {
       const { data, error: fnError } = await supabase.functions.invoke("kid-activity-generator", {
         body: {
+          familyId: activeFamilyId,
           type: "activity",
           prompt: message,
           childAge: options?.childAge,
@@ -378,7 +458,10 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
         throw new Error(data.error);
       }
 
-      const result = data.result as AIResponse;
+      const result = {
+        ...(data.result as AIResponse),
+        type: (data.type as ActivityType | undefined) ?? "activity",
+      } as AIResponse;
       setLastResult(result);
 
       // Format response for chat
@@ -397,7 +480,7 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
     } finally {
       setGenerating(false);
     }
-  }, []);
+  }, [activeFamilyId]);
 
   const clearChat = useCallback(() => {
     setChatMessages([]);
@@ -419,8 +502,21 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
     setError(null);
 
     try {
+      if (!activeFamilyId) {
+        setError("Select a family before generating an activity.");
+        toast({
+          title: "Family required",
+          description: "Select a family before generating an activity.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
       const { data, error: fnError } = await supabase.functions.invoke("kid-activity-generator", {
-        body: options,
+        body: {
+          familyId: activeFamilyId,
+          ...options,
+        },
       });
 
       if (fnError) throw fnError;
@@ -447,7 +543,10 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
         throw new Error(data.error);
       }
 
-      const result = data.result as AIResponse;
+      const result = {
+        ...(data.result as AIResponse),
+        type: (data.type as ActivityType | undefined) ?? options.type,
+      } as AIResponse;
       setLastResult(result);
       return result;
     } catch (err) {
@@ -462,13 +561,14 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
     } finally {
       setGenerating(false);
     }
-  }, [toast]);
+  }, [activeFamilyId, toast]);
 
   return {
     // Data
     folders,
     activities,
     chatMessages,
+    scopeError,
     
     // Loading states
     loading,
@@ -497,25 +597,25 @@ export const useActivityGenerator = (): UseActivityGeneratorReturn => {
 
 // Helper function to format activity response for chat
 function formatActivityResponse(activity: AIResponse): string {
-  let response = `## ${activity.title}\n\n`;
-  response += `**Ages:** ${activity.age_range}\n`;
+  let response = `${activity.title}\n\n`;
+  response += `Ages: ${activity.age_range}\n`;
   
-  if (activity.duration_minutes) response += `**Duration:** ${activity.duration_minutes} min\n`;
-  if (activity.energy_level) response += `**Energy:** ${activity.energy_level}\n`;
-  if (activity.indoor_outdoor) response += `**Location:** ${activity.indoor_outdoor}\n`;
+  if (activity.duration_minutes) response += `Duration: ${activity.duration_minutes} min\n`;
+  if (activity.energy_level) response += `Energy: ${activity.energy_level}\n`;
+  if (activity.indoor_outdoor) response += `Location: ${activity.indoor_outdoor}\n`;
   
   if (activity.materials?.length) {
-    response += `\n**Materials:**\n`;
+    response += `\nMaterials:\n`;
     activity.materials.forEach(m => response += `• ${m}\n`);
   }
   
   if (activity.steps?.length) {
-    response += `\n**Steps:**\n`;
+    response += `\nSteps:\n`;
     activity.steps.forEach((s, i) => response += `${i + 1}. ${s}\n`);
   }
   
   if (activity.safety_notes) {
-    response += `\n⚠️ **Safety:** ${activity.safety_notes}`;
+    response += `\nSafety: ${activity.safety_notes}`;
   }
   
   return response;

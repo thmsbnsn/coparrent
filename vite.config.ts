@@ -1,8 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import { fileURLToPath } from "url";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -113,7 +116,15 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "favicon.svg", "robots.txt", "offline.html"],
+      includeAssets: [
+        "favicon.ico",
+        "favicon.svg",
+        "favicon-32x32.png",
+        "favicon-16x16.png",
+        "apple-touch-icon.png",
+        "robots.txt",
+        "offline.html",
+      ],
       manifest: {
         id: "/",
         name: "CoParrent - Co-Parenting Custody Toolkit",

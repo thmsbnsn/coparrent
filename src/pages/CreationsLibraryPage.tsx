@@ -49,6 +49,7 @@ import {
   Users,
   Lock,
   Eye,
+  AlertTriangle,
 } from "lucide-react";
 import { useCreations, type Creation, type CreationType, type CreationFilters } from "@/hooks/useCreations";
 import { format } from "date-fns";
@@ -62,6 +63,7 @@ const CreationsLibraryContent = () => {
     folders,
     familyMembers,
     loading,
+    scopeError,
     fetchCreations,
     fetchFolders,
     fetchFamilyMembers,
@@ -92,6 +94,7 @@ const CreationsLibraryContent = () => {
   const [currentShares, setCurrentShares] = useState<string[]>([]);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const showScopeBlockedState = !loading && Boolean(scopeError) && creations.length === 0;
 
   // Load data
   useEffect(() => {
@@ -213,13 +216,30 @@ const CreationsLibraryContent = () => {
               </p>
             </div>
           </div>
-          <Button onClick={() => setNewFolderDialogOpen(true)} variant="outline" className="gap-2">
+          <Button
+            onClick={() => setNewFolderDialogOpen(true)}
+            variant="outline"
+            className="gap-2"
+            disabled={Boolean(scopeError)}
+          >
             <FolderPlus className="h-4 w-4" />
             New Folder
           </Button>
         </div>
 
         {/* Filters */}
+        {scopeError && (
+          <Card className="border-amber-500/40 bg-amber-50/40 dark:bg-amber-900/10">
+            <CardContent className="flex items-start gap-3 p-4">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+              <div>
+                <p className="font-medium">Creations Library is unavailable</p>
+                <p className="text-sm text-muted-foreground">{scopeError}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="flex flex-wrap gap-3 items-center">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -317,6 +337,23 @@ const CreationsLibraryContent = () => {
               <Skeleton key={i} className={viewMode === 'grid' ? "h-48" : "h-16"} />
             ))}
           </div>
+        ) : showScopeBlockedState ? (
+          <Card className="p-12 text-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="h-16 w-16 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center">
+                <AlertTriangle className="h-8 w-8" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-lg">Active family required</h3>
+                <p className="text-muted-foreground">
+                  {scopeError}
+                </p>
+              </div>
+              <Button onClick={() => navigate('/dashboard')}>
+                Go to Dashboard
+              </Button>
+            </div>
+          </Card>
         ) : creations.length === 0 ? (
           <Card className="p-12 text-center">
             <div className="flex flex-col items-center gap-4">
@@ -402,7 +439,11 @@ const CreationsLibraryContent = () => {
               Choose who can view and export this creation
             </DialogDescription>
           </DialogHeader>
-          {familyMembers.length === 0 ? (
+          {scopeError ? (
+            <p className="text-center py-4 text-muted-foreground">
+              {scopeError}
+            </p>
+          ) : familyMembers.length === 0 ? (
             <p className="text-muted-foreground text-center py-4">
               No family members to share with
             </p>
@@ -420,7 +461,7 @@ const CreationsLibraryContent = () => {
                     />
                     <div className="flex-1">
                       <p className="font-medium">{member.full_name}</p>
-                      <p className="text-sm text-muted-foreground">{member.email}</p>
+                      <p className="text-sm text-muted-foreground">{member.email || "No email on file"}</p>
                     </div>
                     <Eye className="h-4 w-4 text-muted-foreground" />
                   </label>

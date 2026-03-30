@@ -24,6 +24,12 @@ interface InvitationData {
   role?: string;
 }
 
+interface InviteAcceptResult {
+  success: boolean;
+  error?: string;
+  code?: string;
+}
+
 const AcceptInvite = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -33,19 +39,34 @@ const AcceptInvite = () => {
   const [inviterName, setInviterName] = useState<string>("");
   const [inviteeEmail, setInviteeEmail] = useState<string>("");
   const [invitationType, setInvitationType] = useState<"co_parent" | "third_party">("co_parent");
+  const [lookupDegraded, setLookupDegraded] = useState(false);
   const [isAccepting, setIsAccepting] = useState(false);
 
   const token = searchParams.get("token");
   const typeParam = searchParams.get("type");
 
   const checkInvitation = useCallback(async () => {
+    const fallbackToDeferredValidation = () => {
+      setInviterName("A family member");
+      setInviteeEmail(user?.email || "");
+      setInvitationType(typeParam === "third_party" ? "third_party" : "co_parent");
+      setLookupDegraded(true);
+      setStatus("valid");
+    };
+
     try {
       // Use secure RPC function instead of direct table query
       const { data, error } = await supabase.rpc("get_invitation_by_token", {
         _token: token,
       });
 
-      if (error || !data || data.length === 0) {
+      if (error) {
+        console.error("Error checking invitation:", error);
+        fallbackToDeferredValidation();
+        return;
+      }
+
+      if (!data || data.length === 0) {
         setStatus("invalid");
         return;
       }
@@ -67,12 +88,13 @@ const AcceptInvite = () => {
       setInviterName(invitation.inviter_name || invitation.inviter_email || "A family member");
       setInviteeEmail(invitation.invitee_email);
       setInvitationType(typeParam === "third_party" ? "third_party" : "co_parent");
+      setLookupDegraded(false);
       setStatus("valid");
     } catch (error) {
       console.error("Error checking invitation:", error);
-      setStatus("invalid");
+      fallbackToDeferredValidation();
     }
-  }, [token, typeParam]);
+  }, [token, typeParam, user?.email]);
 
   useEffect(() => {
     if (token) {
@@ -81,6 +103,29 @@ const AcceptInvite = () => {
       setStatus("invalid");
     }
   }, [checkInvitation, token]);
+
+  const handleInviteAcceptanceFailure = (result: InviteAcceptResult) => {
+    if (result.code === "EMAIL_MISMATCH") {
+      setStatus("wrong_email");
+      toast({
+        title: "Email mismatch",
+        description: result.error || "This invitation was sent to a different email address",
+        variant: "destructive",
+      });
+      return true;
+    }
+
+    if (result.code === "FAMILY_ID_REQUIRED") {
+      toast({
+        title: "Invitation setup incomplete",
+        description: "This invitation is missing its family scope. Ask the sender to create a new invitation.",
+        variant: "destructive",
+      });
+      return true;
+    }
+
+    return false;
+  };
 
   const handleAcceptInvitation = async () => {
     if (!user) {
@@ -103,25 +148,10 @@ const AcceptInvite = () => {
           throw new Error("Failed to accept invitation");
         }
 
-        const result = data as { success: boolean; error?: string };
+        const result = data as InviteAcceptResult;
 
         if (!result.success) {
-          if (result.error?.includes("different email")) {
-            setStatus("wrong_email");
-            toast({
-              title: "Email mismatch",
-              description: result.error,
-              variant: "destructive",
-            });
-            return;
-          }
-
-          if (result.error?.includes("Invitation family not found")) {
-            toast({
-              title: "Invitation setup incomplete",
-              description: "The inviting family needs to be refreshed before this invite can be accepted.",
-              variant: "destructive",
-            });
+          if (handleInviteAcceptanceFailure(result)) {
             return;
           }
 
@@ -163,18 +193,13 @@ const AcceptInvite = () => {
           throw new Error("Failed to accept invitation");
         }
 
-        const result = data as { success: boolean; error?: string };
+        const result = data as InviteAcceptResult;
 
         if (!result.success) {
-          if (result.error?.includes("different email")) {
-            setStatus("wrong_email");
-            toast({
-              title: "Email mismatch",
-              description: result.error,
-              variant: "destructive",
-            });
+          if (handleInviteAcceptanceFailure(result)) {
             return;
           }
+
           throw new Error(result.error || "Failed to accept invitation");
         }
 
@@ -239,6 +264,11 @@ const AcceptInvite = () => {
                 <CardDescription>
                   {inviterName} has invited you to {invitationType === "third_party" ? "join their family on" : "co-parent on"} CoParrent
                 </CardDescription>
+                {lookupDegraded ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    Invite details could not be loaded up front. Sign in to validate and continue.
+                  </p>
+                ) : null}
               </>
             )}
 

@@ -48,7 +48,6 @@ const Onboarding = lazy(() => import("./pages/Onboarding"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const CalendarPage = lazy(() => import("./pages/CalendarPage"));
 const ChildrenPage = lazy(() => import("./pages/ChildrenPage"));
-const MessagesPage = lazy(() => import("./pages/MessagesPage"));
 const MessagingHubPage = lazy(() => import("./pages/MessagingHubPage"));
 const DocumentsPage = lazy(() => import("./pages/DocumentsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
@@ -146,14 +145,14 @@ const App = () => (
                 <Route path="/dashboard/calendar" element={<ProtectedRoute><RouteErrorBoundary routeName="Calendar"><CalendarPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/children" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Children"><ChildrenPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/messages" element={<ProtectedRoute><RouteErrorBoundary routeName="Messages"><MessagingHubPage /></RouteErrorBoundary></ProtectedRoute>} />
-                <Route path="/dashboard/messages-legacy" element={<ProtectedRoute><RouteErrorBoundary routeName="Messages Legacy"><MessagesPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/messages-legacy" element={<Navigate to="/dashboard/messages" replace />} />
                 <Route path="/dashboard/documents" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Documents"><DocumentsPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/settings" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Settings"><SettingsPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/families/new" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Add Family"><AddFamilyPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/notifications" element={<ProtectedRoute><RouteErrorBoundary routeName="Notifications"><NotificationsPage /></RouteErrorBoundary></ProtectedRoute>} />
-                <Route path="/dashboard/law-library" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Law Library"><UnifiedLawLibraryPage /></RouteErrorBoundary></ProtectedRoute>} />
-                <Route path="/dashboard/law-library/resources" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Law Library"><UnifiedLawLibraryPage /></RouteErrorBoundary></ProtectedRoute>} />
-                <Route path="/dashboard/law-library/:slug" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Law Article"><LawArticleDetailPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/law-library" element={<ProtectedRoute><RouteErrorBoundary routeName="Law Library"><UnifiedLawLibraryPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/law-library/resources" element={<ProtectedRoute><RouteErrorBoundary routeName="Law Library"><UnifiedLawLibraryPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/law-library/:slug" element={<ProtectedRoute><RouteErrorBoundary routeName="Law Article"><LawArticleDetailPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/journal" element={<ProtectedRoute><RouteErrorBoundary routeName="Journal"><JournalPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/expenses" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Expenses"><ExpensesPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/sports" element={<ProtectedRoute><RouteErrorBoundary routeName="Sports"><SportsPage /></RouteErrorBoundary></ProtectedRoute>} />

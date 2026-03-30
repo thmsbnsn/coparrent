@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
+import { useChildAccount } from "@/hooks/useChildAccount";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { NotificationDropdown } from "@/components/notifications/NotificationDropdown";
@@ -30,6 +31,7 @@ import { TrialBadge } from "@/components/dashboard/TrialBadge";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { FamilySwitcher } from "@/components/family/FamilySwitcher";
+import { canAccessProtectedRoute } from "@/lib/routeAccess";
 
 const GlobalCallManager = lazy(() =>
   import("@/components/calls/GlobalCallManager").then((module) => ({ default: module.GlobalCallManager })),
@@ -42,18 +44,18 @@ interface DashboardLayoutProps {
 
 // Full navigation for parents/guardians
 const parentNavItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", thirdPartyAllowed: true, id: "nav-dashboard" },
-  { icon: Calendar, label: "Parenting Calendar", href: "/dashboard/calendar", thirdPartyAllowed: false, id: "nav-calendar" },
-  { icon: Users, label: "Child Info", href: "/dashboard/children", thirdPartyAllowed: false, id: "nav-children" },
-  { icon: Trophy, label: "Sports Hub", href: "/dashboard/sports", thirdPartyAllowed: false, id: "nav-sports" },
-  { icon: Baby, label: "Kids Hub", href: "/dashboard/kids-hub", thirdPartyAllowed: false, id: "nav-kids-hub" },
-  { icon: MessageSquare, label: "Messaging Hub", href: "/dashboard/messages", thirdPartyAllowed: true, id: "nav-messages" },
-  { icon: FileText, label: "Documents", href: "/dashboard/documents", thirdPartyAllowed: false, id: "nav-documents" },
-  { icon: DollarSign, label: "Expenses", href: "/dashboard/expenses", thirdPartyAllowed: false, id: "nav-expenses" },
-  { icon: BookHeart, label: "Journal", href: "/dashboard/journal", thirdPartyAllowed: true, id: "nav-journal" },
-  { icon: Scale, label: "Law Library", href: "/dashboard/law-library", thirdPartyAllowed: true, id: "nav-law-library" },
-  { icon: BookOpen, label: "Blog", href: "/dashboard/blog", thirdPartyAllowed: true, id: "nav-blog" },
-  { icon: Settings, label: "Settings", href: "/dashboard/settings", thirdPartyAllowed: false, id: "nav-settings" },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", id: "nav-dashboard" },
+  { icon: Calendar, label: "Parenting Calendar", href: "/dashboard/calendar", id: "nav-calendar" },
+  { icon: Users, label: "Child Info", href: "/dashboard/children", id: "nav-children" },
+  { icon: Trophy, label: "Sports Hub", href: "/dashboard/sports", id: "nav-sports" },
+  { icon: Baby, label: "Kids Hub", href: "/dashboard/kids-hub", id: "nav-kids-hub" },
+  { icon: MessageSquare, label: "Messaging Hub", href: "/dashboard/messages", id: "nav-messages" },
+  { icon: FileText, label: "Documents", href: "/dashboard/documents", id: "nav-documents" },
+  { icon: DollarSign, label: "Expenses", href: "/dashboard/expenses", id: "nav-expenses" },
+  { icon: BookHeart, label: "Journal", href: "/dashboard/journal", id: "nav-journal" },
+  { icon: Scale, label: "Law Library", href: "/dashboard/law-library", id: "nav-law-library" },
+  { icon: BookOpen, label: "Blog", href: "/dashboard/blog", id: "nav-blog" },
+  { icon: Settings, label: "Settings", href: "/dashboard/settings", id: "nav-settings" },
 ];
 
 /**
@@ -66,9 +68,9 @@ const parentNavItems = [
  * @see src/lib/routes.ts for route registry
  */
 const lawOfficeNavItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", thirdPartyAllowed: true, id: "nav-dashboard" },
-  { icon: FileText, label: "Documents", href: "/dashboard/documents", thirdPartyAllowed: false, id: "nav-documents" },
-  { icon: Settings, label: "Settings", href: "/dashboard/settings", thirdPartyAllowed: false, id: "nav-settings" },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", id: "nav-dashboard" },
+  { icon: FileText, label: "Documents", href: "/dashboard/documents", id: "nav-documents" },
+  { icon: Settings, label: "Settings", href: "/dashboard/settings", id: "nav-settings" },
 ];
 
 export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayoutProps) => {
@@ -78,14 +80,22 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut, user } = useAuth();
-  const { isThirdParty } = useFamilyRole();
+  const { activeFamilyId, isChild, isThirdParty, loading: roleLoading } = useFamilyRole();
+  const { isChildAccount, loading: childLoading } = useChildAccount();
   const { toast } = useToast();
 
   // Filter nav items based on user role
   const allNavItems = userRole === "lawoffice" ? lawOfficeNavItems : parentNavItems;
-  const navItems = isThirdParty 
-    ? allNavItems.filter(item => item.thirdPartyAllowed) 
-    : allNavItems;
+  const navItems = roleLoading || childLoading
+    ? []
+    : allNavItems.filter((item) =>
+        canAccessProtectedRoute(item.href, {
+          activeFamilyId,
+          isChild,
+          isChildAccount,
+          isThirdParty,
+        }),
+      );
 
   useEffect(() => {
     const fetchUserProfile = async () => {

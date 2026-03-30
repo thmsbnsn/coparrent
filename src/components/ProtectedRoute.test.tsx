@@ -29,6 +29,7 @@ const defaultAuthState = {
 };
 
 const defaultFamilyRoleState = {
+  activeFamilyId: "family-1",
   isThirdParty: false,
   isChild: false,
   loading: false,
@@ -140,5 +141,33 @@ describe("ProtectedRoute", () => {
 
     const rendered = renderProtectedRoute("/dashboard/messages", true);
     expect(rendered.textContent).toContain("dashboard-home");
+  });
+
+  it("shows an explicit failure state when a family-scoped route is missing active family context", () => {
+    mockedUseFamilyRole.mockReturnValue({
+      ...defaultFamilyRoleState,
+      activeFamilyId: null,
+    } as never);
+
+    const rendered = renderProtectedRoute("/dashboard/messages");
+    expect(rendered.textContent).toContain("Active family required");
+    expect(rendered.textContent).toContain("cannot render without an active family");
+    expect(rendered.textContent).toContain("Open onboarding");
+  });
+
+  it("denies unknown protected routes by default", () => {
+    const rendered = renderProtectedRoute("/dashboard/not-registered");
+    expect(rendered.textContent).toContain("dashboard-home");
+  });
+
+  it("allows non-family-scoped routes without an active family", () => {
+    mockedUseFamilyRole.mockReturnValue({
+      ...defaultFamilyRoleState,
+      activeFamilyId: null,
+      isThirdParty: true,
+    } as never);
+
+    const rendered = renderProtectedRoute("/dashboard/law-library");
+    expect(rendered.textContent).toContain("protected-content");
   });
 });
