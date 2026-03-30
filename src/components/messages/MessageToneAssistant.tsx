@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, AlertTriangle, CheckCircle, RefreshCw, X, Lightbulb, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { useFamily } from "@/contexts/FamilyContext";
 import { cn } from "@/lib/utils";
 import { usePremiumAccess } from "@/hooks/usePremiumAccess";
 import {
@@ -43,6 +44,7 @@ const REWRITE_MODES = [
 type RewriteMode = typeof REWRITE_MODES[number]["value"];
 
 export const MessageToneAssistant = ({ message, onRephrase, className }: MessageToneAssistantProps) => {
+  const { activeFamilyId } = useFamily();
   const [quickCheck, setQuickCheck] = useState<QuickCheck | null>(null);
   const [analysis, setAnalysis] = useState<ToneAnalysis | null>(null);
   const [rephrasedMessage, setRephrasedMessage] = useState<string | null>(null);
@@ -61,8 +63,12 @@ export const MessageToneAssistant = ({ message, onRephrase, className }: Message
     }
 
     try {
+      if (!activeFamilyId) {
+        return;
+      }
+
       const { data, error } = await supabase.functions.invoke("ai-message-assist", {
-        body: { message: text, action: "quick-check" },
+        body: { familyId: activeFamilyId, message: text, action: "quick-check" },
       });
 
       if (error) throw error;
@@ -70,7 +76,7 @@ export const MessageToneAssistant = ({ message, onRephrase, className }: Message
     } catch (err) {
       console.error("Quick check error:", err);
     }
-  }, []);
+  }, [activeFamilyId]);
 
   useEffect(() => {
     if (message === lastCheckedMessage) return;
@@ -86,11 +92,15 @@ export const MessageToneAssistant = ({ message, onRephrase, className }: Message
   }, [message, lastCheckedMessage, performQuickCheck]);
 
   const handleAnalyze = async () => {
+    if (!activeFamilyId) {
+      return;
+    }
+
     setLoading(true);
     setShowPanel(true);
     try {
       const { data, error } = await supabase.functions.invoke("ai-message-assist", {
-        body: { message, action: "analyze" },
+        body: { familyId: activeFamilyId, message, action: "analyze" },
       });
 
       if (error) throw error;
@@ -103,10 +113,14 @@ export const MessageToneAssistant = ({ message, onRephrase, className }: Message
   };
 
   const handleRephrase = async () => {
+    if (!activeFamilyId) {
+      return;
+    }
+
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("ai-message-assist", {
-        body: { message, action: "rephrase", mode: selectedMode },
+        body: { familyId: activeFamilyId, message, action: "rephrase", mode: selectedMode },
       });
 
       if (error) throw error;

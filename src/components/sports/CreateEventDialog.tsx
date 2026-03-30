@@ -56,6 +56,8 @@ interface CreateEventDialogProps {
   defaultActivityId?: string;
 }
 
+const UNASSIGNED_PARENT_VALUE = "unassigned-parent";
+
 export const CreateEventDialog = ({
   open,
   onOpenChange,
@@ -284,14 +286,16 @@ export const CreateEventDialog = ({
               <div className="space-y-2">
                 <Label htmlFor="dropoff_parent_id">Drop-off By</Label>
                 <Select
-                  value={watch("dropoff_parent_id") || ""}
-                  onValueChange={(value) => setValue("dropoff_parent_id", value)}
+                  value={watch("dropoff_parent_id") || UNASSIGNED_PARENT_VALUE}
+                  onValueChange={(value) =>
+                    setValue("dropoff_parent_id", value === UNASSIGNED_PARENT_VALUE ? "" : value)
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select parent" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Not assigned</SelectItem>
+                    <SelectItem value={UNASSIGNED_PARENT_VALUE}>Not assigned</SelectItem>
                     {parentProfiles.map((parent) => (
                       <SelectItem key={parent.id} value={parent.id}>
                         {parent.full_name}
@@ -303,14 +307,16 @@ export const CreateEventDialog = ({
               <div className="space-y-2">
                 <Label htmlFor="pickup_parent_id">Pick-up By</Label>
                 <Select
-                  value={watch("pickup_parent_id") || ""}
-                  onValueChange={(value) => setValue("pickup_parent_id", value)}
+                  value={watch("pickup_parent_id") || UNASSIGNED_PARENT_VALUE}
+                  onValueChange={(value) =>
+                    setValue("pickup_parent_id", value === UNASSIGNED_PARENT_VALUE ? "" : value)
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select parent" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Not assigned</SelectItem>
+                    <SelectItem value={UNASSIGNED_PARENT_VALUE}>Not assigned</SelectItem>
                     {parentProfiles.map((parent) => (
                       <SelectItem key={parent.id} value={parent.id}>
                         {parent.full_name}

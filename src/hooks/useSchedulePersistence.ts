@@ -1,13 +1,14 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { useFamily } from "@/contexts/FamilyContext";
+import { fetchFamilyParentProfiles } from "@/lib/familyScope";
 import type { ScheduleConfig, HolidayConfig } from "@/components/calendar/CalendarWizard";
 import type { Json } from "@/integrations/supabase/types";
 
-// Extended type that includes our new columns (not yet in generated types)
 interface DatabaseSchedule {
   id: string;
+  family_id: string | null;
   parent_a_id: string;
   parent_b_id: string;
   pattern: string;
@@ -23,95 +24,94 @@ interface DatabaseSchedule {
   updated_at: string;
 }
 
+const toScheduleConfig = (dbSchedule: DatabaseSchedule): ScheduleConfig => {
+  const parsedHolidays: HolidayConfig[] = Array.isArray(dbSchedule.holidays)
+    ? (dbSchedule.holidays as unknown as HolidayConfig[])
+    : [];
+
+  return {
+    pattern: dbSchedule.pattern,
+    customPattern: dbSchedule.custom_pattern || undefined,
+    startDate: new Date(dbSchedule.start_date),
+    startingParent: (dbSchedule.starting_parent as "A" | "B") || "A",
+    exchangeTime: dbSchedule.exchange_time || "6:00 PM",
+    exchangeLocation: dbSchedule.exchange_location || "",
+    alternateLocation: dbSchedule.alternate_exchange_location || "",
+    holidays: parsedHolidays,
+  };
+};
+
 export const useSchedulePersistence = () => {
-  const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
+  const { activeFamilyId, profileId, loading: familyLoading, isParentInActiveFamily } = useFamily();
   const [scheduleConfig, setScheduleConfig] = useState<ScheduleConfig | null>(null);
   const [scheduleId, setScheduleId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [userProfileId, setUserProfileId] = useState<string | null>(null);
-  const [coParentId, setCoParentId] = useState<string | null>(null);
+  const requestVersionRef = useRef(0);
 
-  // Fetch user's profile ID and co-parent ID
+  const clearScheduleState = useCallback(() => {
+    setScheduleConfig(null);
+    setScheduleId(null);
+  }, []);
+
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) {
-        setLoading(false);
-        return;
-      }
+    requestVersionRef.current += 1;
+    clearScheduleState();
 
-      try {
-        const { data: profile, error } = await supabase
-          .from("profiles")
-          .select("id, co_parent_id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (error) throw error;
-
-        if (profile) {
-          setUserProfileId(profile.id);
-          setCoParentId(profile.co_parent_id);
-        } else {
-          setLoading(false);
-        }
-      } catch (error) {
-        console.error("Error fetching profile:", error);
-        setLoading(false);
-      }
-    };
-
-    if (!authLoading) {
-      fetchProfile();
+    if (!familyLoading) {
+      setLoading(Boolean(activeFamilyId));
     }
-  }, [user, authLoading]);
+  }, [activeFamilyId, familyLoading, clearScheduleState]);
 
-  // Load existing schedule
   const loadSchedule = useCallback(async () => {
-    if (!userProfileId) {
-      setLoading(false);
+    const requestVersion = ++requestVersionRef.current;
+
+    if (familyLoading) {
       return;
     }
+
+    if (!activeFamilyId) {
+      if (requestVersion === requestVersionRef.current) {
+        clearScheduleState();
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const { data, error } = await supabase
         .from("custody_schedules")
         .select("*")
-        .or(`parent_a_id.eq.${userProfileId},parent_b_id.eq.${userProfileId}`)
+        .eq("family_id", activeFamilyId)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (error) throw error;
-
-      if (data) {
-        const dbSchedule = data as unknown as DatabaseSchedule;
-        setScheduleId(dbSchedule.id);
-        
-        // Parse holidays from JSON
-        let parsedHolidays: HolidayConfig[] = [];
-        if (dbSchedule.holidays) {
-          parsedHolidays = Array.isArray(dbSchedule.holidays) 
-            ? dbSchedule.holidays as unknown as HolidayConfig[]
-            : [];
-        }
-        
-        // Convert database format to ScheduleConfig
-        const config: ScheduleConfig = {
-          pattern: dbSchedule.pattern,
-          customPattern: dbSchedule.custom_pattern || undefined,
-          startDate: new Date(dbSchedule.start_date),
-          startingParent: (dbSchedule.starting_parent as "A" | "B") || "A",
-          exchangeTime: dbSchedule.exchange_time || "6:00 PM",
-          exchangeLocation: dbSchedule.exchange_location || "",
-          alternateLocation: dbSchedule.alternate_exchange_location || "",
-          holidays: parsedHolidays,
-        };
-        
-        setScheduleConfig(config);
+      if (requestVersion !== requestVersionRef.current) {
+        return;
       }
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data) {
+        clearScheduleState();
+        return;
+      }
+
+      const dbSchedule = data as unknown as DatabaseSchedule;
+      setScheduleId(dbSchedule.id);
+      setScheduleConfig(toScheduleConfig(dbSchedule));
     } catch (error) {
+      if (requestVersion !== requestVersionRef.current) {
+        return;
+      }
+
+      clearScheduleState();
       console.error("Error loading schedule:", error);
       toast({
         title: "Error",
@@ -119,50 +119,45 @@ export const useSchedulePersistence = () => {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      if (requestVersion === requestVersionRef.current) {
+        setLoading(false);
+      }
     }
-  }, [userProfileId, toast]);
+  }, [activeFamilyId, clearScheduleState, familyLoading, toast]);
 
   useEffect(() => {
-    loadSchedule();
+    void loadSchedule();
   }, [loadSchedule]);
 
-  // Set up realtime subscription
   useEffect(() => {
-    if (!userProfileId) return;
+    if (familyLoading || !activeFamilyId) return;
 
     const channel = supabase
-      .channel('schedule-persistence')
+      .channel(`schedule-persistence-${activeFamilyId}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'custody_schedules'
+          event: "*",
+          schema: "public",
+          table: "custody_schedules",
+          filter: `family_id=eq.${activeFamilyId}`,
         },
-        (payload) => {
-          const schedule = payload.new as DatabaseSchedule;
-          const isRelevant = schedule?.parent_a_id === userProfileId || schedule?.parent_b_id === userProfileId;
-          
-          if (!isRelevant && payload.eventType !== 'DELETE') return;
-
-          // Reload schedule on any change
-          loadSchedule();
-        }
+        () => {
+          void loadSchedule();
+        },
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userProfileId, loadSchedule]);
+  }, [activeFamilyId, familyLoading, loadSchedule]);
 
-  // Save schedule to database
   const saveSchedule = async (config: ScheduleConfig): Promise<boolean> => {
-    if (!userProfileId) {
+    if (!profileId || !activeFamilyId || !isParentInActiveFamily) {
       toast({
         title: "Error",
-        description: "You must be logged in to save a schedule",
+        description: "You must be an active parent or guardian in this family to save a schedule.",
         variant: "destructive",
       });
       return false;
@@ -171,14 +166,22 @@ export const useSchedulePersistence = () => {
     setSaving(true);
 
     try {
-      // Build data object with all fields including new columns
+      const familyParentProfiles = await fetchFamilyParentProfiles(activeFamilyId);
+      const scheduleOwners = [
+        profileId,
+        ...familyParentProfiles
+          .map((profile) => profile.profileId)
+          .filter((candidate) => candidate && candidate !== profileId),
+      ];
+
       const scheduleData = {
-        parent_a_id: userProfileId,
-        parent_b_id: coParentId || userProfileId,
+        family_id: activeFamilyId,
+        parent_a_id: scheduleOwners[0],
+        parent_b_id: scheduleOwners[1] ?? scheduleOwners[0],
         pattern: config.pattern,
         custom_pattern: config.customPattern || null,
         starting_parent: config.startingParent,
-        start_date: config.startDate.toISOString().split('T')[0],
+        start_date: config.startDate.toISOString().split("T")[0],
         exchange_time: config.exchangeTime || null,
         exchange_location: config.exchangeLocation || null,
         alternate_exchange_location: config.alternateLocation || null,
@@ -186,15 +189,14 @@ export const useSchedulePersistence = () => {
       };
 
       if (scheduleId) {
-        // Update existing schedule
         const { error } = await supabase
           .from("custody_schedules")
           .update(scheduleData)
-          .eq("id", scheduleId);
+          .eq("id", scheduleId)
+          .eq("family_id", activeFamilyId);
 
         if (error) throw error;
       } else {
-        // Create new schedule
         const { data, error } = await supabase
           .from("custody_schedules")
           .insert(scheduleData)
@@ -210,7 +212,7 @@ export const useSchedulePersistence = () => {
       setScheduleConfig(config);
       toast({
         title: "Schedule Saved",
-        description: "Your custody schedule has been saved and will sync with your co-parent.",
+        description: "Your custody schedule has been saved for the active family.",
       });
       return true;
     } catch (error) {

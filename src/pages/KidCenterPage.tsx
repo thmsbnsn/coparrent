@@ -11,17 +11,19 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { Palette, Scissors, Gamepad2, ChefHat, Sparkles, Loader2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { usePremiumAccess } from "@/hooks/usePremiumAccess";
 import { useActivityGenerator, type AIResponse, ActivityType } from "@/hooks/useActivityGenerator";
 import { useChildren } from "@/hooks/useChildren";
 import { ActivityResultCard } from "@/components/kid-center/ActivityResultCard";
+
+const ANY_CHILD_VALUE = "any-child";
 
 interface ToolCardProps {
   title: string;
@@ -98,16 +100,18 @@ const ToolCard = ({
 const KidCenterPage = () => {
   const { hasAccess } = usePremiumAccess();
   const { children } = useChildren();
-  const { generate, loading, lastResult } = useActivityGenerator();
+  const { generate, loading } = useActivityGenerator();
   
-  const [selectedChild, setSelectedChild] = useState<string>("");
+  const [selectedChild, setSelectedChild] = useState<string>(ANY_CHILD_VALUE);
   const [selectedDuration, setSelectedDuration] = useState<string>("30min");
   const [selectedLocation, setSelectedLocation] = useState<"indoor" | "outdoor" | "both">("indoor");
   const [currentType, setCurrentType] = useState<ActivityType | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [result, setResult] = useState<AIResponse | null>(null);
 
-  const selectedChildData = children?.find(c => c.id === selectedChild);
+  const selectedChildData = selectedChild === ANY_CHILD_VALUE
+    ? undefined
+    : children?.find(c => c.id === selectedChild);
   const childAge = selectedChildData?.date_of_birth 
     ? Math.floor((Date.now() - new Date(selectedChildData.date_of_birth).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
     : undefined;
@@ -167,22 +171,43 @@ const KidCenterPage = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        {/* Header */}
+      <div className="space-y-5 sm:space-y-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
         >
-          <div className="flex items-start gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center">
-              <Sparkles className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl lg:text-3xl font-display font-bold">Kid Center</h1>
-              <p className="text-muted-foreground mt-1">
-                AI-powered tools to keep your kids entertained and learning
-              </p>
+          <div className="rounded-3xl border border-border bg-gradient-to-br from-primary/10 via-background to-accent/10 p-5 sm:p-6">
+            <div className="flex flex-col gap-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent">
+                  <Sparkles className="w-6 h-6 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <div className="mb-2 inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                    Power tools for kid time
+                  </div>
+                  <h1 className="text-2xl sm:text-3xl font-display font-bold">Kid Center</h1>
+                  <p className="mt-2 text-sm sm:text-base text-muted-foreground">
+                    Generate faster ideas for activities, recipes, and crafts without bouncing between
+                    multiple tools while you are already managing the day.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border bg-card/70 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Best for</p>
+                  <p className="mt-2 text-sm font-medium">Rainy days, bored moments, and last-minute plan changes</p>
+                </div>
+                <div className="rounded-2xl border bg-card/70 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tools</p>
+                  <p className="mt-2 text-sm font-medium">Activities, kitchen prompts, and arts-and-crafts ideas</p>
+                </div>
+                <div className="rounded-2xl border bg-card/70 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Also available</p>
+                  <p className="mt-2 text-sm font-medium">Coloring pages, chore charts, and Nurse Nancy in Kids Hub</p>
+                </div>
+              </div>
             </div>
           </div>
         </motion.div>
@@ -193,7 +218,7 @@ const KidCenterPage = () => {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="p-4 rounded-xl border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30"
+            className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30"
           >
             <div className="flex items-center gap-3">
               <Sparkles className="w-5 h-5 text-amber-600 dark:text-amber-400" />
@@ -202,7 +227,7 @@ const KidCenterPage = () => {
                   Premium Feature
                 </p>
                 <p className="text-sm text-amber-700 dark:text-amber-300">
-                  Upgrade to premium to access AI-powered Kid Center tools.
+                  Upgrade to Power to generate activities, recipes, and crafts from this screen.
                 </p>
               </div>
             </div>
@@ -216,10 +241,12 @@ const KidCenterPage = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <Card>
+            <Card className="border-border shadow-sm">
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Personalize</CardTitle>
-                <CardDescription>Customize activities for your child</CardDescription>
+                <CardTitle className="text-lg">Start with quick context</CardTitle>
+                <CardDescription>
+                  Give the generator enough detail to make the suggestions feel useful on the first pass.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -230,7 +257,7 @@ const KidCenterPage = () => {
                         <SelectValue placeholder="Select a child" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">Any child</SelectItem>
+                        <SelectItem value={ANY_CHILD_VALUE}>Any child</SelectItem>
                         {children?.map((child) => (
                           <SelectItem key={child.id} value={child.id}>
                             {child.name}
@@ -277,7 +304,7 @@ const KidCenterPage = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="grid grid-cols-1 md:grid-cols-3 gap-4 lg:gap-6"
+          className="grid grid-cols-1 gap-4 xl:grid-cols-3"
         >
           {tools.map((tool, index) => (
             <motion.div
@@ -297,36 +324,30 @@ const KidCenterPage = () => {
           ))}
         </motion.div>
 
-        {/* Coloring Pages - Coming Soon */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35 }}
         >
-          <Card className="opacity-60">
+          <Card className="border-border shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="p-3 rounded-xl bg-gradient-to-br from-primary/10 to-accent/10">
                   <Palette className="w-6 h-6 text-primary" />
                 </div>
-                <div className="flex gap-1.5">
-                  <Badge variant="secondary" className="text-xs">
-                    Coming Soon
-                  </Badge>
-                  <Badge variant="outline" className="text-xs gap-1">
-                    <Sparkles className="w-3 h-3" />
-                    Premium
-                  </Badge>
-                </div>
+                <Badge variant="outline" className="text-xs gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  More tools
+                </Badge>
               </div>
-              <CardTitle className="text-lg mt-3">AI Coloring Pages</CardTitle>
+              <CardTitle className="text-lg mt-3">Need the full Kids Hub?</CardTitle>
               <CardDescription className="text-sm">
-                Generate custom coloring pages featuring your child's favorite characters, animals, or themes. Perfect for quiet time activities.
+                Open the broader hub for coloring pages, chore charts, Nurse Nancy, and your saved creations.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full" disabled>
-                Coming Soon
+              <Button asChild variant="outline" className="w-full">
+                <Link to="/dashboard/kids-hub">Open Kids Hub</Link>
               </Button>
             </CardContent>
           </Card>
@@ -337,14 +358,13 @@ const KidCenterPage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="mt-8 p-6 rounded-xl bg-muted/50 border"
+          className="rounded-2xl border bg-muted/40 p-5 sm:p-6"
         >
-          <h3 className="font-semibold mb-2">About Kid Center</h3>
-          <p className="text-sm text-muted-foreground">
-            Kid Center is designed to provide parents with AI-powered tools to create engaging activities 
-            for their children. From recipes to crafts, these tools help you spend quality time 
-            with your kids while fostering creativity and learning. All content is generated with 
-            age-appropriate considerations in mind.
+          <h3 className="font-semibold mb-2">How to use this well</h3>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Give the tool the child, approximate time, and whether you need something indoors or outdoors.
+            That keeps the output practical instead of overly broad. If you want a fuller creation workflow,
+            jump into Kids Hub from above.
           </p>
         </motion.div>
       </div>

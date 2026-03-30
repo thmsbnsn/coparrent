@@ -297,7 +297,7 @@ export const CourtExportDialog = ({ open, onOpenChange }: CourtExportDialogProps
           <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
             <p className="flex items-start gap-2">
               <Shield className="h-4 w-4 mt-0.5 flex-shrink-0 text-primary" />
-              All records include timestamps and are presented in chronological order. Records cannot be modified after creation.
+              Exported sections are organized chronologically from stored record timestamps. Message records are immutable after sending, while other sections reflect the current stored activity history for the selected period.
             </p>
           </div>
         </div>

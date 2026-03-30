@@ -1,6 +1,8 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFamily } from "@/contexts/FamilyContext";
+import { fetchFamilyChildIds, fetchFamilyParentProfiles } from "@/lib/familyScope";
 import { toast } from "sonner";
 
 export interface ExportProfile {
@@ -89,6 +91,7 @@ export interface CourtExportData {
 
 export const useCourtExport = () => {
   const { user } = useAuth();
+  const { activeFamilyId, loading: familyLoading, profileId } = useFamily();
   const [loading, setLoading] = useState(false);
 
   const fetchExportData = useCallback(async (
@@ -99,99 +102,78 @@ export const useCourtExport = () => {
       return null;
     }
 
+    if (familyLoading) {
+      toast.error("Family context is still loading");
+      return null;
+    }
+
+    if (!activeFamilyId || !profileId) {
+      toast.error("Select an active family before exporting data");
+      return null;
+    }
+
     setLoading(true);
 
     try {
-      // Fetch user profile
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("id, full_name, email, co_parent_id")
-        .eq("user_id", user.id)
+        .select("id, full_name, email")
+        .eq("id", profileId)
         .maybeSingle();
 
       if (profileError || !profile) {
         throw new Error("Failed to fetch user profile");
       }
 
-      // Fetch co-parent profile
-      let coParent: ExportProfile | null = null;
-      if (profile.co_parent_id) {
-        const { data: coParentData } = await supabase
-          .from("profiles")
-          .select("id, full_name, email")
-          .eq("id", profile.co_parent_id)
-          .maybeSingle();
-        coParent = coParentData;
-      }
+      const [familyParentProfiles, familyChildIds] = await Promise.all([
+        fetchFamilyParentProfiles(activeFamilyId),
+        fetchFamilyChildIds(activeFamilyId),
+      ]);
+
+      const otherParentProfileIds = familyParentProfiles
+        .map((familyParent) => familyParent.profileId)
+        .filter((familyProfileId) => familyProfileId !== profileId);
 
       const startStr = dateRange.start.toISOString();
       const endStr = dateRange.end.toISOString();
+      const startDateOnly = startStr.split("T")[0];
+      const endDateOnly = endStr.split("T")[0];
 
-      // Fetch all data in parallel (journal entries excluded for privacy)
       const [
-        threadMessagesRes,
+        threadRes,
         expensesRes,
         scheduleRequestsRes,
-        exchangeCheckinsRes,
         scheduleRes,
-        childrenRes,
         documentAccessLogsRes,
+        childrenRes,
       ] = await Promise.all([
-        // Thread Messages (new messaging system)
         supabase
-          .from("thread_messages")
-          .select(`
-            id,
-            content,
-            created_at,
-            sender_id,
-            sender_role,
-            thread:message_threads(name, thread_type, primary_parent_id)
-          `)
-          .gte("created_at", startStr)
-          .lte("created_at", endStr)
-          .order("created_at", { ascending: true }),
+          .from("message_threads")
+          .select("id, name, thread_type")
+          .eq("family_id", activeFamilyId),
 
-        // Expenses
         supabase
           .from("expenses")
           .select("id, amount, description, category, expense_date, split_percentage, notes, created_by, child:children(name)")
-          .gte("expense_date", dateRange.start.toISOString().split('T')[0])
-          .lte("expense_date", dateRange.end.toISOString().split('T')[0])
+          .eq("family_id", activeFamilyId)
+          .gte("expense_date", startDateOnly)
+          .lte("expense_date", endDateOnly)
           .order("expense_date", { ascending: true }),
 
-        // Schedule Requests
         supabase
           .from("schedule_requests")
           .select("*")
-          .or(`requester_id.eq.${profile.id},recipient_id.eq.${profile.id}`)
+          .eq("family_id", activeFamilyId)
           .gte("created_at", startStr)
           .lte("created_at", endStr)
           .order("created_at", { ascending: true }),
 
-        // Exchange Checkins
-        supabase
-          .from("exchange_checkins")
-          .select("id, exchange_date, checked_in_at, note, user_id")
-          .eq("user_id", user.id)
-          .gte("exchange_date", dateRange.start.toISOString().split('T')[0])
-          .lte("exchange_date", dateRange.end.toISOString().split('T')[0])
-          .order("exchange_date", { ascending: true }),
-
-        // Custody Schedule
         supabase
           .from("custody_schedules")
           .select("id, pattern, start_date, exchange_time, exchange_location, holidays")
-          .or(`parent_a_id.eq.${profile.id},parent_b_id.eq.${profile.id}`)
+          .eq("family_id", activeFamilyId)
           .maybeSingle(),
 
-        // Children
-        supabase
-          .from("parent_children")
-          .select("child:children(id, name)")
-          .eq("parent_id", profile.id),
-
-        // Document Access Logs
         supabase
           .from("document_access_logs")
           .select(`
@@ -200,71 +182,131 @@ export const useCourtExport = () => {
             action,
             accessed_by,
             created_at,
-            document:documents(title, uploaded_by)
+            document:documents(title, uploaded_by, family_id)
           `)
           .gte("created_at", startStr)
           .lte("created_at", endStr)
           .order("created_at", { ascending: true }),
-        // Journal entries intentionally excluded from court exports to preserve privacy
+
+        familyChildIds.length > 0
+          ? supabase
+              .from("children")
+              .select("id, name")
+              .in("id", familyChildIds)
+              .order("name")
+          : Promise.resolve({ data: [] as Array<{ id: string; name: string }>, error: null }),
       ]);
 
-      // Process thread messages - filter to user's family threads
-      const rawThreadMessages = threadMessagesRes.data || [];
-      const messages: ExportMessage[] = rawThreadMessages
-        .filter(msg => {
-          const thread = msg.thread as { primary_parent_id: string; thread_type: string } | null;
-          if (!thread) return false;
-          // Include if user is primary parent or co-parent is primary parent
-          return thread.primary_parent_id === profile.id || 
-                 thread.primary_parent_id === profile.co_parent_id;
-        })
-        .map(msg => {
-          const thread = msg.thread as { name: string | null; thread_type: string } | null;
-          const isSender = msg.sender_id === profile.id;
-          return {
-            id: msg.id,
-            content: msg.content,
-            created_at: msg.created_at,
-            sender_id: msg.sender_id,
-            sender_name: isSender 
-              ? (profile.full_name || 'You') 
-              : (coParent?.full_name || 'Co-Parent'),
-            sender_role: msg.sender_role,
-            thread_name: thread?.name || null,
-            thread_type: thread?.thread_type || 'unknown',
-          };
-        });
+      if (threadRes.error) throw threadRes.error;
+      if (expensesRes.error) throw expensesRes.error;
+      if (scheduleRequestsRes.error) throw scheduleRequestsRes.error;
+      if (scheduleRes.error) throw scheduleRes.error;
+      if (documentAccessLogsRes.error) throw documentAccessLogsRes.error;
+      if (childrenRes.error) throw childrenRes.error;
 
-      const expenses = expensesRes.data || [];
-      const scheduleRequests = scheduleRequestsRes.data || [];
-      const exchangeCheckins = exchangeCheckinsRes.data || [];
-      const schedule = scheduleRes.data;
-      const children = (childrenRes.data || [])
-        .filter(pc => pc.child)
-        .map(pc => pc.child as { id: string; name: string });
+      const threadIds = (threadRes.data ?? []).map((thread) => thread.id);
 
-      // Process document access logs
-      const rawAccessLogs = documentAccessLogsRes.data || [];
+      const threadMessagesRes = threadIds.length > 0
+        ? await supabase
+            .from("thread_messages")
+            .select(`
+              id,
+              content,
+              created_at,
+              sender_id,
+              sender_role,
+              thread_id,
+              thread:message_threads(name, thread_type)
+            `)
+            .in("thread_id", threadIds)
+            .gte("created_at", startStr)
+            .lte("created_at", endStr)
+            .order("created_at", { ascending: true })
+        : { data: [], error: null };
+
+      if (threadMessagesRes.error) {
+        throw threadMessagesRes.error;
+      }
+
+      const scheduleIds = scheduleRes.data?.id ? [scheduleRes.data.id] : [];
+      const exchangeCheckinsRes = scheduleIds.length > 0
+        ? await supabase
+            .from("exchange_checkins")
+            .select("id, exchange_date, checked_in_at, note, user_id")
+            .in("schedule_id", scheduleIds)
+            .gte("exchange_date", startDateOnly)
+            .lte("exchange_date", endDateOnly)
+            .order("exchange_date", { ascending: true })
+        : { data: [], error: null };
+
+      if (exchangeCheckinsRes.error) {
+        throw exchangeCheckinsRes.error;
+      }
+
+      const relatedProfileIds = [...new Set([
+        ...otherParentProfileIds,
+        ...(threadMessagesRes.data ?? []).map((message) => message.sender_id),
+        ...(documentAccessLogsRes.data ?? []).map((log) => log.accessed_by),
+      ].filter((value): value is string => Boolean(value)))];
+
+      const relatedProfilesRes = relatedProfileIds.length > 0
+        ? await supabase
+            .from("profiles")
+            .select("id, full_name, email")
+            .in("id", relatedProfileIds)
+        : { data: [] as ExportProfile[], error: null };
+
+      if (relatedProfilesRes.error) {
+        throw relatedProfilesRes.error;
+      }
+
+      const relatedProfiles = new Map(
+        (relatedProfilesRes.data ?? []).map((relatedProfile) => [relatedProfile.id, relatedProfile]),
+      );
+
+      const coParent = otherParentProfileIds
+        .map((otherParentProfileId) => relatedProfiles.get(otherParentProfileId) ?? null)
+        .find((candidate): candidate is ExportProfile => Boolean(candidate)) ?? null;
+
+      const messages: ExportMessage[] = (threadMessagesRes.data ?? []).map((message) => {
+        const thread = message.thread as { name: string | null; thread_type: string } | null;
+        const senderProfile = relatedProfiles.get(message.sender_id) ?? null;
+
+        return {
+          id: message.id,
+          content: message.content,
+          created_at: message.created_at,
+          sender_id: message.sender_id,
+          sender_name:
+            message.sender_id === profile.id
+              ? (profile.full_name || "You")
+              : (senderProfile?.full_name || senderProfile?.email || "Unknown"),
+          sender_role: message.sender_role,
+          thread_name: thread?.name ?? null,
+          thread_type: thread?.thread_type ?? "unknown",
+        };
+      });
+
+      const rawAccessLogs = documentAccessLogsRes.data ?? [];
       const documentAccessLogs: ExportDocumentAccessLog[] = rawAccessLogs
-        .filter(log => {
-          const doc = log.document as { title: string; uploaded_by: string } | null;
-          return doc && (doc.uploaded_by === profile.id || log.accessed_by === profile.id);
+        .filter((log) => {
+          const document = log.document as { title: string; uploaded_by: string; family_id: string | null } | null;
+          return document?.family_id === activeFamilyId;
         })
-        .map(log => {
-          const doc = log.document as { title: string; uploaded_by: string } | null;
-          const isUser = log.accessed_by === profile.id;
-          const isCoParent = log.accessed_by === coParent?.id;
+        .map((log) => {
+          const document = log.document as { title: string; uploaded_by: string; family_id: string | null } | null;
+          const accessedByProfile = relatedProfiles.get(log.accessed_by) ?? null;
+
           return {
             id: log.id,
             document_id: log.document_id,
-            document_title: doc?.title || 'Unknown Document',
+            document_title: document?.title || "Unknown Document",
             action: log.action,
             accessed_by: log.accessed_by,
-            accessed_by_name: isUser 
-              ? (profile.full_name || 'You') 
-              : isCoParent 
-                ? (coParent?.full_name || 'Co-Parent')
-                : 'Unknown',
+            accessed_by_name:
+              log.accessed_by === profile.id
+                ? (profile.full_name || "You")
+                : (accessedByProfile?.full_name || accessedByProfile?.email || "Unknown"),
             created_at: log.created_at,
           };
         });
@@ -273,16 +315,16 @@ export const useCourtExport = () => {
         userProfile: { id: profile.id, full_name: profile.full_name, email: profile.email },
         coParent,
         messages,
-        expenses: expenses.map(e => ({
-          ...e,
-          child: e.child ? { name: (e.child as { name: string }).name } : null
+        expenses: (expensesRes.data ?? []).map((expense) => ({
+          ...expense,
+          child: expense.child ? { name: (expense.child as { name: string }).name } : null,
         })),
-        scheduleRequests,
-        exchangeCheckins,
+        scheduleRequests: scheduleRequestsRes.data ?? [],
+        exchangeCheckins: exchangeCheckinsRes.data ?? [],
         documentAccessLogs,
-        schedule,
+        schedule: scheduleRes.data ?? null,
         dateRange,
-        children,
+        children: childrenRes.data ?? [],
       };
     } catch (error) {
       console.error("Error fetching export data:", error);
@@ -291,7 +333,7 @@ export const useCourtExport = () => {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [activeFamilyId, familyLoading, profileId, user]);
 
   return {
     loading,

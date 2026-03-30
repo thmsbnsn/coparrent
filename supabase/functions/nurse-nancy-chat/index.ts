@@ -124,6 +124,7 @@ Encourage contacting a healthcare provider when:
 Remember: You are providing educational support, not medical care. When in doubt, always encourage parents to seek professional medical advice.`;
 
 interface ChatRequest {
+  familyId: string;
   threadId: string;
   message: string;
   messageHistory?: Array<{ role: string; content: string }>;
@@ -255,10 +256,14 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const body: ChatRequest = await req.json();
+    const { familyId, threadId, message, messageHistory = [] } = body;
 
     // Use aiGuard for auth, role, and plan enforcement
     // Using "analyze" action which requires parent role and premium access
-    const guardResult = await aiGuard(req, "analyze", supabaseUrl, supabaseServiceKey);
+    const guardResult = await aiGuard(req, "analyze", supabaseUrl, supabaseServiceKey, {
+      familyId,
+    });
 
     if (!guardResult.allowed) {
       const statusCode = guardResult.statusCode || 403;
@@ -294,10 +299,6 @@ serve(async (req) => {
         { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    // Parse request - system prompt is NEVER accepted from client
-    const body: ChatRequest = await req.json();
-    const { threadId, message, messageHistory = [] } = body;
 
     if (!threadId || !message) {
       return new Response(

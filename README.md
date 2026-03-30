@@ -54,15 +54,24 @@ These principles intentionally shape decisions such as role-based access, gated 
 
 ## Data Ownership & Privacy Model
 
-CoParrent uses a **parent-owned data model**:
+CoParrent uses a **family-scoped operational model** with **private-by-default owned content**:
 
-- Each parent owns their own data and generated content.
+- Shared family records are bound to a specific `family_id`.
+- Private creations and generated content remain owner-scoped until explicitly shared.
 - Content is **private by default**.
 - Sharing is **explicit and revocable** per item.
 - Shared access is **read-only** unless otherwise stated.
 - No content is publicly accessible or indexed.
 
-This model applies to messages, documents, and all Kids Hub creations.
+This model applies to schedules, requests, documents, messaging, and Kids Hub creations.
+
+## Family-Scoped Architecture
+
+Family-scoped features use `activeFamilyId` in the client and explicit `family_id` on the server as the single source of scope.
+
+- Core reads, writes, notifications, and AI authorization do not infer family context from legacy profile relationships or global account assumptions.
+- Multi-family users must operate inside an explicitly selected family context for every family-scoped action.
+- Cross-family inference is not allowed. If a request does not carry clear family scope, it should not proceed.
 
 ---
 
@@ -79,19 +88,19 @@ Not all features evolve at the same pace. CoParrent tracks feature maturity expl
 | Kids Hub – Activities | Stable |
 | Kids Hub – Coloring Pages | Stable |
 | Nurse Nancy | Support Tool (Non-diagnostic) |
-| PWA & Push Notifications | Stable |
+| PWA & Push Notifications | Backend ready; real-device validation pending |
 
 ---
 
 ## PWA Support
 
-CoParrent is a Progressive Web App (PWA) with full push notification support:
+CoParrent is a Progressive Web App (PWA) with the install flow, backend plumbing, and push registration path in place. Real-device validation is still pending before this should be marketed as fully verified:
 
 | Platform | Installation | Push Notifications |
 |----------|-------------|-------------------|
-| **Android** | Install via browser "Add to Home Screen" | ✅ Supported |
-| **iOS 16.4+** | Add to Home Screen via Safari Share button | ✅ Supported (PWA mode only) |
-| **Desktop** | Install via browser address bar icon | ✅ Supported |
+| **Android** | Install via browser "Add to Home Screen" | Ready in code; live device verification pending |
+| **iOS 16.4+** | Add to Home Screen via Safari Share button | Ready in code; live device verification pending |
+| **Desktop** | Install via browser address bar icon | Ready in code; live device verification pending |
 
 ### Enabling Push Notifications
 
@@ -133,47 +142,53 @@ To avoid misuse or misinterpretation:
 - CoParrent is **not** an emergency communication system
 - CoParrent is **not** a surveillance or monitoring tool
 
-For exact access rules and plan enforcement, see **`docs/GATED_FEATURES.md`**.
-For security architecture, see **`docs/SECURITY_MODEL.md`**.
+For exact access rules and plan enforcement, see **`docs/security/GATED_FEATURES.md`**.
+For security architecture, see **`docs/security/SECURITY_MODEL.md`**.
 
 ---
 
 ## 🧭 Project State
 
-**Current Maturity:** Beta-Candidate — core workflows function, the repo builds cleanly again, and the live backend has been partially reconciled, but deployment and several verification tracks are still open.
+**Current Maturity:** Release-candidate — this section is a direct summary of `docs/project/CURRENT_STATUS.md` and should not diverge from it.
 
 **Current Phase:** Stabilization + Production Verification  
 **Environment:** Vercel + Supabase  
 **Stripe Mode:** Live  
 **Production Supabase Project:** `jnxtskcpwzuxyxjzqrkv`  
-**Last Verified Build:** 2026-03-19  
-**Verified By:** Codex local verification (`npm run verify`)  
-**Last README Update:** 2026-03-19
+**Last Verified Build:** 2026-03-28
+**Verified By:** Codex local verification (`npm run verify`) plus live production smoke and evidence-backed feature checks
+**Last README Update:** 2026-03-29
 
 > **Note:** The `Last Verified Build` and `Verified By` fields must be updated whenever a behavioral or architectural change is made.
 
-### Current Verified Status
+### Done and Verified
 
-- Local `npm run build` succeeds.
-- Local `npm run lint` succeeds with zero warnings.
-- Local `npm run test` succeeds with 58 targeted regression tests.
-- Local `npm run verify` now provides a single lint + test + build verification path.
-- The family-scoped authorization refactor now has a live bootstrap path: parent and guardian accounts create and activate a family membership before family-gated features run.
-- New co-parent invitations are now stamped with `family_id`, so invited users have an existing family to join instead of creating a duplicate family during onboarding.
-- Route-access rules are now centralized, and a third-party access leak caused by prefix-matching `"/dashboard"` as a broad allow-list entry has been fixed.
-- Reminder helper logic is now shared and regression-tested, including midnight-safe leave-by calculations and pickup/drop-off responsibility assignment.
-- `ProtectedRoute` now has direct integration coverage for auth loading, redirects, and role/child gating behavior.
-- `AcceptInvite` now has direct component coverage for invalid and expired tokens, pending invite redirects, and both co-parent and third-party acceptance branches.
-- `Login` and `Signup` now have shared redirect coverage for pending invite handoff and onboarding-versus-dashboard routing after family bootstrap.
-- `FamilyProvider` now has coverage for persisted active-family restoration, family bootstrap edge cases, and safe active-family switching.
-- `PremiumFeatureGate` now has coverage for upgrade prompts, expired-trial messaging, fallback rendering, and hidden locked states.
-- `KidsDashboard` now has smoke coverage for loading, child rendering, and parent/signed-out redirects, and the signed-out redirect now happens in an effect instead of during render.
-- The access-code beta flow has been verified end to end in production for two tester accounts.
-- The production frontend is still behind this local repo and should not be promoted without a preview review.
-- The repo now standardizes all AI edge functions on OpenRouter; runtime verification for Nurse Nancy, activity generation, and coloring-page generation is still required after deployment.
-- Auth captcha was temporarily disabled in Supabase for controlled QA and should be re-enabled after testing.
+- Local `npm run build`, `npm run lint`, `npm run test`, and `npm run verify` all pass.
+- Local tests currently pass with **30** test files and **119** targeted regression tests.
+- `https://www.coparrent.com` is serving the current pushed `origin/main` production build.
+- The public marketing surface, mobile dashboard, Messaging Hub, and Daily calling flow have all been hardened through late-March verification passes.
+- Messaging Hub thread creation, direct-message hydration, and live Daily audio/video calling are verified against the deployed backend.
+- Google sign-in and forgot-password both work on production `https://www.coparrent.com`.
+- Stripe checkout, webhook gating, and customer portal are verified live.
+- OpenRouter-backed AI runtime is verified live for Nurse Nancy, activity generation, and coloring-page generation.
+- `problem_reports` is live in production, including the optional screenshot-upload path.
+- A fresh production smoke pass completed cleanly on March 28, 2026 across home, login, invite landing, dashboard, and Messaging Hub.
 
-For the current operational snapshot, see **`docs/CURRENT_STATUS.md`**.
+### Still Risky
+
+- Real-device push/PWA validation on iPhone, Android, and desktop is still open.
+- Passkeys are not live because hosted Supabase for this project does not yet expose WebAuthn/passkey enrollment.
+- Repo-side production auth now requires captcha by default; deployed environments still need valid hCaptcha configuration.
+- `https://coparrent.com` apex DNS/certificate cutover should still be treated as settling; `https://www.coparrent.com` remains the canonical public URL.
+
+### Left Before Sale
+
+- Complete real-device push/PWA proof with screenshots and evidence.
+- Decide final passkey posture while Supabase still lacks hosted WebAuthn for this project.
+- Confirm deployed auth captcha configuration and finalize any remaining localhost-origin exceptions.
+- Finish env/config hygiene cleanup around stale local-only files and references.
+
+For the current operational snapshot, see **`docs/project/CURRENT_STATUS.md`**.
 
 ---
 
@@ -236,26 +251,28 @@ This section documents recent architectural changes for developers migrating or 
 
 1. **Message Threading Model**: The messaging system uses `thread_messages` as the single source of truth. The legacy `messages` table remains for historical 1:1 co-parent messages but is deprecated for new features. See `useMessagingHub.ts` for the authoritative implementation.
 
-2. **Thread Creation via Edge Function**: Thread creation bypasses RLS via `create-message-thread` edge function to ensure proper server-side validation of family membership.
+2. **Thread Creation via Edge Function**: Messaging Hub prefers the `create-message-thread` edge function for server-side validation of family membership. Live thread creation has now been verified against the deployed backend, and the frontend exposes setup failures clearly when local QA or environment issues still block a thread.
 
 3. **Unread Counts Architecture**: Unread counts are calculated by comparing `thread_messages` against `message_read_receipts`. Indicators respect `notification_preferences` settings.
 
 4. **Mobile-First Messaging**: The messaging hub includes pull-to-refresh, swipe navigation between tabs, and touch-friendly emoji reactions.
 
-### Files Recently Touched (January 2026)
+### Files Recently Touched (March 2026)
 
 | File | Changes |
 |------|---------|
-| `src/hooks/useMessagingHub.ts` | Primary messaging hook (authoritative) |
-| `src/hooks/useUnreadMessages.ts` | NEW - Unread count tracking |
-| `src/hooks/usePullToRefresh.ts` | NEW - Mobile pull-to-refresh |
-| `src/hooks/useMessages.ts` | DEPRECATED - Legacy 1:1 messaging |
-| `src/pages/MessagingHubPage.tsx` | Mobile-first refactor, reactions, unread badges |
-| `src/pages/Dashboard.tsx` | Updated to use `thread_messages` for recent messages |
-| `src/components/messages/MessageReactions.tsx` | NEW - Emoji picker and reactions UI |
-| `src/components/messages/SwipeableTabs.tsx` | NEW - Mobile swipe navigation |
-| `src/components/messages/UnreadBadge.tsx` | NEW - Unread count indicator |
-| `src/components/messages/PullToRefreshIndicator.tsx` | NEW - Pull indicator UI |
+| `src/hooks/useMessagingHub.ts` | Messaging thread setup hardening, clearer failure handling, and local QA recovery paths |
+| `src/hooks/useFamilyRole.ts` | Fixed `primaryParentId` to return the actual parent profile ID instead of the family UUID |
+| `src/pages/MessagingHubPage.tsx` | Mobile header/action cleanup plus explicit setup and empty states |
+| `src/pages/Dashboard.tsx` | Stronger mobile-first summary and action layout |
+| `src/pages/ChildrenPage.tsx` | Better mobile tabs, action layout, and child-management guidance |
+| `src/pages/ExpensesPage.tsx` | Improved mobile header, filter layout, and empty state |
+| `src/pages/SportsPage.tsx` | Mobile polish for Sports Hub layout and actions |
+| `src/pages/KidsHubPage.tsx` | Mobile polish for Kids Hub layout and navigation |
+| `src/pages/KidCenterPage.tsx` | Fixed mobile select-state crash path |
+| `src/pages/ActivitiesPage.tsx` | Fixed generator/select crash path and tightened mobile flow |
+| `src/pages/Index.tsx` / `src/components/landing/HomeSections.tsx` | Expanded the public landing page with stronger proof, workflow, and CTA sections |
+| `src/pages/About.tsx`, `src/pages/HelpCenter.tsx`, `src/pages/BlogPage.tsx`, `src/pages/BlogPostPage.tsx`, `src/pages/CourtRecordsPage.tsx`, `src/pages/PaymentSuccess.tsx` | Public-site content and structure upgrade for buyer/demo readiness |
 
 ### Known TODOs / Intentional Limitations
 
@@ -276,31 +293,30 @@ npm install
 npm run dev
 ```
 
-Required environment variables (auto-configured by Lovable Cloud):
+Required environment variables for local or deployed environments:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_SUPABASE_PROJECT_ID`
 
-No Lovable-specific runtime dependencies exist in the application code.
+There are no remaining legacy hosted-runtime dependencies in the application code.
 
 ---
 
 ### Current Focus
 
-- Verify invite acceptance and onboarding against the family-membership bootstrap rules
-- Verify the OpenRouter-backed AI tools end to end after deployment
-- Run a live Stripe checkout, webhook, and customer-portal verification pass
 - Validate push delivery on iOS, Android, and desktop with current production config
-- Re-enable auth captcha after controlled QA is complete
+- Keep `https://www.coparrent.com` as the canonical public/demo target while the apex cutover settles
+- Confirm deployed auth captcha configuration remains in place
+- Decide the final post-QA posture for passkeys and localhost-origin handling
+- Archive or remove stale env/config references like `_(2).env`
 
 ### Known Blocking Issues
 
-- Nurse Nancy, coloring-page generation, and kid-activity generation now target OpenRouter in the repo and still need runtime verification after deployment.
-- The full co-parent and third-party invite-acceptance path still needs a fresh end-to-end regression pass after the new family bootstrap was applied.
-- The current local repo is ahead of the live Vercel frontend, so there is still deployment drift.
-- Auth captcha is temporarily disabled for QA and should be treated as a temporary security exception.
+- Real-device push/PWA validation is still incomplete.
+- Passkeys remain unavailable until Supabase exposes hosted WebAuthn or the product posture changes.
+- Deployed auth posture still needs config confirmation: keep captcha configured and review any localhost-origin exceptions.
 
-_Last updated: 2026-03-19_
+_Last updated: 2026-03-29_
 
 ---
 
@@ -312,8 +328,8 @@ This section inventories the app's major features and systems with their current
 
 | Feature | Description | Status | Dependencies | Known Gaps | Risk |
 |---------|-------------|--------|--------------|------------|------|
-| Email/Password Auth | Standard authentication with email confirmation | ✅ Complete | Lovable Cloud Auth | None | Low |
-| Google OAuth | Social login via Google | ✅ Complete | Google OAuth credentials | None | Low |
+| Email/Password Auth | Standard authentication with email confirmation | ✅ Complete | Supabase Auth | None | Low |
+| Google OAuth | Social login via Google | ✅ Complete | Google OAuth credentials, Supabase Auth | Branded auth domain is pinned until Supabase plan upgrade | Low |
 | Apple OAuth | Social login via Apple | ⚠️ Partial | Apple OAuth credentials | Not tested in production | Medium |
 | Password Reset | Forgot password flow via email | ✅ Complete | Resend (email) | None | Low |
 | Session Management | Active session tracking and logout | ✅ Complete | None | Session invalidation on permission change | Low |
@@ -321,13 +337,13 @@ This section inventories the app's major features and systems with their current
 | Device Trust | Trusted device management | ⚠️ Partial | user_devices table | Login notification triggers need validation | Medium |
 | Recovery Codes | Backup codes for 2FA | ✅ Complete | manage-recovery-codes function, user_recovery_codes | None | Low |
 
-### Parent / Co-Parent Permissions
+### Family Membership & Invitations
 
 | Feature | Description | Status | Dependencies | Known Gaps | Risk |
 |---------|-------------|--------|--------------|------------|------|
 | Co-Parent Invitation | Email-based invitation system | ✅ Complete | Resend, invitations table | None | Low |
-| Co-Parent Linking | Automatic linking on invite acceptance | ✅ Complete | profiles.co_parent_id | None | Low |
-| Third-Party Invitations | Invite step-parents, grandparents, etc. | ✅ Complete | family_members table | Plan limits not enforced in RLS | Medium |
+| Invite Family Binding | Invite acceptance joins the explicit family from the invitation | ✅ Complete | `invitations.family_id`, `family_members` | None | Low |
+| Third-Party Invitations | Invite step-parents, grandparents, etc. | ✅ Complete | `family_members`, `invitations.family_id` | Plan limits not enforced in RLS | Medium |
 | Role Detection | Parent vs third-party role resolution | ✅ Complete | useFamilyRole hook | None | Low |
 | Feature Gating | Route/feature restrictions by role | ✅ Complete | ProtectedRoute, RoleGate | Some edge cases may bypass | Medium |
 
@@ -380,7 +396,7 @@ This section inventories the app's major features and systems with their current
 | Feature | Description | Status | Dependencies | Known Gaps | Risk |
 |---------|-------------|--------|--------------|------------|------|
 | In-App Notifications | Notification bell and list | ✅ Complete | notifications table | None | Low |
-| Browser Push | Web push notifications | ✅ Complete | usePushNotifications hook | End-to-end device validation still needed | Medium |
+| Browser Push | Web push notifications | ⚠️ Partial | usePushNotifications hook, `send-push`, `sync-push-subscription` | Real-device validation still needed | Medium |
 | iOS Push | iOS PWA push support | ⚠️ Partial | Service worker, Push API | Limited iOS Safari support | High |
 | Email Notifications | Transactional emails | ⚠️ Partial | Resend, edge functions | Not all events trigger emails | Medium |
 | Exchange Reminders | Custody exchange alerts | ✅ Complete | exchange-reminders function | Cron trigger needs setup | Medium |
@@ -393,7 +409,7 @@ This section inventories the app's major features and systems with their current
 | Message PDF Export | Export messaging thread to PDF | ✅ Complete | jspdf, pdfExport.ts | Formatting could improve | Low |
 | Expense Report PDF | Generate expense reports | ✅ Complete | generate-expense-report function | None | Low |
 | Calendar Export (ICS) | Export schedule to ICS format | ✅ Complete | calendarExport.ts | None | Low |
-| Court-Ready Exports | Comprehensive legal documentation | ❌ Missing | N/A | Major gap for legal use case | High |
+| Court-Ready Exports | Comprehensive legal documentation | ⚠️ Partial | Court export UI, PDF export pipeline | Export v1 shipped; broader legal certification/export package still a gap | Medium |
 
 ### Admin & Moderation
 
@@ -413,7 +429,7 @@ This section inventories the app's major features and systems with their current
 | Route Guards | Protected route enforcement | ✅ Complete | ProtectedRoute component | None | Low |
 | AI Rate Limiting | Per-user AI request limits | ✅ Complete | aiRateLimit.ts, aiGuard.ts | None | Low |
 | Function Rate Limiting | Edge function abuse prevention | ✅ Complete | functionRateLimit.ts | Not applied to all functions | Medium |
-| hCaptcha | Bot protection on auth forms | ✅ Complete | hCaptcha integration | None | Low |
+| hCaptcha | Bot protection on auth forms | ✅ Complete | Supabase attack protection | Deployed environments must keep it configured | Low |
 | Input Validation | Zod schema validation | ✅ Complete | validations.ts | Not comprehensive | Medium |
 | Audit Logging | Change tracking | ✅ Complete | audit_logs table, log_audit_event | Comprehensive audit trail for all child data access and modifications | Medium |
 
@@ -457,7 +473,7 @@ This section inventories the app's major features and systems with their current
 | **Recharts**             | ^2.15.4   | Charts & Data Visualization |
 | **Lucide React**         | ^0.462.0  | Icon Library                |
 
-### Backend (Lovable Cloud / Supabase)
+### Backend (Vercel / Supabase)
 
 | Technology                   | Purpose                                 |
 | ---------------------------- | --------------------------------------- |
@@ -554,7 +570,7 @@ The following are explicitly out of scope and should be treated as constraints u
 - Financial arbitration or forced payment handling
 - Native mobile apps beyond PWA
 
-These non-goals may be revisited post-beta.
+These non-goals may be revisited later.
 
 ## 🔌 3rd Party Connections
 
@@ -562,8 +578,8 @@ These non-goals may be revisited post-beta.
 
 | Service                   | Purpose                                                   | Status    |
 | ------------------------- | --------------------------------------------------------- | --------- |
-| **Lovable Cloud Auth**    | User authentication (Email, Google, Apple OAuth)          | ✅ Active |
-| **Lovable Cloud Storage** | Document storage with access logging                      | ✅ Active |
+| **Supabase Auth**         | User authentication (Email, Google, Apple OAuth)          | ✅ Active |
+| **Supabase Storage**      | Document storage with access logging                      | ✅ Active |
 | **Stripe**                | Subscription payments & billing                           | ✅ Active |
 | **Resend**                | Transactional emails (invitations, notifications)         | ✅ Active |
 | **Supabase Auth Captcha** | Bot protection on auth flows                              | ⚠️ Temporarily disabled for QA |
@@ -604,14 +620,14 @@ CoParrent integrates AI-powered features to help co-parents communicate professi
 ### AI Provider Status
 
 - All AI edge functions in the repo now use OpenRouter-backed models.
-- The remaining work is deployment-time verification, especially for `nurse-nancy-chat`, `kid-activity-generator`, and `generate-coloring-page`.
+- Live runtime verification was completed on March 24, 2026 for `nurse-nancy-chat`, `kid-activity-generator`, and `generate-coloring-page`.
 
 Current repo model mapping:
-- `ai-message-assist` -> `google/gemini-2.0-flash-exp:free`
+- `ai-message-assist` -> `google/gemini-3-flash-preview`
 - `ai-schedule-suggest` -> `google/gemini-2.0-flash-exp:free`
 - `nurse-nancy-chat` -> `google/gemini-3-flash-preview`
 - `kid-activity-generator` -> `google/gemini-3-flash-preview`
-- `generate-coloring-page` -> `google/gemini-2.5-flash-image-preview`
+- `generate-coloring-page` -> `google/gemini-2.5-flash-image` with fallback `google/gemini-3.1-flash-image-preview`
 
 ### AI Files & Components
 
@@ -695,11 +711,7 @@ All AI endpoints require authentication:
 
 ### AI Model Configuration
 
-Both edge functions use OpenRouter API with:
-
-- **Model**: `google/gemini-2.0-flash-exp:free`
-- **Temperature**: 0.7
-- **Max Tokens**: 1000-2000
+AI model choice now varies by function. The current mapping above is the source of truth, with OpenRouter used across all AI edge functions.
 
 ### Environment Variables
 
@@ -1115,10 +1127,10 @@ CoParrent Application
 
 | Table                     | Description                                             |
 | ------------------------- | ------------------------------------------------------- |
-| `profiles`                | User profiles with subscription and co-parent linking   |
+| `profiles`                | User profiles with subscription and account metadata    |
 | `children`                | Child information (medical, school, emergency contacts) |
 | `parent_children`         | Junction table linking parents to children              |
-| `family_members`          | Third-party family members (step-parents, grandparents) |
+| `family_members`          | Active family memberships and role assignments          |
 | `custody_schedules`       | Custody patterns and schedule definitions               |
 | `schedule_requests`       | Schedule change requests                                |
 | `exchange_checkins`       | Exchange confirmation records                           |
@@ -1273,7 +1285,7 @@ CoParrent Application
 ### Previous Changes
 
 - Integrated Stripe webhook via Supabase Edge Function
-- Locked webhook events to Lovable-required set
+- Locked webhook events to the required Stripe event set
 
 ---
 
@@ -1323,10 +1335,10 @@ This section provides an honest assessment of what must be completed before depl
 | RLS policies enabled on all tables | ✅ Ready | All tables have RLS enabled |
 | RLS policies tested for edge cases | ⚠️ Needs Validation | Complex family member policies need audit |
 | Password strength requirements | ✅ Ready | Enforced on signup |
-| Two-factor authentication persisted | ❌ Missing | Currently UI-only, not saved to database |
-| Recovery codes stored securely | ❌ Missing | Not implemented in backend |
+| Two-factor authentication persisted | ✅ Ready | TOTP state is persisted and recovery flows are wired |
+| Recovery codes stored securely | ✅ Ready | Recovery codes are hashed and stored through the backend |
 | Session timeout/invalidation | ⚠️ Needs Validation | Basic implementation exists |
-| Rate limiting on auth endpoints | ✅ Ready | hCaptcha protects forms |
+| Rate limiting on auth endpoints | ⚠️ Needs Validation | hCaptcha is wired in the repo; deployed environments must keep it configured and validated |
 | JWT token expiration configured | ✅ Ready | Supabase defaults |
 | Admin role protection | ✅ Ready | has_role() RPC enforces |
 | Child account isolation | ⚠️ Needs Validation | New feature, needs security review |
@@ -1349,9 +1361,8 @@ This section provides an honest assessment of what must be completed before depl
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Terms of Service page | ✅ Done | `/terms` - Beta-appropriate ToS with disclaimers |
+| Terms of Service page | ✅ Done | `/terms` - Updated ToS with product disclaimers |
 | Privacy Policy page | ✅ Done | `/privacy` - Covers data handling, COPPA, CCPA, third parties |
-| Beta banner | ✅ Done | Session-dismissable banner with feedback/bug report links |
 | Cookie consent banner | ✅ Done | GDPR-compliant with customizable preferences |
 | COPPA compliance for child accounts | ⚠️ Needs Validation | Defaults are safe, legal review pending |
 | GDPR data export capability | ✅ Done | "Download My Data" in Settings via edge function |
@@ -1366,8 +1377,8 @@ This section provides an honest assessment of what must be completed before depl
 |------|--------|-------|
 | Database indexes on common queries | ⚠️ Needs Validation | Some indexes exist, need audit |
 | Image optimization | ⚠️ Needs Validation | Using src/assets, lazy loading partial |
-| Bundle size optimization | ⚠️ Needs Validation | No code splitting implemented |
-| CDN configuration | ✅ Ready | Lovable Cloud provides |
+| Bundle size optimization | ✅ Ready | Route splitting and focused production cleanup are in place |
+| CDN configuration | ✅ Ready | Vercel provides edge delivery for the web app |
 | API response times < 500ms | ⚠️ Needs Validation | Not benchmarked |
 | Concurrent user testing | ❌ Missing | No load testing performed |
 | Realtime subscription cleanup | ⚠️ Needs Validation | Some components may leak |
@@ -1377,7 +1388,7 @@ This section provides an honest assessment of what must be completed before depl
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Database backups configured | ✅ Ready | Lovable Cloud provides |
+| Database backups configured | ✅ Ready | Supabase provides managed backups/PITR features |
 | Point-in-time recovery | ✅ Ready | Supabase feature |
 | Foreign key constraints | ⚠️ Needs Validation | Most exist, some missing |
 | Cascade delete behavior | ⚠️ Needs Validation | Child deletion RPC exists |
@@ -1393,7 +1404,7 @@ This section provides an honest assessment of what must be completed before depl
 | Database query monitoring | ✅ Ready | Supabase dashboard |
 | Edge function logs | ✅ Ready | Supabase dashboard |
 | User action audit trail | ⚠️ Needs Validation | Partial implementation |
-| Health check endpoint | ❌ Missing | Not implemented |
+| Health check endpoint | ✅ Ready | Production health function exists |
 | Alerting on failures | ❌ Missing | Not configured |
 
 ### UX & Edge Cases
@@ -1414,27 +1425,26 @@ This section provides an honest assessment of what must be completed before depl
 
 | Item | Status | Notes |
 |------|--------|-------|
-| Domain configured | ⚠️ Needs Validation | Using Lovable subdomain |
-| SSL certificate | ✅ Ready | Lovable Cloud provides |
+| Domain configured | ✅ Ready | `https://www.coparrent.com` is active; apex is still settling |
+| SSL certificate | ✅ Ready | Vercel-managed certificates are active |
 | Environment variables documented | ✅ Ready | In README |
-| Deployment pipeline | ✅ Ready | Lovable handles |
+| Deployment pipeline | ✅ Ready | GitHub + Vercel production pipeline is active |
 | Rollback procedure | ⚠️ Needs Validation | Git history available |
 | Incident response plan | ❌ Missing | Not documented |
-| User support channel | ❌ Missing | Not established |
+| User support channel | ✅ Ready | `support@coparrent.com` plus live in-app problem reporting |
 | Status page | ❌ Missing | Not implemented |
 
 ### Known Risks & Constraints
 
 | Risk | Severity | Mitigation |
 |------|----------|------------|
-| 2FA not persisted | High | Users think they have 2FA but don't; implement database storage |
+| Real-device push/PWA proof still pending | High | Complete the remaining iPhone/Android/desktop device validation |
 | Live billing config drift | High | Stripe dashboard, edge functions, and docs must stay aligned |
-| No Terms of Service | High | Legal exposure; create and display ToS |
-| No Privacy Policy | High | Legal exposure and app store rejection risk; create policy |
+| Passkey posture unresolved | Medium | Keep passkeys hidden or revisit when Supabase exposes WebAuthn |
 | Limited error monitoring | Medium | Bugs may go unnoticed; integrate Sentry or similar |
 | Untested payment webhooks | Medium | Revenue issues possible; test with live Stripe events |
-| Child account security | Medium | New feature; conduct security review |
-| Court export incomplete | Medium | Core value prop gap; implement comprehensive exports |
+| Auth posture / localhost config | Medium | Keep deployed captcha configured and finalize localhost-origin posture |
+| Apex host propagation | Low | Keep `https://www.coparrent.com` canonical until apex behavior is clean everywhere |
 
 ---
 
@@ -1465,7 +1475,7 @@ The app will be available at `http://localhost:8080`
 
 ### Environment Variables
 
-The `.env` file is auto-configured by Lovable Cloud with:
+Use `.env.example` as the source of truth for local development and deployed env configuration. The minimum client-side variables are:
 
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
@@ -1477,12 +1487,13 @@ The `.env` file is auto-configured by Lovable Cloud with:
 
 ### High Priority
 
-- [ ] **Invite Acceptance Regression**: Verify fresh co-parent and third-party invites land users inside the existing family after acceptance
-- [ ] **AI Runtime Verification**: Verify the OpenRouter-backed Nurse Nancy, activity generation, and coloring-page generation flows in the target environment
-- [ ] **Billing Verification**: Run a live end-to-end Power checkout, webhook, and customer portal test
+- [x] **Invite Acceptance Regression**: Verified fresh co-parent and third-party invites land users inside the existing family after acceptance
+- [x] **Messaging Hub Live Verification**: Verified thread creation against the deployed backend without CORS or RLS surprises
+- [x] **AI Runtime Verification**: Verified the OpenRouter-backed Nurse Nancy, activity generation, and coloring-page generation flows in the deployed environment
+- [x] **Billing Verification**: Completed a live end-to-end Power checkout, webhook, and customer portal test
 - [ ] **Push Device Validation**: Verify production push delivery on iOS, Android, and desktop
 - [ ] **PWA Device Testing**: Run PWA Test Checklist on physical iOS/Android devices
-- [ ] **Re-enable Auth Captcha**: Restore Supabase attack protection after QA completes
+- [ ] **Confirm Auth Captcha Deployment Config**: Keep hCaptcha configured in deployed environments and review localhost-origin posture
 
 ### Medium Priority
 
@@ -1533,10 +1544,11 @@ The `.env` file is auto-configured by Lovable Cloud with:
 - [x] **GDPR Data Export**: User data export feature in settings with JSON download
 - [x] **Data Retention Policy**: Documented data retention schedules in Privacy Policy
 - [x] **CCPA Compliance**: California Privacy Rights disclosures in Privacy Policy
-- [x] **PWA & Push Notifications**: Full PWA with Web Push support for Android, iOS (PWA mode), and desktop
+- [x] **PWA Foundation & Push Plumbing**: Installability, service worker, push subscription sync, and backend delivery path are in place; real-device validation is still pending
 - [x] **Per-Family Role Authorization**: Family-scoped roles with RLS enforcement
 - [x] **Family Membership Bootstrap**: Parent/guardian signup/login now ensures an active family before family-gated features run
 - [x] **Invite Family Binding**: New co-parent invites are created with the inviter's `family_id`
+- [x] **Family-Scoped Core Flows**: AI guard, third-party management, schedules, schedule requests, and document flow now require explicit active-family scope
 - [x] **Rate Limiting & Cost Control**: Unified rate limiter with tier-based limits and abuse telemetry
 - [x] **Stripe Billing Integrity**: Idempotent webhook handling with signature verification
 
@@ -1552,9 +1564,9 @@ The `.env` file is auto-configured by Lovable Cloud with:
 
 ### Known Issues to Verify
 
-- [ ] Verify co-parent acceptance flow works end-to-end in production after family bootstrap changes
-- [ ] Verify third-party acceptance flow works end-to-end in production after family bootstrap changes
-- [ ] Test subscription webhook handling with live Stripe events
+- [x] Verify co-parent acceptance flow works end-to-end in production after family bootstrap changes
+- [x] Verify third-party acceptance flow works end-to-end in production after family bootstrap changes
+- [x] Test subscription webhook handling with live Stripe events
 - [ ] Validate realtime subscriptions cleanup on component unmount
 - [ ] Test law library file downloads with actual uploaded PDFs
 - [ ] Run PWA Test Checklist on iOS and Android devices before production release

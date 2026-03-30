@@ -3,6 +3,7 @@ import { aiGuard } from "../_shared/aiGuard.ts";
 import { strictCors, getCorsHeaders } from "../_shared/aiCors.ts";
 
 interface ActivityRequest {
+  familyId: string;
   type: "activity" | "recipe" | "craft";
   prompt?: string;
   childAge?: number;
@@ -195,10 +196,14 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const body: ActivityRequest = await req.json();
+    const { familyId, type = "activity", prompt, childAge, childName, duration, location, energyLevel, materials, dietary } = body;
 
     // Use aiGuard for auth, role, and plan enforcement
     // Requires parent role and premium access (using "analyze" action)
-    const guardResult = await aiGuard(req, "analyze", supabaseUrl, supabaseServiceKey);
+    const guardResult = await aiGuard(req, "analyze", supabaseUrl, supabaseServiceKey, {
+      familyId,
+    });
 
     if (!guardResult.allowed) {
       const statusCode = guardResult.statusCode || 403;
@@ -218,10 +223,6 @@ serve(async (req) => {
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    // Parse request
-    const body: ActivityRequest = await req.json();
-    const { type = "activity", prompt, childAge, childName, duration, location, energyLevel, materials, dietary } = body;
 
     if (!["activity", "recipe", "craft"].includes(type)) {
       return new Response(

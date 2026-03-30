@@ -8,11 +8,12 @@
 // ============================================
 
 export interface MessageAnalysis {
-  tone: "neutral" | "positive" | "negative" | "aggressive" | "passive_aggressive";
-  clarity: "clear" | "unclear" | "ambiguous";
-  appropriateness: "appropriate" | "concerning" | "inappropriate";
+  overallTone: "positive" | "neutral" | "concerning";
+  toneScore: number;
   suggestions: string[];
-  summary: string;
+  positiveAspects: string[];
+  childFocused: boolean;
+  courtAppropriate: boolean;
 }
 
 export interface MessageAssistOutput {
@@ -43,9 +44,27 @@ export interface ScheduleSuggestOutput {
 // Validators
 // ============================================
 
-const VALID_TONES = ["neutral", "positive", "negative", "aggressive", "passive_aggressive"];
-const VALID_CLARITY = ["clear", "unclear", "ambiguous"];
-const VALID_APPROPRIATENESS = ["appropriate", "concerning", "inappropriate"];
+const VALID_TONES = ["positive", "neutral", "concerning"] as const;
+
+function normalizeTone(value: unknown): MessageAnalysis["overallTone"] | null {
+  if (value === "positive" || value === "neutral" || value === "concerning") {
+    return value;
+  }
+
+  if (value === "negative" || value === "aggressive" || value === "passive_aggressive") {
+    return "concerning";
+  }
+
+  return null;
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
+}
 
 /**
  * Validate and sanitize message analysis output
@@ -63,34 +82,41 @@ export function validateMessageAnalysis(data: unknown): {
 
   const obj = data as Record<string, unknown>;
 
-  // Validate tone
-  if (!obj.tone || !VALID_TONES.includes(obj.tone as string)) {
-    errors.push(`Invalid tone: ${obj.tone}. Expected one of: ${VALID_TONES.join(", ")}`);
+  const overallTone = normalizeTone(obj.overallTone ?? obj.tone);
+  if (!overallTone) {
+    errors.push(`Invalid overallTone: ${String(obj.overallTone ?? obj.tone)}. Expected one of: ${VALID_TONES.join(", ")}`);
   }
 
-  // Validate clarity
-  if (!obj.clarity || !VALID_CLARITY.includes(obj.clarity as string)) {
-    errors.push(`Invalid clarity: ${obj.clarity}. Expected one of: ${VALID_CLARITY.join(", ")}`);
+  const toneScore =
+    typeof obj.toneScore === "number" && Number.isFinite(obj.toneScore)
+      ? Math.min(10, Math.max(1, Math.round(obj.toneScore)))
+      : null;
+  if (toneScore === null) {
+    errors.push("Invalid toneScore: expected number between 1 and 10");
   }
 
-  // Validate appropriateness
-  if (!obj.appropriateness || !VALID_APPROPRIATENESS.includes(obj.appropriateness as string)) {
-    errors.push(`Invalid appropriateness: ${obj.appropriateness}. Expected one of: ${VALID_APPROPRIATENESS.join(", ")}`);
-  }
-
-  // Validate suggestions array
-  if (!Array.isArray(obj.suggestions)) {
+  const suggestions = toStringArray(obj.suggestions);
+  if (suggestions.length === 0) {
     errors.push("Invalid suggestions: expected array");
-  } else {
-    const invalidSuggestions = obj.suggestions.filter((s) => typeof s !== "string");
-    if (invalidSuggestions.length > 0) {
-      errors.push("Invalid suggestions: all items must be strings");
-    }
   }
 
-  // Validate summary
-  if (typeof obj.summary !== "string") {
-    errors.push("Invalid summary: expected string");
+  const positiveAspects = toStringArray(obj.positiveAspects);
+
+  const childFocused = typeof obj.childFocused === "boolean" ? obj.childFocused : null;
+  if (childFocused === null) {
+    errors.push("Invalid childFocused: expected boolean");
+  }
+
+  const courtAppropriate =
+    typeof obj.courtAppropriate === "boolean"
+      ? obj.courtAppropriate
+      : obj.appropriateness === "appropriate"
+        ? true
+        : obj.appropriateness === "concerning" || obj.appropriateness === "inappropriate"
+          ? false
+          : null;
+  if (courtAppropriate === null) {
+    errors.push("Invalid courtAppropriate: expected boolean");
   }
 
   if (errors.length > 0) {
@@ -100,11 +126,12 @@ export function validateMessageAnalysis(data: unknown): {
   return {
     valid: true,
     data: {
-      tone: obj.tone as MessageAnalysis["tone"],
-      clarity: obj.clarity as MessageAnalysis["clarity"],
-      appropriateness: obj.appropriateness as MessageAnalysis["appropriateness"],
-      suggestions: obj.suggestions as string[],
-      summary: obj.summary as string,
+      overallTone,
+      toneScore,
+      suggestions,
+      positiveAspects,
+      childFocused,
+      courtAppropriate,
     },
   };
 }
@@ -231,15 +258,14 @@ export function validateScheduleSuggestOutput(data: unknown): {
  */
 export function createFallbackMessageAnalysis(rawText?: string): MessageAnalysis {
   return {
-    tone: "neutral",
-    clarity: "unclear",
-    appropriateness: "appropriate",
+    overallTone: "neutral",
+    toneScore: 5,
     suggestions: rawText 
       ? ["Unable to fully analyze. Please review manually."] 
       : ["Analysis unavailable. Please try again."],
-    summary: rawText 
-      ? "Analysis could not be completed. The AI response was malformed." 
-      : "No analysis available.",
+    positiveAspects: [],
+    childFocused: false,
+    courtAppropriate: false,
   };
 }
 

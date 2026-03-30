@@ -15,7 +15,8 @@ import {
   MoreVertical,
   Download,
   Printer,
-  FileText
+  FileText,
+  PanelLeft
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -49,6 +50,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { PremiumFeatureGate } from "@/components/premium/PremiumFeatureGate";
 import { RoleGate } from "@/components/gates/RoleGate";
 import { ShareToFamilyDialog } from "@/components/nurse-nancy/ShareToFamilyDialog";
@@ -98,6 +106,13 @@ const renderInlineFormatting = (text: string) => {
     return part;
   });
 };
+
+const NURSE_NANCY_QUICK_PROMPTS = [
+  "My child has a mild cough tonight. What comfort care can I try?",
+  "What should I watch for with a low fever and runny nose?",
+  "My child has an upset stomach. How can I keep them hydrated?",
+  "What are good questions to ask a pediatrician about ear pain?",
+];
 
 interface ChatMessageProps {
   message: NurseNancyMessage;
@@ -331,6 +346,7 @@ const NurseNancyContent = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [inputValue, setInputValue] = useState("");
+  const [mobileThreadsOpen, setMobileThreadsOpen] = useState(false);
   const [shareMessageContent, setShareMessageContent] = useState("");
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -354,6 +370,11 @@ const NurseNancyContent = () => {
     deleteThread,
     renameThread,
   } = useNurseNancy();
+
+  const handleSelectThread = async (thread: NurseNancyThread) => {
+    await selectThread(thread);
+    setMobileThreadsOpen(false);
+  };
 
   // Export handlers
   const handleExportPdf = async () => {
@@ -440,6 +461,18 @@ const NurseNancyContent = () => {
     selectThread(thread);
   };
 
+  const handleQuickPrompt = async (prompt: string) => {
+    if (!currentThread) {
+      const thread = await startNewChat();
+      if (!thread) {
+        return;
+      }
+    }
+
+    setInputValue(prompt);
+    setTimeout(() => inputRef.current?.focus(), 50);
+  };
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       {/* Pinned Disclaimer Banner */}
@@ -476,6 +509,17 @@ const NurseNancyContent = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {filteredThreads.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 md:hidden"
+              onClick={() => setMobileThreadsOpen(true)}
+            >
+              <PanelLeft className="h-4 w-4" />
+              Chats
+            </Button>
+          )}
           {/* Export menu - only show when thread is active */}
           {currentThread && messages.length > 0 && (
             <DropdownMenu>
@@ -498,7 +542,7 @@ const NurseNancyContent = () => {
             </DropdownMenu>
           )}
           
-          <Badge variant="outline" className="gap-1.5 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+          <Badge variant="outline" className="hidden gap-1.5 text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-950/20 sm:inline-flex">
             <AlertTriangle className="h-3 w-3" />
             Not Medical Advice
           </Badge>
@@ -539,18 +583,72 @@ const NurseNancyContent = () => {
                 <Plus className="h-4 w-4" />
                 Start a New Chat
               </Button>
+
+              <div className="mt-6 grid w-full max-w-3xl gap-3 text-left md:grid-cols-2">
+                <Card className="border-dashed bg-muted/30">
+                  <CardContent className="p-4">
+                    <p className="text-sm font-medium">A good fit for Nurse Nancy</p>
+                    <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                      <li>General symptom check-ins</li>
+                      <li>Comfort-care ideas for home</li>
+                      <li>Questions to ask the pediatrician</li>
+                    </ul>
+                  </CardContent>
+                </Card>
+                <Card className="border-amber-200 bg-amber-50/70 dark:border-amber-900/50 dark:bg-amber-950/20">
+                  <CardContent className="p-4">
+                    <p className="flex items-center gap-2 text-sm font-medium text-amber-800 dark:text-amber-300">
+                      <AlertTriangle className="h-4 w-4" />
+                      Skip the chat and get help now if
+                    </p>
+                    <ul className="mt-2 space-y-1 text-sm text-amber-700 dark:text-amber-400">
+                      <li>Breathing looks hard or unusual</li>
+                      <li>A child seems hard to wake or not acting like themselves</li>
+                      <li>You think urgent or emergency care may be needed</li>
+                    </ul>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="mt-6 w-full max-w-2xl">
+                <p className="text-sm font-medium text-foreground">Try a starter question</p>
+                <div className="mt-3 flex flex-wrap justify-center gap-2">
+                  {NURSE_NANCY_QUICK_PROMPTS.map((prompt) => (
+                    <Button
+                      key={prompt}
+                      variant="outline"
+                      size="sm"
+                      className="h-auto whitespace-normal px-3 py-2 text-left text-xs"
+                      onClick={() => void handleQuickPrompt(prompt)}
+                    >
+                      {prompt}
+                    </Button>
+                  ))}
+                </div>
+              </div>
               
               {/* Mobile thread list */}
               {filteredThreads.length > 0 && (
                 <div className="md:hidden mt-6 w-full max-w-sm">
-                  <p className="text-sm font-medium mb-2">Previous Conversations</p>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">Recent Conversations</p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 gap-1 px-2 text-xs"
+                      onClick={() => setMobileThreadsOpen(true)}
+                    >
+                      <PanelLeft className="h-3.5 w-3.5" />
+                      View all
+                    </Button>
+                  </div>
                   <div className="space-y-2">
                     {filteredThreads.slice(0, 3).map((thread) => (
                       <Button
                         key={thread.id}
                         variant="outline"
                         className="w-full justify-start gap-2"
-                        onClick={() => selectThread(thread)}
+                        onClick={() => void handleSelectThread(thread)}
                       >
                         <MessageCircle className="h-4 w-4" />
                         <span className="truncate">{thread.title}</span>
@@ -569,6 +667,14 @@ const NurseNancyContent = () => {
                   <span className="text-sm font-medium truncate">{currentThread.title}</span>
                 </div>
                 <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => setMobileThreadsOpen(true)}
+                  >
+                    <PanelLeft className="h-4 w-4" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="icon"
@@ -622,6 +728,19 @@ const NurseNancyContent = () => {
 
               {/* Input */}
               <div className="p-4 border-t bg-background">
+                <div className="mb-3 flex flex-wrap gap-2">
+                  {NURSE_NANCY_QUICK_PROMPTS.slice(0, 2).map((prompt) => (
+                    <Button
+                      key={prompt}
+                      variant="outline"
+                      size="sm"
+                      className="h-auto whitespace-normal px-3 py-2 text-left text-xs"
+                      onClick={() => setInputValue(prompt)}
+                    >
+                      {prompt}
+                    </Button>
+                  ))}
+                </div>
                 <div className="flex gap-2">
                   <Input
                     ref={inputRef}
@@ -640,6 +759,9 @@ const NurseNancyContent = () => {
                     <Send className="h-4 w-4" />
                   </Button>
                 </div>
+                <p className="mt-2 text-xs text-muted-foreground text-center">
+                  Best for general symptom questions, comfort-care ideas, and planning what to ask a clinician.
+                </p>
                 {/* Privacy note + emergency reminder */}
                 <div className="mt-2 space-y-1">
                   <p className="text-xs text-muted-foreground text-center">
@@ -674,6 +796,29 @@ const NurseNancyContent = () => {
         onOpenChange={setSearchDialogOpen}
         onSelectResult={handleSearchResult}
       />
+
+      <Sheet open={mobileThreadsOpen} onOpenChange={setMobileThreadsOpen}>
+        <SheetContent side="left" className="w-[88vw] p-0 sm:max-w-sm">
+          <SheetHeader className="border-b px-4 py-4">
+            <SheetTitle>Conversations</SheetTitle>
+            <SheetDescription>Switch between Nurse Nancy chats or start a new one.</SheetDescription>
+          </SheetHeader>
+          <div className="h-[calc(100vh-6rem)]">
+            <ThreadSidebar
+              threads={filteredThreads}
+              currentThreadId={currentThread?.id || null}
+              onSelectThread={handleSelectThread}
+              onNewChat={handleNewChat}
+              onDeleteThread={deleteThread}
+              onRenameThread={handleRenameClick}
+              onSearch={() => setSearchDialogOpen(true)}
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
+              loading={loading}
+            />
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 };

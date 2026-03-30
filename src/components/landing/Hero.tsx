@@ -21,9 +21,9 @@ import { useAuth } from "@/contexts/AuthContext";
  */
 
 const trustSignals = [
-  { icon: Shield, label: "Secure & Private" },
-  { icon: Scale, label: "Court-Ready Records" },
-  { icon: FileCheck, label: "Documented History" },
+  { icon: Shield, label: "Private family data" },
+  { icon: FileCheck, label: "Documented communication" },
+  { icon: Scale, label: "Court-aware exports" },
 ];
 
 export const Hero = () => {
@@ -62,7 +62,7 @@ export const Hero = () => {
             {/* FIX: Increased contrast on eyebrow text for readability */}
             <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-white/95 text-sm font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-              Trusted by families and attorneys
+              Built for shared custody and clearer records
             </span>
           </motion.div>
 
@@ -73,10 +73,10 @@ export const Hero = () => {
             transition={{ duration: 0.6, delay: 0.1 }}
             className="text-white mb-6"
           >
-            Custody coordination
+            One system for
             <br />
             {/* FIX: headline sub-line was too faint */}
-            <span className="text-white/95">built for clarity</span>
+            <span className="text-white/95">calmer co-parenting</span>
           </motion.h1>
 
           {/* Value Proposition - Direct, Confident */}
@@ -87,9 +87,9 @@ export const Hero = () => {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="text-lg sm:text-xl text-white/85 max-w-2xl mx-auto mb-10 leading-relaxed"
           >
-            The co-parenting platform that keeps schedules organized, 
-            communication documented, and records court-ready—so you can 
-            focus on what matters.
+            CoParrent keeps schedules, messages, child information, documents,
+            and expenses in one structured place, so fewer details fall through
+            the cracks and every decision has context.
           </motion.p>
 
           {/* CTA - Singular, Clear Action */}

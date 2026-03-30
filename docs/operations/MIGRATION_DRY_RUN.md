@@ -159,14 +159,14 @@ This system integrates with the existing Production Checklist in the Admin Dashb
 |------|---------|
 | `src/lib/migrationDryRun.ts` | Core validation logic and types |
 | `src/components/admin/MigrationDryRunPanel.tsx` | Admin UI component |
-| `docs/MIGRATION_DRY_RUN.md` | This documentation |
+| `docs/operations/MIGRATION_DRY_RUN.md` | This documentation |
 
 ---
 
 ## Related Documentation
 
-- `docs/SECURITY_MODEL.md` - Security architecture
-- `docs/GATED_FEATURES.md` - Feature access rules
+- `docs/security/SECURITY_MODEL.md` - Security architecture
+- `docs/security/GATED_FEATURES.md` - Feature access rules
 - `README.md` - Project overview and design principles
 
 ---

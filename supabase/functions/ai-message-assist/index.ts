@@ -88,7 +88,7 @@ serve(async (req) => {
   try {
     // Parse request body
     const body = await req.json();
-    const { message, action, mode } = body;
+    const { familyId, message, action, mode } = body;
     
     // Validate action
     if (!action || !VALID_ACTIONS.includes(action as ValidAction)) {
@@ -109,7 +109,9 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     
     // Use the action directly since aiGuard AiAction type includes these actions
-    const guardResult = await aiGuard(req, validAction as AiAction, supabaseUrl, supabaseServiceKey);
+    const guardResult = await aiGuard(req, validAction as AiAction, supabaseUrl, supabaseServiceKey, {
+      familyId,
+    });
     
     if (!guardResult.allowed) {
       const errorObj = guardResult.error || { error: "Access denied", code: "FORBIDDEN" };

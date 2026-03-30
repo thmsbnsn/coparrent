@@ -22,6 +22,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { useFamily } from "@/contexts/FamilyContext";
 import { useChildren } from "@/hooks/useChildren";
 import { toast } from "sonner";
 
@@ -161,6 +162,7 @@ export const CalendarWizard = ({ onComplete, onCancel }: CalendarWizardProps) =>
   const [preferences, setPreferences] = useState("");
   const [selectedState, setSelectedState] = useState("");
 
+  const { activeFamilyId } = useFamily();
   const { children } = useChildren();
 
   const nextStep = () => setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1));
@@ -224,6 +226,10 @@ export const CalendarWizard = ({ onComplete, onCancel }: CalendarWizardProps) =>
     setShowAISuggestions(true);
     
     try {
+      if (!activeFamilyId) {
+        throw new Error("Select a family before requesting AI suggestions.");
+      }
+
       const childrenInfo = {
         count: children?.length || 0,
         ages: getChildrenAges(),
@@ -231,6 +237,7 @@ export const CalendarWizard = ({ onComplete, onCancel }: CalendarWizardProps) =>
 
       const { data, error } = await supabase.functions.invoke('ai-schedule-suggest', {
         body: {
+          familyId: activeFamilyId,
           childrenInfo,
           isHighConflict,
           preferences,

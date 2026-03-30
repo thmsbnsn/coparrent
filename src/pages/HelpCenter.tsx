@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { 
@@ -14,7 +14,9 @@ import {
   ChevronRight,
   Mail,
   ArrowRight,
-  BookOpen
+  BookOpen,
+  LifeBuoy,
+  Sparkles,
 } from "lucide-react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
@@ -42,48 +44,56 @@ const helpCategories = [
     title: "Getting Started",
     description: "Account setup and basics",
     href: "/help/getting-started",
+    keywords: ["setup", "onboarding", "start", "invite"],
   },
   {
     icon: Calendar,
     title: "Scheduling",
     description: "Custody calendars and exchanges",
     href: "/help/scheduling",
+    keywords: ["calendar", "exchange", "pattern", "schedule", "change request"],
   },
   {
     icon: MessageSquare,
     title: "Messaging",
     description: "Communication and records",
     href: "/help/messaging",
+    keywords: ["chat", "messages", "communication", "records"],
   },
   {
     icon: FileText,
     title: "Documents",
     description: "Storage and exports",
     href: "/help/documents",
+    keywords: ["files", "exports", "pdf", "storage"],
   },
   {
     icon: DollarSign,
     title: "Expenses",
     description: "Tracking and reimbursements",
     href: "/help/expenses",
+    keywords: ["money", "reimbursements", "receipts", "payments"],
   },
   {
     icon: Scale,
     title: "Court Use",
     description: "Legal documentation",
     href: "/court-records",
+    keywords: ["court", "legal", "records", "export"],
   },
   {
     icon: User,
     title: "Account",
     description: "Billing and settings",
     href: "/help/account",
+    keywords: ["billing", "subscription", "profile", "settings"],
   },
   {
     icon: Shield,
     title: "Security",
     description: "Privacy and protection",
     href: "/help/privacy",
+    keywords: ["privacy", "security", "data", "protection"],
   },
 ];
 
@@ -120,8 +130,69 @@ const popularArticles = [
   },
 ];
 
+const quickPaths = [
+  {
+    icon: Rocket,
+    title: "Set up a family",
+    description: "Start with children, schedules, and invitations.",
+    href: "/help/getting-started",
+  },
+  {
+    icon: Sparkles,
+    title: "Find record and export answers",
+    description: "See how messaging, documents, and court-ready records work.",
+    href: "/court-records",
+  },
+  {
+    icon: LifeBuoy,
+    title: "Get direct support",
+    description: "Billing, account access, and high-priority help routes.",
+    href: "/help/contact",
+  },
+];
+
 const HelpCenter = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+
+  const searchResults = useMemo(() => {
+    if (!normalizedQuery) return [];
+
+    const categoryResults = helpCategories
+      .filter((category) => {
+        const haystack = [
+          category.title,
+          category.description,
+          ...category.keywords,
+        ]
+          .join(" ")
+          .toLowerCase();
+        return haystack.includes(normalizedQuery);
+      })
+      .map((category) => ({
+        title: category.title,
+        description: category.description,
+        href: category.href,
+        label: "Topic",
+      }));
+
+    const articleResults = popularArticles
+      .filter((article) =>
+        [article.title, article.category].join(" ").toLowerCase().includes(normalizedQuery)
+      )
+      .map((article) => ({
+        title: article.title,
+        description: article.category,
+        href: article.href,
+        label: "Article",
+      }));
+
+    const merged = [...categoryResults, ...articleResults];
+
+    return merged.filter(
+      (item, index) => merged.findIndex((candidate) => candidate.href === item.href) === index
+    );
+  }, [normalizedQuery]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -146,16 +217,17 @@ const HelpCenter = () => {
               transition={{ delay: 0.1 }}
               className="mb-4"
             >
-              How can we help?
+              Find the right answer fast.
             </motion.h1>
             
             <motion.p
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 }}
-              className="text-muted-foreground mb-8"
+              className="text-muted-foreground mb-8 text-lg"
             >
-              Find guides, answers, and support for every part of CoParrent.
+              Browse setup guides, scheduling help, record questions, billing answers,
+              and direct support paths without guessing where to start.
             </motion.p>
 
             {/* Search */}
@@ -168,7 +240,7 @@ const HelpCenter = () => {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search for help..."
+                placeholder="Search setup, messages, billing, records..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-12 pr-4 h-12 text-base rounded-xl"
@@ -176,67 +248,150 @@ const HelpCenter = () => {
             </motion.div>
           </div>
 
-          {/* Categories - Clean Grid */}
-          <motion.section
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
-            className="max-w-4xl mx-auto mb-16 lg:mb-20"
-          >
-            <h2 className="text-lg font-display font-semibold text-center mb-6">
-              Browse by topic
-            </h2>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-4">
-              {helpCategories.map((category) => (
-                <Link key={category.title} to={category.href}>
-                  <div className="h-full p-4 lg:p-5 rounded-xl border border-border bg-card hover:border-primary/30 hover:shadow-md transition-all duration-200 group">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/15 transition-colors">
-                      <category.icon className="w-5 h-5 text-primary" />
-                    </div>
-                    <h3 className="font-display font-semibold text-sm mb-1 group-hover:text-primary transition-colors">
-                      {category.title}
-                    </h3>
-                    <p className="text-xs text-muted-foreground">
-                      {category.description}
-                    </p>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </motion.section>
+          {normalizedQuery ? (
+            <motion.section
+              initial={{ opacity: 0, y: 24 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="max-w-3xl mx-auto mb-16 lg:mb-20"
+            >
+              <div className="flex items-center justify-between gap-4 mb-6">
+                <div>
+                  <h2 className="text-lg font-display font-semibold">Search results</h2>
+                  <p className="text-sm text-muted-foreground">
+                    {searchResults.length} result{searchResults.length === 1 ? "" : "s"} for "{searchQuery.trim()}"
+                  </p>
+                </div>
+                <Button variant="ghost" onClick={() => setSearchQuery("")}>
+                  Clear search
+                </Button>
+              </div>
 
-          {/* Popular Articles - Scannable List */}
-          <motion.section
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="max-w-2xl mx-auto mb-16 lg:mb-20"
-          >
-            <h2 className="text-lg font-display font-semibold text-center mb-6">
-              Popular articles
-            </h2>
-            <div className="bg-card border border-border rounded-xl overflow-hidden">
-              {popularArticles.map((article, index) => (
-                <Link
-                  key={article.title}
-                  to={article.href}
-                  className={`flex items-center justify-between p-4 hover:bg-muted/50 transition-colors group ${
-                    index !== 0 ? 'border-t border-border' : ''
-                  }`}
-                >
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs text-muted-foreground block mb-1">
-                      {article.category}
-                    </span>
-                    <span className="font-medium text-sm group-hover:text-primary transition-colors line-clamp-1">
-                      {article.title}
-                    </span>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary flex-shrink-0 ml-3 transition-colors" />
-                </Link>
-              ))}
-            </div>
-          </motion.section>
+              {searchResults.length > 0 ? (
+                <div className="grid gap-3">
+                  {searchResults.map((result) => (
+                    <Link
+                      key={result.href}
+                      to={result.href}
+                      className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 hover:border-primary/30 hover:bg-muted/30 transition-all group"
+                    >
+                      <div className="min-w-0">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-primary/80 block mb-2">
+                          {result.label}
+                        </span>
+                        <h3 className="font-display font-semibold group-hover:text-primary transition-colors">
+                          {result.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground mt-1">{result.description}</p>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-border bg-card p-8 text-center">
+                  <h3 className="text-lg font-display font-semibold mb-2">No direct matches</h3>
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto mb-5">
+                    Try a broader term like schedule, messaging, billing, records, or privacy.
+                    If you still cannot find it, use the contact path below.
+                  </p>
+                  <Button asChild>
+                    <Link to="/help/contact">Contact Support</Link>
+                  </Button>
+                </div>
+              )}
+            </motion.section>
+          ) : (
+            <>
+              <motion.section
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.28 }}
+                className="max-w-5xl mx-auto mb-12 lg:mb-14"
+              >
+                <h2 className="text-lg font-display font-semibold text-center mb-6">
+                  Start with the most common paths
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {quickPaths.map((path) => (
+                    <Link key={path.title} to={path.href}>
+                      <div className="h-full rounded-2xl border border-border bg-card p-5 hover:border-primary/30 hover:shadow-md transition-all group">
+                        <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/15 transition-colors">
+                          <path.icon className="w-5 h-5 text-primary" />
+                        </div>
+                        <h3 className="font-display font-semibold mb-2 group-hover:text-primary transition-colors">
+                          {path.title}
+                        </h3>
+                        <p className="text-sm text-muted-foreground leading-relaxed">{path.description}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </motion.section>
+
+              {/* Categories - Clean Grid */}
+              <motion.section
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.34 }}
+                className="max-w-4xl mx-auto mb-16 lg:mb-20"
+              >
+                <h2 className="text-lg font-display font-semibold text-center mb-6">
+                  Browse by topic
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 lg:gap-4">
+                  {helpCategories.map((category) => (
+                    <Link key={category.title} to={category.href}>
+                      <div className="h-full p-4 lg:p-5 rounded-xl border border-border bg-card hover:border-primary/30 hover:shadow-md transition-all duration-200 group">
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-3 group-hover:bg-primary/15 transition-colors">
+                          <category.icon className="w-5 h-5 text-primary" />
+                        </div>
+                        <h3 className="font-display font-semibold text-sm mb-1 group-hover:text-primary transition-colors">
+                          {category.title}
+                        </h3>
+                        <p className="text-xs text-muted-foreground">
+                          {category.description}
+                        </p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </motion.section>
+
+              {/* Popular Articles - Scannable List */}
+              <motion.section
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="max-w-2xl mx-auto mb-16 lg:mb-20"
+              >
+                <h2 className="text-lg font-display font-semibold text-center mb-6">
+                  Popular articles
+                </h2>
+                <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  {popularArticles.map((article, index) => (
+                    <Link
+                      key={article.title}
+                      to={article.href}
+                      className={`flex items-center justify-between p-4 hover:bg-muted/50 transition-colors group ${
+                        index !== 0 ? "border-t border-border" : ""
+                      }`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs text-muted-foreground block mb-1">
+                          {article.category}
+                        </span>
+                        <span className="font-medium text-sm group-hover:text-primary transition-colors line-clamp-1">
+                          {article.title}
+                        </span>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary flex-shrink-0 ml-3 transition-colors" />
+                    </Link>
+                  ))}
+                </div>
+              </motion.section>
+            </>
+          )}
 
           {/* Contact - Calm Escalation */}
           <motion.section
@@ -255,9 +410,11 @@ const HelpCenter = () => {
               <p className="text-muted-foreground text-sm mb-6 max-w-sm mx-auto">
                 Can't find what you're looking for? Our team typically responds within one business day.
               </p>
-              <Button size="lg" className="px-8">
-                Contact Support
-                <ArrowRight className="w-4 h-4 ml-2" />
+              <Button asChild size="lg" className="px-8">
+                <Link to="/help/contact">
+                  Contact Support
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Link>
               </Button>
             </div>
           </motion.section>

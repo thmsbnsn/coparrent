@@ -1,19 +1,16 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { getCorsHeaders, strictCors } from "../_shared/cors.ts";
 
 // App version - keep in sync with frontend
 const APP_VERSION = "0.9.0";
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+  const corsResponse = strictCors(req);
+  if (corsResponse) {
+    return corsResponse;
   }
 
+  const corsHeaders = getCorsHeaders(req);
   const startTime = Date.now();
   
   try {

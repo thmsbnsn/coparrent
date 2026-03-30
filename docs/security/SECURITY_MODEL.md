@@ -67,8 +67,8 @@ CoParrent supports multiple roles with **strict capability separation**:
 
 | Role | Description |
 |-----|------------|
-| Parent | Primary account holder and data owner |
-| Co-Parent | Secondary parent with limited access |
+| Parent | Parent member with family-scoped write access where allowed |
+| Guardian | Guardian member with family-scoped write access where allowed |
 | Third-Party | Read-only invited participant |
 | Child | Restricted account with no data creation rights |
 
@@ -83,18 +83,26 @@ CoParrent now enforces authorization against the user's **active family membersh
 - Family-gated features should assume that `auth.uid()` alone is not enough; the user must also have the correct role inside the active family.
 - Invitation rows should carry `family_id` so acceptance resolves into the intended family rather than creating ambiguous membership state.
 
+## Family-Scoped Architecture
+
+`activeFamilyId` in the client and explicit `family_id` on the server are the only valid scope inputs for family operations.
+
+- Core flows do not infer scope from legacy relationship linkage or other global profile assumptions.
+- Multi-family users must supply explicit family context for reads, writes, notifications, and AI authorization.
+- If family scope is missing or ambiguous, the operation should fail closed rather than guess.
+
 ---
 
 ## Data Ownership Model
 
-- All data is **owned by a single parent user**
-- Ownership is immutable unless explicitly transferred (future feature)
-- Ownership determines:
+- Family-operational records are bound to a single `family_id`.
+- Private content remains owner-scoped until explicitly shared.
+- Ownership and family scope determine:
   - Edit permissions
   - Delete permissions
   - Sharing authority
 
-No automatic co-parent visibility exists.
+Family scope is explicit. Visibility should never be inferred across families.
 
 ---
 
@@ -186,7 +194,8 @@ Push notifications follow the same zero-trust model as other features:
 - Edge functions use centralized rate-limit helpers.
 - AI features enforce per-user limits server-side.
 - Invitation and notification flows are rate-limited independently from normal app reads.
-- Temporary QA exceptions such as disabled captcha or localhost origin allowances should be treated as operational risk, not permanent baseline behavior.
+- `notify-third-party-added` intentionally keeps `verify_jwt=false` in `supabase/config.toml` so trusted internal callers can use a shared-secret header, but the function itself requires JWT-or-internal authorization, validates family/invitation ownership, rate-limits sends, and audit-logs every send attempt.
+- Temporary QA exceptions such as localhost origin allowances should be treated as operational risk, not permanent baseline behavior. Repo-side production auth captcha now defaults to enabled and should remain configured in deployed environments.
 
 ---
 
@@ -234,14 +243,14 @@ The following limitations are intentional:
 
 When security rules block an action:
 - The system fails **closed**
-
----
-
-_Last Updated: 2026-03-13_
 - Users receive clear, non-technical messaging
 - No internal state or identifiers are exposed
 
 Security errors are handled as product behavior, not exceptions.
+
+---
+
+_Last Updated: 2026-03-29_
 
 ---
 

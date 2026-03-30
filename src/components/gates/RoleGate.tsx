@@ -63,7 +63,7 @@ export const RoleGate = ({
   featureName = "This feature",
 }: RoleGateProps) => {
   const navigate = useNavigate();
-  const { isThirdParty, isChild, loading, activeFamilyId } = useFamilyRole();
+  const { isParent, isThirdParty, isChild, loading, activeFamilyId } = useFamilyRole();
   const { activeFamily } = useFamily();
   const { tier } = useSubscription();
 

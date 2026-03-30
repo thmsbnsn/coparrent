@@ -110,8 +110,9 @@ export const THREAD_TYPE_LABELS: Record<string, string> = {
 
 // Access Reason Labels
 export const ACCESS_REASON_LABELS: Record<string, string> = {
-  "MVP Tester": "Early Access Tester",
-  "Beta Tester": "Beta Tester",
+  "MVP Tester": "Complimentary access",
+  "Beta Tester": "Complimentary access",
+  "Closed Beta Tester": "Complimentary access",
   "Free Trial": "Free Trial",
   "Promotional Access": "Promotional Access",
 } as const;

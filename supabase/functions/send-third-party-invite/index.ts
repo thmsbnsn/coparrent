@@ -8,7 +8,7 @@ const InviteRequestSchema = z.object({
   inviteeEmail: z.string().email("Invalid email address").max(255, "Email too long"),
   inviterName: z.string().min(1, "Inviter name required").max(100, "Name too long"),
   token: z.string().uuid("Invalid token format"),
-  primaryParentId: z.string().uuid("Invalid primary parent ID"),
+  primaryParentId: z.string().uuid("Invalid primary parent ID").optional(),
 });
 
 const logStep = (step: string, details?: Record<string, unknown>) => {
@@ -77,21 +77,48 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    const { inviteeEmail, inviterName, token: inviteToken, primaryParentId } = parseResult.data;
-    logStep("Input validated", { inviteeEmail, primaryParentId });
+    const { inviteeEmail, inviterName, token: inviteToken } = parseResult.data;
+    logStep("Input validated", { inviteeEmail });
 
-    // Verify the invitation exists
+    // Get the authenticated user's profile ID first
+    const { data: userProfile, error: profileError } = await supabaseClient
+      .from('profiles')
+      .select('id')
+      .eq('user_id', userData.user.id)
+      .single();
+
+    if (profileError || !userProfile) {
+      logStep("User profile not found");
+      return new Response(
+        JSON.stringify({ success: false, error: "User profile not found" }),
+        { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Verify the invitation exists and belongs to the authenticated user
     const { data: invitation, error: inviteError } = await supabaseClient
       .from('invitations')
       .select('id, inviter_id, status, invitation_type')
       .eq('token', inviteToken)
+      .eq('inviter_id', userProfile.id)
       .single();
 
     if (inviteError || !invitation) {
-      logStep("Invitation not found", { token: inviteToken });
+      logStep("Invitation not found or unauthorized", { token: inviteToken });
       return new Response(
-        JSON.stringify({ success: false, error: "Invitation not found" }),
+        JSON.stringify({ success: false, error: "Invitation not found or you are not authorized" }),
         { status: 404, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    if (invitation.inviter_id !== userProfile.id) {
+      logStep("Unauthorized - invitation does not belong to user", {
+        inviterId: invitation.inviter_id,
+        userProfileId: userProfile.id,
+      });
+      return new Response(
+        JSON.stringify({ success: false, error: "You are not authorized to send this invitation" }),
+        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 

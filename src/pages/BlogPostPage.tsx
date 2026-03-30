@@ -1,13 +1,14 @@
 import { useState, useEffect } from "react";
 import { useParams, Link, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowLeft, Share2, Calendar, User, Tag } from "lucide-react";
+import { ArrowLeft, Share2, Calendar, User, Tag, ArrowRight } from "lucide-react";
 import { format } from "date-fns";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { PublicLayout } from "@/components/landing/PublicLayout";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ShareDialog } from "@/components/blog/ShareDialog";
+import { BlogContent } from "@/components/blog/BlogContent";
 import { supabase } from "@/integrations/supabase/client";
 
 interface BlogPost {
@@ -81,7 +82,7 @@ const BlogPostPage = () => {
 
   return (
     <Layout>
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
         {/* Back Button */}
         <Button variant="ghost" asChild>
           <Link to={backLink}>
@@ -123,7 +124,14 @@ const BlogPostPage = () => {
           </div>
 
           {/* Title */}
-          <h1 className="text-3xl lg:text-4xl font-display font-bold">{post.title}</h1>
+          <div className="space-y-4">
+            <h1 className="text-3xl lg:text-5xl font-display font-bold leading-tight">{post.title}</h1>
+            {post.excerpt && (
+              <p className="text-lg text-muted-foreground leading-relaxed max-w-3xl">
+                {post.excerpt}
+              </p>
+            )}
+          </div>
 
           {/* Share Button */}
           <div className="flex gap-2">
@@ -134,36 +142,8 @@ const BlogPostPage = () => {
           </div>
 
           {/* Content */}
-          <div className="prose prose-lg dark:prose-invert max-w-none">
-            {post.content.split("\n\n").map((paragraph, index) => {
-              // Handle markdown-style bold and headers
-              if (paragraph.startsWith("**") && paragraph.endsWith("**")) {
-                return (
-                  <h3 key={index} className="text-lg font-semibold mt-6 mb-3">
-                    {paragraph.replace(/\*\*/g, "")}
-                  </h3>
-                );
-              }
-              if (paragraph.startsWith("- ")) {
-                return (
-                  <p key={index} className="ml-4">
-                    • {paragraph.substring(2).replace(/\*\*/g, "")}
-                  </p>
-                );
-              }
-              if (paragraph.match(/^\d+\. \*\*/)) {
-                return (
-                  <p key={index} className="ml-4 font-medium">
-                    {paragraph.replace(/\*\*/g, "")}
-                  </p>
-                );
-              }
-              return (
-                <p key={index} className="mb-4">
-                  {paragraph.replace(/\*\*/g, "")}
-                </p>
-              );
-            })}
+          <div className="rounded-[2rem] border border-border bg-card p-6 sm:p-8 lg:p-10 shadow-sm">
+            <BlogContent content={post.content} />
           </div>
 
           {/* Tags */}
@@ -177,6 +157,25 @@ const BlogPostPage = () => {
               ))}
             </div>
           )}
+
+          <div className="rounded-[1.75rem] border border-border bg-muted/25 p-6 lg:p-8">
+            <h2 className="text-2xl font-display font-bold mb-3">Need product-specific help?</h2>
+            <p className="text-muted-foreground leading-relaxed mb-5 max-w-2xl">
+              The blog is for guidance and perspective. If you need setup instructions,
+              billing help, or answers about records and exports, the Help Center is the better path.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button asChild>
+                <Link to="/help" className="flex items-center gap-2">
+                  Visit Help Center
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link to={backLink}>Back to articles</Link>
+              </Button>
+            </div>
+          </div>
         </motion.article>
       </div>
 

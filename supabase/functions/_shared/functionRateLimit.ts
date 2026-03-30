@@ -17,6 +17,7 @@ interface RateLimitResult {
 const RATE_LIMIT_CONFIGS: Record<string, RateLimitConfig> = {
   "send-coparent-invite": { maxPerDay: 20, maxPerMinute: 5 },
   "send-third-party-invite": { maxPerDay: 20, maxPerMinute: 5 },
+  "notify-third-party-added": { maxPerDay: 20, maxPerMinute: 5 },
   "send-notification": { maxPerDay: 100, maxPerMinute: 20 },
   "login-notification": { maxPerDay: 50, maxPerMinute: 10 },
   default: { maxPerDay: 100, maxPerMinute: 30 },

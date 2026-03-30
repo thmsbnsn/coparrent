@@ -3,7 +3,7 @@
 This document lists all premium, role-gated, and admin-restricted features in CoParrent,
 along with where each gate is enforced (UI component + server-side).
 
-**Last Updated:** 2026-03-13
+**Last Updated:** 2026-03-29
 
 ---
 
@@ -24,8 +24,11 @@ Client-side checks are considered **advisory only**.
 
 - Parent and guardian accounts now bootstrap an active family membership before family-scoped gates run.
 - New co-parent and third-party invitations are expected to carry a concrete `family_id` so invited users join an existing family instead of creating a new one during onboarding.
+- Core family flows now require explicit family scope through `activeFamilyId` and persisted `family_id` values. The current migration covers AI guard, third-party management, schedules, schedule requests, and document flow.
+- Family-scoped operations must not infer recipients, visibility, or permissions from legacy relationship links or implicit account pairings.
 - Complimentary Power granted by access code is treated the same as paid Power for feature gating.
-- All AI edge functions are intended to run through OpenRouter; production risk is now runtime verification, not provider ambiguity.
+- All AI edge functions now run through OpenRouter, and the main runtime paths already have live verification evidence.
+- Messaging Hub remains an allowed family route, and live thread creation has already been verified against the deployed backend.
 
 ---
 
@@ -85,7 +88,7 @@ The following limitations are **by design**, not omissions:
 
 ## Cross-Reference
 
-- Security architecture: **`docs/SECURITY_MODEL.md`**
+- Security architecture: **`docs/security/SECURITY_MODEL.md`**
 - Design principles: **`README.md`**
 
 ---
@@ -118,6 +121,7 @@ CoParrent uses a two-tier subscription model:
 - Invited co-parents should join the inviter's family rather than create a new family.
 - Invited third-party users should also join an existing family from the invitation context.
 - Family-scoped pages should not rely on a parent account being globally marked as parent; they require an active family membership.
+- Family-scoped actions should not guess a target family from profile relationships; they require explicit scope from the active family selection or stored `family_id`.
 
 ---
 

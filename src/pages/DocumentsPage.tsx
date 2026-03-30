@@ -1,7 +1,7 @@
 /**
  * @page-role Reference
  * @summary-pattern Category counts + document grid with search/filter
- * @ownership Both co-parents can view all documents (shared vault)
+ * @ownership Active family parents and guardians can view family-scoped documents
  * @court-view Court Export dialog generates neutral, print-safe document bundles
  * 
  * LAW 1: Reference role - read-only browsing, low cognitive load
@@ -124,7 +124,7 @@ const DocumentsPageContent = () => {
               <h3 className="font-medium text-sm">Court-Ready Security</h3>
               <p className="text-sm text-muted-foreground mt-1">
                 All documents are encrypted and access is logged for legal
-                compliance. Both co-parents can view all documents.
+                compliance. Documents shown here stay scoped to the active family.
               </p>
             </div>
           </div>
@@ -201,7 +201,7 @@ const DocumentsPageContent = () => {
             <p className="text-muted-foreground max-w-md mx-auto mb-6">
               {searchQuery || categoryFilter !== 'all'
                 ? 'Try adjusting your search or filter'
-                : 'Upload important documents like custody agreements, medical records, and school information to share securely with your co-parent.'}
+                : 'Upload important documents like custody agreements, medical records, and school information to share securely with the other parent or guardian in this family.'}
             </p>
             {!searchQuery && categoryFilter === 'all' && permissions.canManageDocuments && (
               <Button onClick={() => setShowUploadDialog(true)}>

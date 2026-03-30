@@ -91,28 +91,28 @@ const SportsPage = () => {
       <RoleGate requireParent restrictedMessage="Youth Sports Hub is only available to parents and guardians.">
         <PremiumFeatureGate featureName="Youth Sports Hub">
           <div className="space-y-6">
-          {/* Header */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-3 sm:gap-4">
                 {selectedActivity && (
                   <Button
                     variant="ghost"
                     size="icon"
                     onClick={() => setSelectedActivity(null)}
+                    className="shrink-0"
                   >
                     <ArrowLeft className="w-5 h-5" />
                   </Button>
                 )}
-                <div>
-                  <h1 className="text-2xl lg:text-3xl font-display font-bold flex items-center gap-2">
+                <div className="min-w-0">
+                  <h1 className="text-2xl lg:text-3xl font-display font-bold flex flex-wrap items-center gap-2">
                     <Trophy className="w-7 h-7 text-primary" />
                     {selectedActivity ? selectedActivity.name : "Youth Sports Hub"}
                   </h1>
-                  <p className="text-muted-foreground mt-1">
+                  <p className="mt-1 text-sm sm:text-base text-muted-foreground">
                     {selectedActivity
                       ? `${selectedActivity.child_name} • ${selectedActivity.team_name || "No team"}`
                       : "Manage sports, activities, and events"}
@@ -120,19 +120,19 @@ const SportsPage = () => {
                 </div>
               </div>
               {!selectedActivity && (
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setShowCreateEvent(true)}>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                  <Button variant="outline" onClick={() => setShowCreateEvent(true)} className="w-full sm:w-auto">
                     <Calendar className="w-4 h-4 mr-2" />
                     Add Event
                   </Button>
-                  <Button onClick={() => setShowCreateActivity(true)}>
+                  <Button onClick={() => setShowCreateActivity(true)} className="w-full sm:w-auto">
                     <Plus className="w-4 h-4 mr-2" />
                     Add Activity
                   </Button>
                 </div>
               )}
               {selectedActivity && (
-                <Button onClick={() => setShowCreateEvent(true)}>
+                <Button onClick={() => setShowCreateEvent(true)} className="w-full sm:w-auto">
                   <Plus className="w-4 h-4 mr-2" />
                   Add Event
                 </Button>
@@ -150,12 +150,12 @@ const SportsPage = () => {
                 exit={{ opacity: 0 }}
               >
                 <Tabs defaultValue="events" className="space-y-6">
-                  <TabsList>
-                    <TabsTrigger value="events" className="gap-2">
+                  <TabsList className="grid h-auto w-full grid-cols-2">
+                    <TabsTrigger value="events" className="gap-2 text-xs sm:text-sm">
                       <Calendar className="w-4 h-4" />
                       Upcoming Events
                     </TabsTrigger>
-                    <TabsTrigger value="activities" className="gap-2">
+                    <TabsTrigger value="activities" className="gap-2 text-xs sm:text-sm">
                       <Dumbbell className="w-4 h-4" />
                       Activities
                     </TabsTrigger>
@@ -207,7 +207,7 @@ const SportsPage = () => {
                         </CardContent>
                       </Card>
                     ) : (
-                      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                         {activities.map((activity) => (
                           <ActivityCard
                             key={activity.id}

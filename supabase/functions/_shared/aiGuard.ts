@@ -13,10 +13,15 @@ export type AiAction =
 export interface UserContext {
   userId: string;
   profileId: string | null;
+  familyId: string;
   role: FamilyRole;
   isParent: boolean;
   planTier: PlanTier;
   hasPremiumAccess: boolean;
+}
+
+export interface AiGuardScope {
+  familyId?: string | null;
 }
 
 interface GuardResult {
@@ -33,6 +38,20 @@ interface PlanLimits {
 }
 
 type SupabaseServiceClient = ReturnType<typeof createClient>;
+
+interface FamilyMembershipRecord {
+  family_id: string | null;
+  role: FamilyRole;
+  status: string | null;
+}
+
+interface FamilyAccessResult {
+  profileId: string | null;
+  role: FamilyRole;
+  isParent: boolean;
+  error?: { error: string; code: string };
+  statusCode?: number;
+}
 
 // Plan-based limits (simplified: free vs power)
 const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
@@ -74,47 +93,123 @@ async function validateAuth(
 }
 
 /**
- * Determines user's family role using the same logic as useFamilyRole.ts
+ * Resolve a user's role within an explicitly scoped family.
  */
 async function getUserFamilyRole(
   supabase: SupabaseServiceClient,
-  userId: string
-): Promise<{ profileId: string | null; role: FamilyRole; isParent: boolean }> {
+  userId: string,
+  scope: AiGuardScope,
+): Promise<FamilyAccessResult> {
   try {
     // Get user's profile
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, co_parent_id")
+      .select("id")
       .eq("user_id", userId)
       .maybeSingle();
 
-    if (!profile) {
-      return { profileId: null, role: null, isParent: false };
-    }
-
-    // Check if user is a third-party member
-    const { data: familyMember } = await supabase
-      .from("family_members")
-      .select("role")
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .maybeSingle();
-
-    if (familyMember) {
-      // User is a third-party
-      const role = familyMember.role as FamilyRole;
-      return { 
-        profileId: profile.id, 
-        role, 
-        isParent: role === "guardian" 
+    if (profileError || !profile) {
+      return {
+        profileId: null,
+        role: null,
+        isParent: false,
+        error: { error: "Profile not found", code: "PROFILE_NOT_FOUND" },
+        statusCode: 404,
       };
     }
 
-    // User is a parent/guardian
-    return { profileId: profile.id, role: "parent", isParent: true };
+    const { data: familyMembers, error: membershipError } = await supabase
+      .from("family_members")
+      .select("family_id, role, status")
+      .eq("user_id", userId)
+      .eq("status", "active");
+
+    if (membershipError) {
+      console.error("Error fetching family memberships:", membershipError);
+      return {
+        profileId: profile.id,
+        role: null,
+        isParent: false,
+        error: { error: "Unable to verify family access", code: "FAMILY_ACCESS_ERROR" },
+        statusCode: 500,
+      };
+    }
+
+    const memberships = ((familyMembers ?? []) as FamilyMembershipRecord[])
+      .filter((membership) => membership.family_id);
+    const familyId = scope.familyId?.trim();
+
+    if (!familyId) {
+      if (memberships.length > 1) {
+        return {
+          profileId: profile.id,
+          role: null,
+          isParent: false,
+          error: {
+            error: "Multiple family memberships found. Provide an explicit family_id.",
+            code: "AMBIGUOUS_FAMILY_SCOPE",
+          },
+          statusCode: 400,
+        };
+      }
+
+      return {
+        profileId: profile.id,
+        role: null,
+        isParent: false,
+        error: {
+          error: "family_id is required for AI requests.",
+          code: "FAMILY_SCOPE_REQUIRED",
+        },
+        statusCode: 400,
+      };
+    }
+
+    const scopedMemberships = memberships.filter((membership) => membership.family_id === familyId);
+
+    if (scopedMemberships.length === 0) {
+      return {
+        profileId: profile.id,
+        role: null,
+        isParent: false,
+        error: {
+          error: "You do not have access to the provided family.",
+          code: "FAMILY_ACCESS_DENIED",
+        },
+        statusCode: 403,
+      };
+    }
+
+    if (scopedMemberships.length > 1) {
+      return {
+        profileId: profile.id,
+        role: null,
+        isParent: false,
+        error: {
+          error: "Ambiguous membership found for the provided family.",
+          code: "AMBIGUOUS_FAMILY_MEMBERSHIP",
+        },
+        statusCode: 409,
+      };
+    }
+
+    const membership = scopedMemberships[0];
+    const role = membership.role as FamilyRole;
+
+    return {
+      profileId: profile.id,
+      role,
+      isParent: role === "parent" || role === "guardian",
+    };
   } catch (error) {
     console.error("Error fetching family role:", error);
-    return { profileId: null, role: null, isParent: false };
+    return {
+      profileId: null,
+      role: null,
+      isParent: false,
+      error: { error: "Unable to verify family access", code: "FAMILY_ACCESS_ERROR" },
+      statusCode: 500,
+    };
   }
 }
 
@@ -228,7 +323,8 @@ export async function aiGuard(
   req: Request,
   action: AiAction,
   supabaseUrl: string,
-  supabaseServiceKey: string
+  supabaseServiceKey: string,
+  scope: AiGuardScope = {},
 ): Promise<GuardResult> {
   // Create Supabase client with service role for admin access
   const supabase = createClient(supabaseUrl, supabaseServiceKey, {
@@ -248,7 +344,18 @@ export async function aiGuard(
   }
 
   // 2. Get user's family role
-  const { profileId, role, isParent } = await getUserFamilyRole(supabase, user.id);
+  const familyId = scope.familyId?.trim();
+  const familyAccess = await getUserFamilyRole(supabase, user.id, scope);
+
+  if (familyAccess.error) {
+    return {
+      allowed: false,
+      error: familyAccess.error,
+      statusCode: familyAccess.statusCode || 403,
+    };
+  }
+
+  const { profileId, role, isParent } = familyAccess;
 
   // 3. Get user's plan tier
   const { planTier, hasPremiumAccess } = await getUserPlanTier(supabase, user.id);
@@ -259,6 +366,7 @@ export async function aiGuard(
   const userContext: UserContext = {
     userId: user.id,
     profileId,
+    familyId: familyId!,
     role,
     isParent: isParent || isAdmin,
     planTier: isAdmin ? "admin_access" : planTier,
@@ -286,7 +394,7 @@ export async function aiGuard(
     return {
       allowed: false,
       error: { 
-        error: "This action requires parent or guardian role", 
+        error: "This action requires parent or guardian role in the specified family",
         code: "ROLE_REQUIRED" 
       },
       statusCode: 403,

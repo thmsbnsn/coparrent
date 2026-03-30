@@ -23,6 +23,24 @@ const PRODUCT_TIERS: Record<string, string> = {
   "prod_Tf1QUUhL8Tx1Ks": "power", // Old MVP (test)
 };
 
+function getProductId(
+  product: string | Stripe.Product | Stripe.DeletedProduct | null | undefined,
+): string | null {
+  if (!product) {
+    return null;
+  }
+
+  if (typeof product === "string") {
+    return product;
+  }
+
+  if ("id" in product && typeof product.id === "string") {
+    return product.id;
+  }
+
+  return null;
+}
+
 // Map Stripe subscription status to our internal status
 const mapStripeStatus = (stripeStatus: string): string => {
   switch (stripeStatus) {
@@ -224,7 +242,6 @@ serve(async (req) => {
     const subscriptions = await stripe.subscriptions.list({
       customer: customerId,
       limit: 5,
-      expand: ["data.items.data.price.product"],
     });
 
     logStep("Retrieved subscriptions", { count: subscriptions.data.length });
@@ -285,9 +302,9 @@ serve(async (req) => {
     }
 
     // Process active/trialing/past_due subscription
-    const productId = subscription.items.data[0]?.price?.product as string;
+    const productId = getProductId(subscription.items.data[0]?.price?.product);
     // All paid products map to "power" tier
-    const tier = PRODUCT_TIERS[productId] || "power";
+    const tier = (productId && PRODUCT_TIERS[productId]) || "power";
     const internalStatus = mapStripeStatus(subscription.status);
     
     let subscriptionEnd = null;
@@ -300,7 +317,7 @@ serve(async (req) => {
       status: subscription.status, 
       internalStatus,
       tier, 
-      productId,
+      productId: productId || "unknown",
       endsAt: subscriptionEnd 
     });
 

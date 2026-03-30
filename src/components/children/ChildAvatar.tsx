@@ -96,55 +96,66 @@ export const ChildAvatar = ({
     .slice(0, 2);
 
   const showImage = avatarUrl && !imageError && !isLoading;
+  const avatarClasses = cn(
+    "rounded-full flex items-center justify-center overflow-hidden transition-all",
+    "bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold",
+    "border-2 border-transparent",
+    sizeClasses[size],
+    editable && "cursor-pointer hover:border-primary/50",
+    uploading && "opacity-50 cursor-wait",
+    !editable && "cursor-default",
+  );
+
+  const avatarInner = (
+    <>
+      {isLoading ? (
+        <div className="animate-pulse bg-muted rounded-full w-full h-full" />
+      ) : showImage ? (
+        <img
+          src={avatarUrl}
+          alt={name}
+          className="w-full h-full object-cover"
+          onError={() => setImageError(true)}
+        />
+      ) : (
+        <span>{initials || <User className={iconSizes[size]} />}</span>
+      )}
+
+      {editable && !uploading && (
+        <div
+          className={cn(
+            "absolute inset-0 bg-black/50 rounded-full flex items-center justify-center",
+            "opacity-0 group-hover:opacity-100 transition-opacity"
+          )}
+        >
+          <Camera className={cn("text-white", iconSizes[size])} />
+        </div>
+      )}
+
+      {uploading && (
+        <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
+          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className={cn("relative group", className)}>
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={!editable || uploading}
-        className={cn(
-          "rounded-full flex items-center justify-center overflow-hidden transition-all",
-          "bg-gradient-to-br from-primary/20 to-primary/10 text-primary font-semibold",
-          "border-2 border-transparent",
-          sizeClasses[size],
-          editable && "cursor-pointer hover:border-primary/50",
-          uploading && "opacity-50 cursor-wait",
-          !editable && "cursor-default"
-        )}
-      >
-        {isLoading ? (
-          <div className="animate-pulse bg-muted rounded-full w-full h-full" />
-        ) : showImage ? (
-          <img
-            src={avatarUrl}
-            alt={name}
-            className="w-full h-full object-cover"
-            onError={() => setImageError(true)}
-          />
-        ) : (
-          <span>{initials || <User className={iconSizes[size]} />}</span>
-        )}
-
-        {/* Edit overlay */}
-        {editable && !uploading && (
-          <div
-            className={cn(
-              "absolute inset-0 bg-black/50 rounded-full flex items-center justify-center",
-              "opacity-0 group-hover:opacity-100 transition-opacity"
-            )}
-          >
-            <Camera className={cn("text-white", iconSizes[size])} />
-          </div>
-        )}
-
-        {/* Uploading overlay */}
-        {uploading && (
-          <div className="absolute inset-0 bg-black/50 rounded-full flex items-center justify-center">
-            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-          </div>
-        )}
-      </button>
+      {editable ? (
+        <button
+          type="button"
+          onClick={handleClick}
+          disabled={uploading}
+          className={avatarClasses}
+        >
+          {avatarInner}
+        </button>
+      ) : (
+        <div className={avatarClasses}>
+          {avatarInner}
+        </div>
+      )}
 
       {/* Hidden file input */}
       {editable && (

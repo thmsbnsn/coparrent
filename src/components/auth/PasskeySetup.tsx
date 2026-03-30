@@ -49,11 +49,9 @@ export const PasskeySetup = () => {
   const [projectEnrollmentEnabled, setProjectEnrollmentEnabled] = useState(
     () => getPasskeySupportState().projectEnrollmentEnabled,
   );
+  const passkeySupportState = useMemo(() => getPasskeySupportState(), []);
 
-  const browserSupportsPasskeys = useMemo(
-    () => getPasskeySupportState().browserSupported,
-    [],
-  );
+  const browserSupportsPasskeys = passkeySupportState.browserSupported;
 
   const loadFactors = useCallback(async () => {
     try {
@@ -148,10 +146,7 @@ export const PasskeySetup = () => {
     );
   }
 
-  // Hide the passkey management block until the project has WebAuthn enabled.
-  // If a user already has passkeys enrolled, keep the block visible so they can
-  // review or remove them even if the feature is temporarily disabled later.
-  if (!projectEnrollmentEnabled && factors.length === 0) {
+  if (!browserSupportsPasskeys || !projectEnrollmentEnabled) {
     return null;
   }
 

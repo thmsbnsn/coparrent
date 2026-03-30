@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { UserPlus, Check, X, Clock, Lock, Crown, Mail, Users2, ChevronDown } from "lucide-react";
+import type { Database } from "@/integrations-supabase/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,32 +11,51 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useFamily } from "@/contexts/FamilyContext";
+import { fetchFamilyChildIds, ensureFamilyChildLinksSynced } from "@/lib/familyScope";
 import { useNavigate } from "react-router-dom";
 
-interface ThirdPartyMember {
+type MemberRole = Database["public"]["Enums"]["member_role"];
+
+interface ThirdPartyMemberRow {
   id: string;
-  user_id: string | null;
+  family_id: string;
   profile_id: string | null;
-  primary_parent_id: string;
-  role: string;
+  relationship_label: string | null;
+  role: MemberRole;
   status: string;
   created_at: string;
-  invitee_email?: string;
   profiles?: {
     full_name: string | null;
     email: string | null;
-  };
+  } | {
+    full_name: string | null;
+    email: string | null;
+  }[] | null;
+}
+
+interface ThirdPartyInvitationRow {
+  id: string;
+  family_id: string | null;
+  invitee_email: string;
+  relationship: string | null;
+  status: string;
+  created_at: string;
+}
+
+interface ThirdPartyListItem {
+  id: string;
+  createdAt: string;
+  displayName: string | null;
+  email: string | null;
+  relationshipLabel: string | null;
+  source: "membership" | "invitation";
+  status: "active" | "invited";
 }
 
 interface Child {
   id: string;
   name: string;
-}
-
-interface ParentChildRow {
-  child_id: string;
-  children: Child | Child[] | null;
 }
 
 interface ThirdPartyInviteRpcResult {
@@ -45,6 +65,11 @@ interface ThirdPartyInviteRpcResult {
   data?: {
     token?: string | null;
   } | null;
+}
+
+interface InviterProfile {
+  email: string | null;
+  full_name: string | null;
 }
 
 interface ThirdPartyManagerProps {
@@ -63,101 +88,163 @@ const RELATIONSHIP_OPTIONS = [
   { value: "other", label: "Other" },
 ];
 
-// Plan limits now enforced server-side via RPC
-// Free: 4 third-party, Power: 6 third-party
 const PLAN_LIMITS: Record<string, number> = {
   free: 4,
   power: 6,
-  premium: 6, // legacy mapping
-  mvp: 6, // legacy mapping
+  premium: 6,
+  mvp: 6,
 };
 
+const getProfileRecord = (profiles: ThirdPartyMemberRow["profiles"]) =>
+  Array.isArray(profiles) ? profiles[0] ?? null : profiles ?? null;
+
+const buildThirdPartyList = (
+  members: ThirdPartyMemberRow[],
+  invitations: ThirdPartyInvitationRow[],
+): ThirdPartyListItem[] => [
+  ...members.map((member) => {
+    const profileRecord = getProfileRecord(member.profiles);
+
+    return {
+      id: member.id,
+      createdAt: member.created_at,
+      displayName: profileRecord?.full_name ?? profileRecord?.email ?? null,
+      email: profileRecord?.email ?? null,
+      relationshipLabel: member.relationship_label ?? null,
+      source: "membership" as const,
+      status: "active" as const,
+    };
+  }),
+  ...invitations.map((invitation) => ({
+    id: invitation.id,
+    createdAt: invitation.created_at,
+    displayName: invitation.invitee_email,
+    email: invitation.invitee_email,
+    relationshipLabel: invitation.relationship ?? null,
+    source: "invitation" as const,
+    status: "invited" as const,
+  })),
+].sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+
 export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPartyManagerProps) => {
-  const { user } = useAuth();
+  const { activeFamilyId, profileId, loading: familyLoading } = useFamily();
   const { toast } = useToast();
   const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [relationship, setRelationship] = useState("");
   const [selectedChildren, setSelectedChildren] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
-  const [members, setMembers] = useState<ThirdPartyMember[]>([]);
+  const [members, setMembers] = useState<ThirdPartyListItem[]>([]);
   const [children, setChildren] = useState<Child[]>([]);
-  const [profileId, setProfileId] = useState<string | null>(null);
-  const [primaryParentId, setPrimaryParentId] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const tier = subscriptionTier || "free";
   const limit = PLAN_LIMITS[tier] || 0;
-  const currentCount = members.filter(m => m.status === "active" || m.status === "invited").length;
-  const canAddMore = isTrialActive || currentCount < limit;
+  const currentCount = members.length;
+  const canAddMore = Boolean(activeFamilyId) && (isTrialActive || currentCount < limit);
   const isFeatureAvailable = isTrialActive || tier !== "free";
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!user) return;
-
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("id, co_parent_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-      if (profile) {
-        setProfileId(profile.id);
-        // Primary parent is the "lower" ID for consistency
-        const ppId = profile.co_parent_id
-          ? (profile.id < profile.co_parent_id ? profile.id : profile.co_parent_id)
-          : profile.id;
-        setPrimaryParentId(ppId);
-        fetchMembers(ppId);
-        fetchChildren(profile.id);
-      }
-    };
-
-    fetchData();
-  }, [user]);
-
-  const fetchChildren = async (profileId: string) => {
-    const { data } = await supabase
-      .from("parent_children")
-      .select("child_id, children(id, name)")
-      .eq("parent_id", profileId);
-
-    if (data) {
-      const childList = (data as ParentChildRow[])
-        .map((parentChild) => Array.isArray(parentChild.children) ? parentChild.children[0] : parentChild.children)
-        .filter((child): child is Child => Boolean(child))
-        .map((child) => ({
-          id: child.id,
-          name: child.name,
-        }));
-      setChildren(childList);
-      // Default to all children selected
-      setSelectedChildren(childList.map(c => c.id));
+  const refreshFamilyScopedData = useCallback(async () => {
+    if (familyLoading) {
+      return;
     }
-  };
 
-  const fetchMembers = async (ppId: string) => {
-    const { data } = await supabase
-      .from("family_members")
-      .select("*")
-      .eq("primary_parent_id", ppId)
-      .eq("role", "third_party")
-      .neq("status", "removed");
+    if (!activeFamilyId || !profileId) {
+      setMembers([]);
+      setChildren([]);
+      setSelectedChildren([]);
+      return;
+    }
 
-    setMembers((data as unknown as ThirdPartyMember[]) || []);
-  };
+    try {
+      await ensureFamilyChildLinksSynced(activeFamilyId);
+
+      const [memberResult, invitationResult, childIds] = await Promise.all([
+        supabase
+          .from("family_members")
+          .select(`
+            id,
+            family_id,
+            profile_id,
+            relationship_label,
+            role,
+            status,
+            created_at,
+            profiles:profile_id(full_name, email)
+          `)
+          .eq("family_id", activeFamilyId)
+          .eq("role", "third_party")
+          .eq("status", "active")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("invitations")
+          .select("id, family_id, invitee_email, relationship, status, created_at")
+          .eq("family_id", activeFamilyId)
+          .eq("inviter_id", profileId)
+          .eq("invitation_type", "third_party")
+          .eq("status", "pending")
+          .order("created_at", { ascending: false }),
+        fetchFamilyChildIds(activeFamilyId),
+      ]);
+
+      if (memberResult.error) {
+        throw memberResult.error;
+      }
+
+      if (invitationResult.error) {
+        throw invitationResult.error;
+      }
+
+      let nextChildren: Child[] = [];
+      if (childIds.length > 0) {
+        const { data: childData, error: childError } = await supabase
+          .from("children")
+          .select("id, name")
+          .in("id", childIds)
+          .order("name");
+
+        if (childError) {
+          throw childError;
+        }
+
+        nextChildren = (childData as Child[] | null) ?? [];
+      }
+
+      setMembers(
+        buildThirdPartyList(
+          (memberResult.data as ThirdPartyMemberRow[] | null) ?? [],
+          (invitationResult.data as ThirdPartyInvitationRow[] | null) ?? [],
+        ),
+      );
+      setChildren(nextChildren);
+      setSelectedChildren(nextChildren.map((child) => child.id));
+    } catch (error) {
+      console.error("Error loading third-party access:", error);
+      setMembers([]);
+      setChildren([]);
+      setSelectedChildren([]);
+      toast({
+        title: "Error",
+        description: "Failed to load third-party access for the active family.",
+        variant: "destructive",
+      });
+    }
+  }, [activeFamilyId, familyLoading, profileId, toast]);
+
+  useEffect(() => {
+    void refreshFamilyScopedData();
+  }, [refreshFamilyScopedData]);
 
   const toggleChild = (childId: string) => {
-    setSelectedChildren(prev => 
+    setSelectedChildren((prev) =>
       prev.includes(childId)
-        ? prev.filter(id => id !== childId)
-        : [...prev, childId]
+        ? prev.filter((id) => id !== childId)
+        : [...prev, childId],
     );
   };
 
   const handleInviteThirdParty = async () => {
-    if (!profileId || !primaryParentId || !email.trim()) return;
+    if (!profileId || !activeFamilyId || !email.trim()) return;
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
@@ -199,8 +286,8 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
     setLoading(true);
 
     try {
-      // Use RPC for server-side limit enforcement
       const { data: rpcResult, error: rpcError } = await supabase.rpc("rpc_create_third_party_invite", {
+        p_family_id: activeFamilyId,
         p_invitee_email: email.trim().toLowerCase(),
         p_relationship: relationship,
         p_child_ids: selectedChildren,
@@ -227,29 +314,26 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
         throw new Error("Invitation created without a token.");
       }
 
-      // Get inviter name
       const { data: inviterProfile } = await supabase
         .from("profiles")
         .select("full_name, email")
         .eq("id", profileId)
         .single();
 
-      const inviterName = inviterProfile?.full_name || inviterProfile?.email || "A family member";
+      const inviterRecord = inviterProfile as InviterProfile | null;
+      const inviterName = inviterRecord?.full_name || inviterRecord?.email || "A family member";
 
-      // Send invitation email
       const { error: emailError } = await supabase.functions.invoke("send-third-party-invite", {
         body: {
           inviteeEmail: email.trim().toLowerCase(),
           inviterName,
           token: invitationToken,
-          primaryParentId,
-          relationship: RELATIONSHIP_OPTIONS.find(r => r.value === relationship)?.label || relationship,
+          relationship: RELATIONSHIP_OPTIONS.find((option) => option.value === relationship)?.label || relationship,
         },
       });
 
       if (emailError) {
         console.error("Email error:", emailError);
-        // Continue anyway - invitation is created
       }
 
       toast({
@@ -260,7 +344,7 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
       setEmail("");
       setRelationship("");
       setShowAdvanced(false);
-      fetchMembers(primaryParentId);
+      await refreshFamilyScopedData();
     } catch (error: unknown) {
       console.error("Error inviting third-party:", error);
       toast({
@@ -273,27 +357,45 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
     }
   };
 
-  const handleRemoveMember = async (memberId: string) => {
-    if (!primaryParentId) return;
+  const handleRemoveMember = async (member: ThirdPartyListItem) => {
+    if (!activeFamilyId) return;
+    if (member.source === "invitation" && !profileId) return;
 
-    const { error } = await supabase
-      .from("family_members")
-      .update({ status: "removed" })
-      .eq("id", memberId);
+    const updateResult = member.source === "membership"
+      ? await supabase
+          .from("family_members")
+          .update({ status: "removed" })
+          .eq("id", member.id)
+          .eq("family_id", activeFamilyId)
+          .eq("role", "third_party")
+      : await supabase
+          .from("invitations")
+          .update({
+            status: "cancelled",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", member.id)
+          .eq("family_id", activeFamilyId)
+          .eq("inviter_id", profileId)
+          .eq("invitation_type", "third_party");
 
-    if (error) {
+    if (updateResult.error) {
       toast({
         title: "Error",
-        description: "Failed to remove member",
+        description: member.source === "membership" ? "Failed to remove member" : "Failed to cancel invitation",
         variant: "destructive",
       });
-    } else {
-      toast({
-        title: "Member removed",
-        description: "The family member has been removed",
-      });
-      fetchMembers(primaryParentId);
+      return;
     }
+
+    toast({
+      title: member.source === "membership" ? "Member removed" : "Invitation cancelled",
+      description: member.source === "membership"
+        ? "The family member has been removed"
+        : "The pending invitation has been cancelled",
+    });
+
+    await refreshFamilyScopedData();
   };
 
   if (!isFeatureAvailable) {
@@ -312,7 +414,7 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Invite step-parents, grandparents, babysitters, or other trusted adults to your family group. 
+              Invite step-parents, grandparents, babysitters, or other trusted adults to your family group.
               They get access to the messaging hub and can view the child calendar.
             </p>
             <Button variant="outline" size="sm" onClick={() => navigate("/pricing")}>
@@ -326,7 +428,6 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
 
   return (
     <div className="space-y-6">
-      {/* Header with limits */}
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-start gap-4">
           <div className="p-3 rounded-full bg-primary/10">
@@ -340,11 +441,10 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
               </Badge>
             </div>
             <p className="text-sm text-muted-foreground mb-4">
-              Invite step-parents, grandparents, babysitters, or other trusted adults. 
+              Invite step-parents, grandparents, babysitters, or other trusted adults.
               They can message the family and view the child calendar (read-only).
             </p>
 
-            {/* Invite form */}
             <div className="space-y-4">
               <div className="flex flex-col sm:flex-row gap-2">
                 <div className="flex-1">
@@ -374,7 +474,6 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
                 </Select>
               </div>
 
-              {/* Advanced options */}
               <Collapsible open={showAdvanced} onOpenChange={setShowAdvanced}>
                 <CollapsibleTrigger asChild>
                   <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
@@ -410,8 +509,8 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
                 </CollapsibleContent>
               </Collapsible>
 
-              <Button 
-                onClick={handleInviteThirdParty} 
+              <Button
+                onClick={handleInviteThirdParty}
                 disabled={loading || !email.trim() || !relationship || !canAddMore}
                 className="w-full sm:w-auto"
               >
@@ -422,7 +521,7 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
 
             {!canAddMore && !isTrialActive && (
               <p className="text-sm text-warning mt-2">
-                You've reached your plan limit. 
+                You've reached your plan limit.
                 <Button variant="link" className="px-1 h-auto" onClick={() => navigate("/pricing")}>
                   Upgrade
                 </Button>
@@ -433,14 +532,13 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
         </div>
       </div>
 
-      {/* Current members */}
       {members.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-6">
           <h3 className="font-semibold mb-4">Family Members</h3>
           <div className="space-y-3">
             {members.map((member) => (
               <motion.div
-                key={member.id}
+                key={`${member.source}-${member.id}`}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
@@ -451,7 +549,7 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
                   </div>
                   <div>
                     <p className="font-medium">
-                      {member.profiles?.full_name || member.profiles?.email || member.invitee_email || "Invited member"}
+                      {member.displayName || member.email || "Invited member"}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {member.status === "invited" ? "Invitation pending" : "Active member"}
@@ -467,7 +565,9 @@ export const ThirdPartyManager = ({ subscriptionTier, isTrialActive }: ThirdPart
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleRemoveMember(member.id)}
+                    onClick={() => {
+                      void handleRemoveMember(member);
+                    }}
                   >
                     <X className="w-4 h-4" />
                   </Button>

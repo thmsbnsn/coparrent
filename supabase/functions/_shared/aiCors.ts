@@ -11,9 +11,3 @@ export {
   validateOrigin,
   strictCors,
 } from "./cors.ts";
-
-// Legacy export for backward compatibility (deprecated - use getCorsHeaders instead)
-export const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};

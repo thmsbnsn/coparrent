@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { Stethoscope, Palette, Sparkles, ClipboardList, BookOpen, Library } from "lucide-react";
+import { Stethoscope, Palette, Sparkles, ClipboardList, BookOpen, Library, ArrowRight, ShieldCheck, WandSparkles } from "lucide-react";
 import { motion } from "framer-motion";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,28 +32,38 @@ const HubCard = ({ title, description, icon: Icon, href, comingSoon, badge }: Hu
         onClick={() => !comingSoon && navigate(href)}
       >
         <CardHeader className="pb-3">
-          <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+          <div className="flex items-start justify-between gap-3">
+            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
               <Icon className="h-6 w-6 text-primary" />
             </div>
-            {comingSoon && (
-              <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
-                Coming Soon
-              </span>
-            )}
-            {badge && !comingSoon && (
-              <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
-                {badge}
-              </span>
-            )}
+            <div className="flex flex-wrap justify-end gap-1.5">
+              {comingSoon && (
+                <span className="text-xs bg-muted text-muted-foreground px-2 py-1 rounded-full">
+                  Coming Soon
+                </span>
+              )}
+              {badge && !comingSoon && (
+                <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+                  {badge}
+                </span>
+              )}
+            </div>
           </div>
           <CardTitle className="text-lg mt-3">{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center text-sm text-muted-foreground">
-            <Sparkles className="h-4 w-4 mr-1.5 text-primary" />
-            <span>AI-Powered</span>
+          <div className="flex items-center justify-between text-sm text-muted-foreground">
+            <div className="flex items-center">
+              <Sparkles className="h-4 w-4 mr-1.5 text-primary" />
+              <span>AI-Powered</span>
+            </div>
+            {!comingSoon && (
+              <div className="flex items-center gap-1 text-primary">
+                <span>Open</span>
+                <ArrowRight className="h-4 w-4" />
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -64,13 +74,48 @@ const HubCard = ({ title, description, icon: Icon, href, comingSoon, badge }: Hu
 const KidsHubContent = () => {
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Kids Hub</h1>
-          <p className="text-muted-foreground">
-            AI-powered tools to help you care for and entertain your children
-          </p>
+      <div className="rounded-3xl border border-border bg-gradient-to-br from-primary/10 via-background to-accent/10 p-5 sm:p-6">
+        <div className="flex flex-col gap-5">
+          <div className="space-y-3">
+            <div className="inline-flex rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              Power plan creative toolkit
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-display font-bold tracking-tight">Kids Hub</h1>
+            <p className="text-sm sm:text-base text-muted-foreground max-w-2xl">
+              One place for health guidance, printable activities, chore charts, and saved creations.
+              Built to be quick to use from your phone when you need an answer or activity fast.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border bg-card/70 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <ShieldCheck className="h-4 w-4 text-primary" />
+                Guided support
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Health prompts, kid-safe activity ideas, and reusable tools in one flow.
+              </p>
+            </div>
+            <div className="rounded-2xl border bg-card/70 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <WandSparkles className="h-4 w-4 text-primary" />
+                Creation tools
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Generate something useful, save it, and come back without starting over.
+              </p>
+            </div>
+            <div className="rounded-2xl border bg-card/70 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Library className="h-4 w-4 text-primary" />
+                Library ready
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Creations stay organized instead of getting lost across tabs and downloads.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 

@@ -26,6 +26,31 @@ const getErrorName = (error: unknown): string =>
 const getErrorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : "";
 
+const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let index = 0; index < rawData.length; index += 1) {
+    outputArray[index] = rawData.charCodeAt(index);
+  }
+
+  return outputArray;
+};
+
+const detectPushPlatform = (isiOS: boolean, isPWA: boolean): string => {
+  const userAgent = navigator.userAgent.toLowerCase();
+  const isAndroid = userAgent.includes("android");
+
+  if (isiOS && isPWA) return "ios-pwa";
+  if (isiOS) return "ios-browser";
+  if (isAndroid && isPWA) return "android-pwa";
+  if (isAndroid) return "android-browser";
+  if (isPWA) return "desktop-pwa";
+  return "desktop-browser";
+};
+
 // Feature detection utilities
 const detectiOS = (): boolean => {
   if (typeof navigator === "undefined") return false;
@@ -96,6 +121,42 @@ export const usePushNotifications = () => {
   const [loading, setLoading] = useState(true);
   const [profileId, setProfileId] = useState<string | null>(null);
   const [unsupportedReason, setUnsupportedReason] = useState<string>();
+
+  const syncRemoteSubscription = useCallback(async (
+    action: "upsert" | "revoke",
+    subscription: PushSubscription,
+  ) => {
+    if (!profileId) {
+      throw new Error("Profile is not ready for push subscription sync");
+    }
+
+    const serialized = subscription.toJSON();
+    const endpoint = serialized.endpoint?.trim();
+
+    if (!endpoint) {
+      throw new Error("Push subscription is missing an endpoint");
+    }
+
+    const { data, error } = await supabase.functions.invoke("sync-push-subscription", {
+      body: {
+        action,
+        endpoint,
+        keys: serialized.keys,
+        platform: detectPushPlatform(state.isiOS, state.isPWA),
+        userAgent: navigator.userAgent,
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+
+    if (data?.error) {
+      throw new Error(String(data.error));
+    }
+
+    return data;
+  }, [profileId, state.isPWA, state.isiOS]);
 
   // Check if push notifications are supported
   useEffect(() => {
@@ -280,12 +341,20 @@ export const usePushNotifications = () => {
       if ("PushManager" in window) {
         try {
           const registration = await registerServiceWorker();
-          
-          // Subscribe without VAPID key (will use browser's built-in push)
-          // In production, you'd use a VAPID key here
-          const subscription = await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-          });
+          const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY?.trim();
+          if (!vapidPublicKey) {
+            throw new Error("VAPID public key is not configured for the frontend");
+          }
+
+          let subscription = await registration.pushManager.getSubscription();
+          if (!subscription) {
+            subscription = await registration.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+            });
+          }
+
+          await syncRemoteSubscription("upsert", subscription);
 
           setState((prev) => ({
             ...prev,
@@ -303,22 +372,7 @@ export const usePushNotifications = () => {
 
           return true;
         } catch (pushError: unknown) {
-          console.warn("PushManager subscribe failed, using fallback:", pushError);
-          const pushErrorMessage = getErrorMessage(pushError);
-          const pushErrorName = getErrorName(pushError);
-
-          // Check if it's a VAPID key issue - still enable local notifications
-          if (pushErrorMessage.includes("applicationServerKey") || pushErrorName === "InvalidStateError") {
-            localStorage.setItem("coparrent-notifications-enabled", "true");
-            setState((prev) => ({ ...prev, isSubscribed: true }));
-            
-            toast({
-              title: "Notifications Enabled",
-              description: "Browser notifications are now active.",
-            });
-            return true;
-          }
-          
+          console.warn("PushManager subscribe failed:", pushError);
           throw pushError instanceof Error
             ? pushError
             : new Error("Push notification subscription failed.");
@@ -353,12 +407,13 @@ export const usePushNotifications = () => {
       }
       return false;
     }
-  }, [state.isSupported, profileId, requestPermission, registerServiceWorker, toast, unsupportedReason]);
+  }, [profileId, registerServiceWorker, requestPermission, state.isSupported, syncRemoteSubscription, toast, unsupportedReason]);
 
   // Unsubscribe from push notifications
   const unsubscribe = useCallback(async (): Promise<boolean> => {
     try {
       if (state.subscription) {
+        await syncRemoteSubscription("revoke", state.subscription);
         await state.subscription.unsubscribe();
       }
 
@@ -385,7 +440,7 @@ export const usePushNotifications = () => {
       });
       return false;
     }
-  }, [state.subscription, toast]);
+  }, [state.subscription, syncRemoteSubscription, toast]);
 
   // Send a local notification (for testing or immediate feedback)
   const sendLocalNotification = useCallback(

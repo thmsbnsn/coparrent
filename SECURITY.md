@@ -54,4 +54,4 @@ The following are generally not treated as security reports:
 
 ## Architecture Reference
 
-Implementation details and trust-boundary notes live in [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md).
+Implementation details and trust-boundary notes live in [docs/security/SECURITY_MODEL.md](docs/security/SECURITY_MODEL.md).

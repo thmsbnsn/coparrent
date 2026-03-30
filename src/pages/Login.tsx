@@ -11,11 +11,13 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { AuthCaptcha } from "@/components/auth/AuthCaptcha";
 import { SocialLoginButtons } from "@/components/auth/SocialLoginButtons";
 import {
   AuthMfaChallenge,
   type VerifiedMfaFactor,
 } from "@/components/auth/AuthMfaChallenge";
+import { getAuthCaptchaState } from "@/lib/authCapabilities";
 import { logger } from "@/lib/logger";
 import { safeErrorMessage } from "@/lib/safeText";
 import { resolvePostAuthPath } from "@/lib/postAuthPath";
@@ -26,9 +28,12 @@ const Login = () => {
   const { user, loading } = useAuth();
   const passwordRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaRenderKey, setCaptchaRenderKey] = useState(0);
   const [mfaRequired, setMfaRequired] = useState(false);
   const [mfaPrimaryFactor, setMfaPrimaryFactor] = useState<VerifiedMfaFactor | null>(null);
   const [mfaSecondaryFactor, setMfaSecondaryFactor] = useState<VerifiedMfaFactor | null>(null);
+  const captchaRequired = getAuthCaptchaState().required;
   const [rememberMe, setRememberMe] = useState(() => {
     return localStorage.getItem("rememberMe") === "true";
   });
@@ -98,11 +103,22 @@ const Login = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (captchaRequired && !captchaToken) {
+      toast({
+        title: "Captcha required",
+        description: "Complete the captcha before signing in.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: formData.email,
       password: formData.password,
+      options: captchaRequired ? { captchaToken } : undefined,
     });
 
     setIsLoading(false);
@@ -118,6 +134,10 @@ const Login = () => {
         description: safeErrorMessage(error, "Invalid email or password. Please try again."),
         variant: "destructive",
       });
+      if (captchaRequired) {
+        setCaptchaToken(null);
+        setCaptchaRenderKey((current) => current + 1);
+      }
       return;
     }
 
@@ -254,7 +274,18 @@ const Login = () => {
                   </Label>
                 </div>
 
-                <Button type="submit" className="w-full" disabled={isLoading}>
+                {captchaRequired ? (
+                  <AuthCaptcha
+                    key={captchaRenderKey}
+                    onTokenChange={setCaptchaToken}
+                  />
+                ) : null}
+
+                <Button
+                  type="submit"
+                  className="w-full"
+                  disabled={isLoading || (captchaRequired && !captchaToken)}
+                >
                   {isLoading ? "Signing in..." : "Sign in"}
                   {!isLoading && <ArrowRight className="ml-2 w-4 h-4" />}
                 </Button>

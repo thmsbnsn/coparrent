@@ -1,12 +1,16 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useNotificationService } from "@/hooks/useNotificationService";
+import { useFamily } from "@/contexts/FamilyContext";
+import { fetchFamilyParentProfiles } from "@/lib/familyScope";
 import { format } from "date-fns";
+
+const DEFAULT_MESSAGE_DESTINATION = "/dashboard/messages";
 
 export interface ScheduleRequest {
   id: string;
+  family_id: string | null;
   request_type: string;
   original_date: string;
   proposed_date: string | null;
@@ -19,128 +23,235 @@ export interface ScheduleRequest {
   updated_at: string;
 }
 
+export interface ScheduleRequestCreationResult {
+  messageDestination: string;
+  messageThreadId: string | null;
+  recipientId: string;
+  request: ScheduleRequest;
+}
+
+const buildMessageDestination = (threadId: string | null) =>
+  threadId ? `${DEFAULT_MESSAGE_DESTINATION}?thread=${threadId}` : DEFAULT_MESSAGE_DESTINATION;
+
 export const useScheduleRequests = () => {
-  const { user } = useAuth();
   const { toast } = useToast();
   const { notifyScheduleChange, notifyScheduleResponse, showLocalNotification } = useNotificationService();
+  const { activeFamilyId, isParentInActiveFamily, loading: familyLoading, profileId } = useFamily();
   const [requests, setRequests] = useState<ScheduleRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userProfileId, setUserProfileId] = useState<string | null>(null);
   const [userProfileName, setUserProfileName] = useState<string | null>(null);
-  const [coParentProfileId, setCoParentProfileId] = useState<string | null>(null);
+  const requestVersionRef = useRef(0);
 
-  // Fetch profile IDs
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (!user) {
-        setLoading(false);
+    requestVersionRef.current += 1;
+    setRequests([]);
+
+    if (!familyLoading) {
+      setLoading(Boolean(activeFamilyId && profileId));
+    }
+  }, [activeFamilyId, familyLoading, profileId]);
+
+  useEffect(() => {
+    const fetchProfileName = async () => {
+      if (!profileId) {
+        setUserProfileName(null);
         return;
       }
 
-      const { data: profile } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
-        .select("id, co_parent_id, full_name")
-        .eq("user_id", user.id)
+        .select("full_name")
+        .eq("id", profileId)
         .maybeSingle();
 
-      if (profile) {
-        setUserProfileId(profile.id);
-        setUserProfileName(profile.full_name);
-        setCoParentProfileId(profile.co_parent_id);
+      if (error) {
+        console.error("Error fetching requester profile:", error);
+        return;
       }
-      setLoading(false);
+
+      setUserProfileName(data?.full_name ?? null);
     };
 
-    fetchProfile();
-  }, [user]);
+    void fetchProfileName();
+  }, [profileId]);
 
-  // Fetch schedule requests
   const fetchRequests = useCallback(async () => {
-    if (!userProfileId) return;
+    const requestVersion = ++requestVersionRef.current;
 
-    const { data, error } = await supabase
-      .from("schedule_requests")
-      .select("*")
-      .or(`requester_id.eq.${userProfileId},recipient_id.eq.${userProfileId}`)
-      .order("created_at", { ascending: false });
+    if (familyLoading) {
+      return;
+    }
 
-    if (error) {
+    if (!activeFamilyId || !profileId) {
+      if (requestVersion === requestVersionRef.current) {
+        setRequests([]);
+        setLoading(false);
+      }
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from("schedule_requests")
+        .select("*")
+        .eq("family_id", activeFamilyId)
+        .order("created_at", { ascending: false });
+
+      if (requestVersion !== requestVersionRef.current) {
+        return;
+      }
+
+      if (error) {
+        throw error;
+      }
+
+      setRequests((data ?? []) as ScheduleRequest[]);
+    } catch (error) {
+      if (requestVersion !== requestVersionRef.current) {
+        return;
+      }
+
       console.error("Error fetching schedule requests:", error);
-    } else {
-      setRequests(data || []);
+      setRequests([]);
+    } finally {
+      if (requestVersion === requestVersionRef.current) {
+        setLoading(false);
+      }
     }
-  }, [userProfileId]);
+  }, [activeFamilyId, familyLoading, profileId]);
 
   useEffect(() => {
-    if (userProfileId) {
-      fetchRequests();
-    }
-  }, [userProfileId, fetchRequests]);
+    void fetchRequests();
+  }, [fetchRequests]);
 
-  // Subscribe to realtime updates
   useEffect(() => {
-    if (!userProfileId) return;
+    if (!activeFamilyId || !profileId || familyLoading) return;
 
     const channel = supabase
-      .channel("schedule-requests-changes")
+      .channel(`schedule-requests-changes-${activeFamilyId}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "schedule_requests",
+          filter: `family_id=eq.${activeFamilyId}`,
         },
         async (payload) => {
-          const record = payload.new as ScheduleRequest;
-          const oldRecord = payload.old as { id: string };
-          
-          // Only process if this request involves the current user
-          if (payload.eventType === "INSERT") {
-            if (record.requester_id === userProfileId || record.recipient_id === userProfileId) {
-              setRequests((prev) => [record, ...prev]);
+          const record = (payload.new ?? payload.old) as ScheduleRequest;
+          const oldRecord = payload.old as { id?: string };
 
-              // Show local notification for incoming requests
-              if (record.recipient_id === userProfileId) {
+          if (payload.eventType === "INSERT") {
+            if (record.requester_id === profileId || record.recipient_id === profileId) {
+              setRequests((prev) => [record, ...prev.filter((request) => request.id !== record.id)]);
+
+              if (record.recipient_id === profileId) {
                 await showLocalNotification(
                   "Schedule Change Request",
-                  `You have a new schedule change request for ${format(new Date(record.original_date), 'MMM d, yyyy')}`
+                  `You have a new schedule change request for ${format(new Date(record.original_date), "MMM d, yyyy")}`,
                 );
               }
             }
-          } else if (payload.eventType === "UPDATE") {
-            setRequests((prev) =>
-              prev.map((r) => (r.id === record.id ? record : r))
-            );
+            return;
+          }
 
-            // Notify requester of response
-            if (record.requester_id === userProfileId && record.status !== "pending") {
+          if (payload.eventType === "UPDATE") {
+            setRequests((prev) => prev.map((request) => (request.id === record.id ? record : request)));
+
+            if (record.requester_id === profileId && record.status !== "pending") {
               await showLocalNotification(
                 `Schedule Request ${record.status === "accepted" ? "Accepted" : "Declined"}`,
-                `Your schedule change request for ${format(new Date(record.original_date), 'MMM d, yyyy')} was ${record.status}.`
+                `Your schedule change request for ${format(new Date(record.original_date), "MMM d, yyyy")} was ${record.status}.`,
               );
             }
-          } else if (payload.eventType === "DELETE") {
-            setRequests((prev) => prev.filter((r) => r.id !== oldRecord.id));
+            return;
           }
-        }
+
+          if (payload.eventType === "DELETE") {
+            setRequests((prev) => prev.filter((request) => request.id !== oldRecord.id));
+          }
+        },
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [userProfileId, showLocalNotification]);
+  }, [activeFamilyId, familyLoading, profileId, showLocalNotification]);
+
+  const resolveRecipientProfileId = useCallback(async () => {
+    if (!activeFamilyId || !profileId) {
+      return null;
+    }
+
+    const familyParentProfiles = await fetchFamilyParentProfiles(activeFamilyId);
+    return familyParentProfiles.find((familyParent) => familyParent.profileId !== profileId)?.profileId ?? null;
+  }, [activeFamilyId, profileId]);
+
+  const resolveMessageDestination = useCallback(
+    async (recipientProfileId: string) => {
+      if (!activeFamilyId) {
+        return {
+          messageDestination: DEFAULT_MESSAGE_DESTINATION,
+          messageThreadId: null,
+        };
+      }
+
+      try {
+        const { data, error } = await supabase.functions.invoke("create-message-thread", {
+          body: {
+            family_id: activeFamilyId,
+            thread_type: "direct_message",
+            other_profile_id: recipientProfileId,
+          },
+        });
+
+        if (error || !data?.success) {
+          return {
+            messageDestination: DEFAULT_MESSAGE_DESTINATION,
+            messageThreadId: null,
+          };
+        }
+
+        const threadId = typeof data.thread?.id === "string" ? data.thread.id : null;
+        return {
+          messageDestination: buildMessageDestination(threadId),
+          messageThreadId: threadId,
+        };
+      } catch (error) {
+        console.error("Error preparing schedule request conversation:", error);
+        return {
+          messageDestination: DEFAULT_MESSAGE_DESTINATION,
+          messageThreadId: null,
+        };
+      }
+    },
+    [activeFamilyId],
+  );
 
   const createRequest = async (data: {
     request_type: string;
     original_date: string;
     proposed_date?: string;
     reason?: string;
-  }) => {
-    if (!userProfileId || !coParentProfileId) {
+  }): Promise<ScheduleRequestCreationResult | null> => {
+    if (!profileId || !activeFamilyId || !isParentInActiveFamily) {
       toast({
         title: "Error",
-        description: "You must be connected with a co-parent to create requests",
+        description: "You must be an active parent or guardian in this family to create a schedule request.",
+        variant: "destructive",
+      });
+      return null;
+    }
+
+    const recipientProfileId = await resolveRecipientProfileId();
+
+    if (!recipientProfileId) {
+      toast({
+        title: "Error",
+        description: "An active parent or guardian recipient could not be resolved for this family.",
         variant: "destructive",
       });
       return null;
@@ -149,12 +260,13 @@ export const useScheduleRequests = () => {
     const { data: newRequest, error } = await supabase
       .from("schedule_requests")
       .insert({
+        family_id: activeFamilyId,
         request_type: data.request_type,
         original_date: data.original_date,
         proposed_date: data.proposed_date || null,
         reason: data.reason || null,
-        requester_id: userProfileId,
-        recipient_id: coParentProfileId,
+        requester_id: profileId,
+        recipient_id: recipientProfileId,
         status: "pending",
       })
       .select()
@@ -170,32 +282,43 @@ export const useScheduleRequests = () => {
       return null;
     }
 
-    toast({
-      title: "Request Sent",
-      description: "Your schedule change request has been sent to your co-parent.",
-    });
-
-    // Send notification to co-parent
-    const senderName = userProfileName || "Your co-parent";
+    const senderName = userProfileName || "A parent";
     await notifyScheduleChange(
-      coParentProfileId,
+      recipientProfileId,
       senderName,
       data.request_type,
-      format(new Date(data.original_date), 'MMM d, yyyy'),
-      data.proposed_date ? format(new Date(data.proposed_date), 'MMM d, yyyy') : undefined
+      format(new Date(data.original_date), "MMM d, yyyy"),
+      data.proposed_date ? format(new Date(data.proposed_date), "MMM d, yyyy") : undefined,
     );
 
-    return newRequest;
+    const { messageDestination, messageThreadId } = await resolveMessageDestination(recipientProfileId);
+
+    toast({
+      title: "Request Sent",
+      description: "Your schedule change request has been sent to the other parent or guardian in this family.",
+    });
+
+    return {
+      messageDestination,
+      messageThreadId,
+      recipientId: recipientProfileId,
+      request: newRequest as ScheduleRequest,
+    };
   };
 
   const respondToRequest = async (requestId: string, response: "accepted" | "declined") => {
-    const request = requests.find(r => r.id === requestId);
-    
+    const request = requests.find((existingRequest) => existingRequest.id === requestId);
+
+    if (!profileId || !activeFamilyId) {
+      return false;
+    }
+
     const { error } = await supabase
       .from("schedule_requests")
       .update({ status: response, updated_at: new Date().toISOString() })
       .eq("id", requestId)
-      .eq("recipient_id", userProfileId);
+      .eq("recipient_id", profileId)
+      .eq("family_id", activeFamilyId);
 
     if (error) {
       console.error("Error updating schedule request:", error);
@@ -215,14 +338,13 @@ export const useScheduleRequests = () => {
           : "The schedule change has been declined.",
     });
 
-    // Send notification to requester
     if (request) {
-      const responderName = userProfileName || "Your co-parent";
+      const responderName = userProfileName || "A parent";
       await notifyScheduleResponse(
         request.requester_id,
         responderName,
         response,
-        format(new Date(request.original_date), 'MMM d, yyyy')
+        format(new Date(request.original_date), "MMM d, yyyy"),
       );
     }
 
@@ -230,10 +352,10 @@ export const useScheduleRequests = () => {
   };
 
   const pendingRequests = requests.filter(
-    (r) => r.status === "pending" && r.recipient_id === userProfileId
+    (request) => request.status === "pending" && request.recipient_id === profileId,
   );
 
-  const myRequests = requests.filter((r) => r.requester_id === userProfileId);
+  const myRequests = requests.filter((request) => request.requester_id === profileId);
 
   return {
     requests,

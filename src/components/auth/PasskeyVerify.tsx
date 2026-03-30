@@ -3,6 +3,7 @@ import { Fingerprint, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getPasskeySupportState } from "@/lib/authCapabilities";
 import { sanitizeErrorForUser } from "@/lib/errorMessages";
 
 interface PasskeyVerifyProps {
@@ -18,16 +19,16 @@ export const PasskeyVerify = ({
 }: PasskeyVerifyProps) => {
   const { toast } = useToast();
   const [authenticating, setAuthenticating] = useState(false);
-  const browserSupportsPasskeys =
-    typeof window !== "undefined" &&
-    window.isSecureContext &&
-    typeof window.PublicKeyCredential !== "undefined";
+  const passkeySupportState = getPasskeySupportState();
+  const passkeysAvailable = passkeySupportState.canUsePasskeys;
 
   const handleAuthenticate = async () => {
-    if (!browserSupportsPasskeys) {
+    if (!passkeysAvailable) {
       toast({
         title: "Passkeys unavailable",
-        description: "This browser or page does not support passkeys.",
+        description: passkeySupportState.projectEnrollmentEnabled
+          ? "This browser or page does not support passkeys."
+          : "Passkeys are not enabled for this project right now.",
         variant: "destructive",
       });
       return;
@@ -82,9 +83,11 @@ export const PasskeyVerify = ({
         </div>
       </div>
 
-      {!browserSupportsPasskeys && (
+      {!passkeysAvailable && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          Passkeys are only available on supported secure browsers and devices.
+          {passkeySupportState.projectEnrollmentEnabled
+            ? "Passkeys are only available on supported secure browsers and devices."
+            : "Passkeys are not enabled for this project right now."}
         </div>
       )}
 
@@ -92,7 +95,7 @@ export const PasskeyVerify = ({
         <Button
           type="button"
           onClick={handleAuthenticate}
-          disabled={authenticating || !browserSupportsPasskeys}
+          disabled={authenticating || !passkeysAvailable}
         >
           {authenticating ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />

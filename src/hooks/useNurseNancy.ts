@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFamily } from "@/contexts/FamilyContext";
 import { useToast } from "@/hooks/use-toast";
 import { sanitizeErrorForUser } from "@/lib/errorMessages";
 import { acquireMutationLock, releaseMutationLock } from "@/lib/mutations";
@@ -44,6 +45,7 @@ Now, how can I help you today? 💜`;
 
 export function useNurseNancy() {
   const { user } = useAuth();
+  const { activeFamilyId } = useFamily();
   const { toast } = useToast();
   const [threads, setThreads] = useState<NurseNancyThread[]>([]);
   const [currentThread, setCurrentThread] = useState<NurseNancyThread | null>(null);
@@ -249,6 +251,22 @@ export function useNurseNancy() {
     setMessages(prev => [...prev, tempUserMessage]);
 
     try {
+      if (!activeFamilyId) {
+        setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id));
+        toast({
+          title: "Family required",
+          description: "Select a family before using Nurse Nancy.",
+          variant: "destructive",
+        });
+        return {
+          success: false,
+          error: {
+            code: "FAMILY_SCOPE_REQUIRED",
+            message: "Select a family before using Nurse Nancy.",
+          },
+        };
+      }
+
       // Get message history for context (excluding system messages)
       const historyForAI = messages
         .filter(m => m.role !== "system")
@@ -256,6 +274,7 @@ export function useNurseNancy() {
 
       const { data, error } = await supabase.functions.invoke("nurse-nancy-chat", {
         body: {
+          familyId: activeFamilyId,
           threadId: currentThread.id,
           message: content,
           messageHistory: historyForAI,
@@ -360,7 +379,7 @@ export function useNurseNancy() {
       setSending(false);
       releaseMutationLock(lockKey);
     }
-  }, [currentThread, user, sending, messages, fetchThreads, toast]);
+  }, [activeFamilyId, currentThread, user, sending, messages, fetchThreads, toast]);
 
   // Delete a thread
   const deleteThread = useCallback(async (threadId: string) => {

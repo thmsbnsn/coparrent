@@ -1,6 +1,7 @@
 import { Navbar } from "@/components/landing/Navbar";
 import { Hero } from "@/components/landing/Hero";
 import { Features } from "@/components/landing/Features";
+import { HomeSections } from "@/components/landing/HomeSections";
 import { Footer } from "@/components/landing/Footer";
 import { BackToTop } from "@/components/ui/BackToTop";
 
@@ -11,6 +12,7 @@ const Index = () => {
       <main>
         <Hero />
         <Features />
+        <HomeSections />
       </main>
       <Footer />
       <BackToTop />

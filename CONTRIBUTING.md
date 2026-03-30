@@ -9,9 +9,9 @@ CoParrent is a private repository. Contributions should stay aligned with the do
 ## Before You Start
 
 - Read [README.md](README.md) for architecture, routing, auth, and product rules.
-- Check [docs/CURRENT_STATUS.md](docs/CURRENT_STATUS.md) for the current operational snapshot.
-- Check [docs/PROJECT_COMPLETION_REVIEW.md](docs/PROJECT_COMPLETION_REVIEW.md) before starting work that is intended to unblock release readiness.
-- Review [SECURITY.md](SECURITY.md) and [docs/SECURITY_MODEL.md](docs/SECURITY_MODEL.md) for any auth, billing, RLS, or child-data changes.
+- Check [docs/project/CURRENT_STATUS.md](docs/project/CURRENT_STATUS.md) for the current operational snapshot.
+- Check [docs/project/PROJECT_COMPLETION_REVIEW.md](docs/project/PROJECT_COMPLETION_REVIEW.md) before starting work that is intended to unblock release readiness.
+- Review [SECURITY.md](SECURITY.md) and [docs/security/SECURITY_MODEL.md](docs/security/SECURITY_MODEL.md) for any auth, billing, RLS, or child-data changes.
 
 ## Local Setup
 

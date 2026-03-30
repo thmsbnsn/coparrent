@@ -48,8 +48,18 @@ export const BlogCard = ({ post, index = 0, isPublic = false }: BlogCardProps) =
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <span className="text-4xl">📝</span>
+              <div className="w-full h-full p-5 bg-gradient-to-br from-primary/15 via-background to-primary/5 flex flex-col justify-between">
+                <Badge variant="secondary" className="w-fit">
+                  {post.category}
+                </Badge>
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-2">
+                    CoParrent Journal
+                  </p>
+                  <p className="text-lg font-display font-semibold leading-snug text-foreground line-clamp-3">
+                    {post.title}
+                  </p>
+                </div>
               </div>
             )}
           </div>

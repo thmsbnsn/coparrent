@@ -5,6 +5,7 @@ import { strictCors, getCorsHeaders } from "../_shared/aiCors.ts";
 import { parseAIJsonResponse, createFallbackScheduleSuggestion } from "../_shared/aiSchemas.ts";
 
 interface SuggestionRequest {
+  familyId: string;
   childrenInfo: { count: number; ages: number[] };
   isHighConflict: boolean;
   preferences: string;
@@ -219,8 +220,13 @@ serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
 
   try {
+    const body: SuggestionRequest = await req.json();
+    const { familyId, childrenInfo, isHighConflict, preferences, state } = body;
+
     // 2. Validate auth, role, and plan via aiGuard
-    const guardResult = await aiGuard(req, "schedule-suggest", supabaseUrl, supabaseServiceKey);
+    const guardResult = await aiGuard(req, "schedule-suggest", supabaseUrl, supabaseServiceKey, {
+      familyId,
+    });
 
     if (!guardResult.allowed || !guardResult.userContext) {
       console.error("[AI-SCHEDULE-SUGGEST] Guard rejected:", guardResult.error);
@@ -248,8 +254,6 @@ serve(async (req) => {
     console.log(`[AI-SCHEDULE-SUGGEST] Quota check passed: ${quotaResult.remaining}/${quotaResult.limit} remaining`);
 
     // 4. Parse and validate request
-    const { childrenInfo, isHighConflict, preferences, state }: SuggestionRequest = await req.json();
-
     // Safe logging: log structure, not raw preference text
     console.log("[AI-SCHEDULE-SUGGEST] Request:", {
       childCount: childrenInfo?.count,

@@ -10,8 +10,10 @@ import { PasswordInput } from "@/components/ui/PasswordInput";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { AuthCaptcha } from "@/components/auth/AuthCaptcha";
 import { SocialLoginButtons } from "@/components/auth/SocialLoginButtons";
 import { PasswordStrengthIndicator } from "@/components/auth/PasswordStrengthIndicator";
+import { getAuthCaptchaState } from "@/lib/authCapabilities";
 import { logger } from "@/lib/logger";
 import { safeErrorMessage } from "@/lib/safeText";
 import { getEmailConfirmationRedirectUrl } from "@/lib/authRedirects";
@@ -23,6 +25,9 @@ const Signup = () => {
   const { user, loading } = useAuth();
   const passwordRef = useRef<HTMLInputElement>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaRenderKey, setCaptchaRenderKey] = useState(0);
+  const captchaRequired = getAuthCaptchaState().required;
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -49,6 +54,15 @@ const Signup = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (captchaRequired && !captchaToken) {
+      toast({
+        title: "Captcha required",
+        description: "Complete the captcha before creating your account.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     if (formData.password.length < 8) {
       toast({
@@ -68,6 +82,7 @@ const Signup = () => {
       password: formData.password,
       options: {
         emailRedirectTo: redirectUrl,
+        captchaToken: captchaRequired ? captchaToken : undefined,
         data: {
           full_name: formData.fullName,
           account_type: "parent",
@@ -92,6 +107,10 @@ const Signup = () => {
         description: errorMessage,
         variant: "destructive",
       });
+      if (captchaRequired) {
+        setCaptchaToken(null);
+        setCaptchaRenderKey((current) => current + 1);
+      }
       return;
     }
 
@@ -175,7 +194,18 @@ const Signup = () => {
                 <PasswordStrengthIndicator password={formData.password} className="mt-3" />
               </div>
 
-              <Button type="submit" className="w-full" disabled={isLoading}>
+              {captchaRequired ? (
+                <AuthCaptcha
+                  key={captchaRenderKey}
+                  onTokenChange={setCaptchaToken}
+                />
+              ) : null}
+
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={isLoading || (captchaRequired && !captchaToken)}
+              >
                 {isLoading ? "Creating account..." : "Create account"}
                 {!isLoading && <ArrowRight className="ml-2 w-4 h-4" />}
               </Button>

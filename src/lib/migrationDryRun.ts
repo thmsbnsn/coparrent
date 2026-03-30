@@ -17,8 +17,8 @@
  * - audit_logs (immutable audit trail)
  * - subscriptions/trial state (gating enforcement)
  * 
- * @see docs/SECURITY_MODEL.md for security architecture
- * @see docs/GATED_FEATURES.md for gating enforcement
+ * @see docs/security/SECURITY_MODEL.md for security architecture
+ * @see docs/security/GATED_FEATURES.md for gating enforcement
  */
 
 import { supabase } from "@/integrations/supabase/client";

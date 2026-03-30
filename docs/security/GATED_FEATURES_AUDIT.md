@@ -30,6 +30,7 @@ Current addendum:
 - Parent/guardian access is now family-scoped and depends on an active family membership.
 - Production SQL now bootstraps family membership for direct parent/guardian accounts before gates run.
 - New co-parent invitations are now stamped with `family_id`.
+- Core family flows now require explicit family scope and no longer rely on legacy relationship-based recipient or visibility inference.
 
 ---
 
