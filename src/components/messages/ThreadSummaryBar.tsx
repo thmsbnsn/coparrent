@@ -7,6 +7,13 @@ interface ThreadSummaryBarProps {
   totalMessages: number;
   threadType: "family_channel" | "group_chat" | "direct_message";
   courtView: boolean;
+  recordState?:
+    | "ready"
+    | "empty"
+    | "loading_existing"
+    | "loading_empty"
+    | "error"
+    | "history_unavailable";
   className?: string;
 }
 
@@ -33,11 +40,40 @@ export const ThreadSummaryBar = ({
   totalMessages,
   threadType,
   courtView,
+  recordState = totalMessages === 0 ? "empty" : "ready",
   className,
 }: ThreadSummaryBarProps) => {
   const thread = THREAD_LABELS[threadType];
   const Icon = thread.icon;
-  const emptyThread = totalMessages === 0;
+  const emptyThread = recordState === "empty";
+  const loadingRecord =
+    recordState === "loading_existing" || recordState === "loading_empty";
+  const blockedRecord =
+    recordState === "error" || recordState === "history_unavailable";
+  const statusBadge =
+    recordState === "loading_existing"
+      ? "Loading recorded history"
+      : recordState === "loading_empty"
+        ? "Checking thread status"
+        : recordState === "history_unavailable"
+          ? "History unavailable"
+          : recordState === "error"
+            ? "Load blocked"
+            : emptyThread
+              ? "No messages yet"
+              : `${totalMessages} message${totalMessages === 1 ? "" : "s"}`;
+  const statusNote =
+    recordState === "loading_existing"
+      ? "This thread already has recorded activity. Loading the full history now."
+      : recordState === "loading_empty"
+        ? "Confirming the current state of this record before drafting."
+        : recordState === "history_unavailable"
+          ? "This thread has recorded activity metadata, but the message history did not hydrate in this view. Refresh before replying."
+          : recordState === "error"
+            ? "The selected record could not be loaded right now. Refresh before replying."
+            : emptyThread
+              ? `${thread.note}. The record is open and ready for the first message.`
+              : `${thread.note}. Messages are permanent and exportable for review.`;
 
   return (
     <div
@@ -51,16 +87,16 @@ export const ThreadSummaryBar = ({
           <Icon className="h-3.5 w-3.5" />
           {thread.label}
         </Badge>
-        {emptyThread ? (
-          <Badge variant="secondary">No messages yet</Badge>
+        {loadingRecord ? (
+          <Badge variant="secondary">{statusBadge}</Badge>
+        ) : blockedRecord ? (
+          <Badge variant="destructive">{statusBadge}</Badge>
         ) : (
           <>
             {unreadCount > 0 && (
               <Badge variant="destructive">{unreadCount} unread</Badge>
             )}
-            <Badge variant="secondary">
-              {totalMessages} message{totalMessages === 1 ? "" : "s"}
-            </Badge>
+            <Badge variant="secondary">{statusBadge}</Badge>
           </>
         )}
         <Badge variant={courtView ? "default" : "outline"} className="gap-1.5">
@@ -69,12 +105,10 @@ export const ThreadSummaryBar = ({
         </Badge>
       </div>
       <p className="mt-2 text-xs text-muted-foreground">
-        {emptyThread
-          ? `${thread.note}. The record is open and ready for the first message.`
-          : `${thread.note}. Messages are permanent and exportable for review.`}
-        {!emptyThread && unreadCount > 0 && " Review unread items before replying."}
+        {statusNote}
+        {recordState === "ready" && unreadCount > 0 && " Review unread items before replying."}
       </p>
-      {!emptyThread && unreadCount > 5 && (
+      {recordState === "ready" && unreadCount > 5 && (
         <div className="mt-2 flex items-center gap-1.5 text-xs text-warning">
           <AlertTriangle className="h-3.5 w-3.5" />
           This thread has accumulated unread activity.

@@ -217,6 +217,8 @@ export const useMessagingHub = () => {
   const [activeThread, setActiveThread] = useState<MessageThread | null>(null);
   const [messages, setMessages] = useState<ThreadMessage[]>([]);
   const [systemEvents, setSystemEvents] = useState<ThreadSystemEvent[]>([]);
+  const [activeThreadLoading, setActiveThreadLoading] = useState(false);
+  const [activeThreadLoadError, setActiveThreadLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [setupError, setSetupError] = useState<string | null>(null);
 
@@ -537,6 +539,8 @@ export const useMessagingHub = () => {
       setActiveThread(null);
       setMessages([]);
       setSystemEvents([]);
+      setActiveThreadLoading(false);
+      setActiveThreadLoadError(null);
       return;
     }
 
@@ -871,6 +875,7 @@ export const useMessagingHub = () => {
       await markMessagesRead(unreadMessageIds);
     } catch (error) {
       console.error("Error fetching messages:", error);
+      throw error;
     }
   }, [markMessagesRead, profileId]);
 
@@ -1018,14 +1023,32 @@ export const useMessagingHub = () => {
     if (!activeThread) {
       setMessages([]);
       setSystemEvents([]);
+      setActiveThreadLoading(false);
+      setActiveThreadLoadError(null);
       return;
     }
 
-    await Promise.all([
-      fetchMessages(activeThread.id),
-      fetchSystemEvents(activeThread),
-    ]);
-  }, [activeThread, fetchMessages, fetchSystemEvents]);
+    setActiveThreadLoading(true);
+    setActiveThreadLoadError(null);
+
+    try {
+      await Promise.all([
+        fetchMessages(activeThread.id),
+        fetchSystemEvents(activeThread),
+      ]);
+    } catch (error) {
+      logger.warn("Unable to refresh active thread", error, {
+        profileId,
+        threadId: activeThread.id,
+      });
+      setMessages([]);
+      setActiveThreadLoadError(
+        "The recorded thread could not be loaded right now. Refresh before replying.",
+      );
+    } finally {
+      setActiveThreadLoading(false);
+    }
+  }, [activeThread, fetchMessages, fetchSystemEvents, profileId]);
 
   // Send message with double-submit protection
   const sendMessage = async (content: string) => {
@@ -1540,9 +1563,12 @@ export const useMessagingHub = () => {
     groupChats,
     familyChannel,
     familyMembers,
+    activeFamilyId,
     activeThread,
     messages,
     systemEvents,
+    activeThreadLoading,
+    activeThreadLoadError,
     loading,
     role,
     profileId,

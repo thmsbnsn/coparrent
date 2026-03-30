@@ -10,6 +10,9 @@ interface DeliberateComposerProps {
   onTyping?: () => void;
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
+  helperText?: string;
+  submitLabel?: string;
 }
 
 const COURT_FRIENDLY_HINTS = [
@@ -23,6 +26,9 @@ export const DeliberateComposer = ({
   onTyping,
   placeholder = "Compose your message...",
   className,
+  disabled = false,
+  helperText,
+  submitLabel = "Send message",
 }: DeliberateComposerProps) => {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
@@ -30,7 +36,7 @@ export const DeliberateComposer = ({
   const trimmed = value.trim();
   const characterCount = value.length;
 
-  const helperText = useMemo(() => {
+  const autoHelperText = useMemo(() => {
     if (characterCount === 0) return COURT_FRIENDLY_HINTS[0];
     if (characterCount < 80) return COURT_FRIENDLY_HINTS[1];
     return COURT_FRIENDLY_HINTS[2];
@@ -38,7 +44,7 @@ export const DeliberateComposer = ({
 
   const handleSubmit = async (event?: FormEvent<HTMLFormElement>) => {
     event?.preventDefault();
-    if (!trimmed || sending) return;
+    if (!trimmed || sending || disabled) return;
 
     setSending(true);
     try {
@@ -56,8 +62,12 @@ export const DeliberateComposer = ({
     >
       <div className="rounded-xl border border-border bg-background p-3">
         <Textarea
+          disabled={disabled}
           value={value}
           onChange={(event) => {
+            if (disabled) {
+              return;
+            }
             setValue(event.target.value);
             onTyping?.();
           }}
@@ -72,28 +82,30 @@ export const DeliberateComposer = ({
           className="min-h-[110px] resize-none border-0 px-0 shadow-none focus-visible:ring-0"
         />
 
-        <MessageToneAssistant
-          message={value}
-          onRephrase={setValue}
-          className="mt-3"
-        />
+        {!disabled && (
+          <MessageToneAssistant
+            message={value}
+            onRephrase={setValue}
+            className="mt-3"
+          />
+        )}
 
         <div className="mt-3 flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-medium text-foreground">Deliberate composer</p>
-            <p className="text-xs text-muted-foreground">{helperText}</p>
+            <p className="text-xs text-muted-foreground">{helperText ?? autoHelperText}</p>
           </div>
           <div className="flex items-center justify-between gap-3 sm:justify-end">
             <span className="text-xs text-muted-foreground">
               {characterCount}/4000
             </span>
-            <Button type="submit" disabled={!trimmed || sending}>
+            <Button type="submit" disabled={disabled || !trimmed || sending}>
               {sending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Send className="mr-2 h-4 w-4" />
               )}
-              Send message
+              {submitLabel}
             </Button>
           </div>
         </div>
