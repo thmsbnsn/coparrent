@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MessagingHubPage from "@/pages/MessagingHubPage";
 
 const messagingMockState = vi.hoisted(() => ({
+  activeFamilyId: "family-1",
   directMessages: [
     {
       content: "Can we confirm the pickup time for tomorrow?",
@@ -96,6 +97,248 @@ const messagingMockState = vi.hoisted(() => ({
   },
 }));
 
+const supabaseMockState = vi.hoisted(() => ({
+  invoke: vi.fn(async (_name: string, payload?: { body?: Record<string, unknown> }) => {
+    const body = payload?.body;
+    if (body?.action === "create") {
+      return {
+        data: {
+          artifact_payload_json: "{\"artifact\":true}",
+          canonical_payload: {
+            entries: [
+              {
+                content: "Can we confirm the pickup time for tomorrow?",
+                entry_id: "direct-message-1",
+                kind: "message",
+                sender_id: "jessica-profile",
+                sender_name: "Jessica Morgan",
+                sender_role: "parent",
+                sender_role_label: "Parent",
+                sequence: 1,
+                timestamp: "2026-03-30T10:45:00.000Z",
+              },
+            ],
+            family_id: "family-1",
+            schema_version: "coparrent.messaging-thread-export/v3",
+            canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
+            source_type: "message_thread",
+            thread: {
+              id: "direct-thread-jessica",
+              thread_type: "direct_message",
+            },
+          },
+          canonical_payload_json: "{\"ok\":true}",
+          evidence_package: {
+            artifact_payload_json: "{\"artifact\":true}",
+            canonical_payload_json: "{\"ok\":true}",
+            canonical_payload: {
+              entries: [],
+              family_id: "family-1",
+              schema_version: "coparrent.messaging-thread-export/v3",
+              canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
+              source_type: "message_thread",
+              thread: {
+                id: "direct-thread-jessica",
+                thread_type: "direct_message",
+              },
+            },
+            manifest: {},
+            manifest_json: "{\"manifest\":true}",
+            package_schema_version: "coparrent.messaging-thread-export-package/v3",
+            receipt: {},
+            verification_instructions: ["note-1"],
+          },
+          evidence_package_json: "{\"evidence\":true}",
+          export: {
+            artifact_hash: "artifact-hash-123",
+            artifact_hash_algorithm: "sha256",
+            artifact_type: "json_evidence_package",
+            canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
+            content_hash: "hash-123",
+            export_format: "pdf",
+            exported_at: "2026-03-30T14:00:00.000Z",
+            family_id: "family-1",
+            hash_algorithm: "sha256",
+            id: "export-record-1",
+            integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
+            manifest_hash: "manifest-hash-123",
+            manifest_hash_algorithm: "sha256",
+            record_count: 1,
+            signature_algorithm: "ed25519",
+            signing_key_id: "messaging-export-key-v1",
+            signature_present: true,
+            thread_display_name: "Jessica Morgan",
+            thread_id: "direct-thread-jessica",
+            thread_type: "direct_message",
+            total_messages: 1,
+            total_system_events: 0,
+          },
+          manifest: {
+            application_build_id: null,
+            canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
+            export_generated_at: "2026-03-30T14:00:00.000Z",
+            export_id: "export-record-1",
+            export_format: "pdf",
+            exported_by_profile_id: "my-profile",
+            family_id: "family-1",
+            integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
+            included_message_ids: ["direct-message-1"],
+            included_system_event_ids: [],
+            included_timeline_entry_ids: ["direct-message-1"],
+            record_end: "2026-03-30T10:45:00.000Z",
+            record_start: "2026-03-30T10:45:00.000Z",
+            schema_version: "coparrent.messaging-thread-export/v3",
+            source_type: "message_thread",
+            thread_display_name: "Jessica Morgan",
+            thread_id: "direct-thread-jessica",
+            thread_type: "direct_message",
+            total_entries: 1,
+            total_messages: 1,
+            total_system_events: 0,
+            verification_notes: ["note-1"],
+          },
+          manifest_json: "{\"manifest\":true}",
+          receipt: {
+            application_build_id: null,
+            artifact_hash: "artifact-hash-123",
+            artifact_hash_algorithm: "sha256",
+            artifact_type: "json_evidence_package",
+            canonical_content_hash: "hash-123",
+            canonical_hash_algorithm: "sha256",
+            canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
+            created_by_profile_id: "my-profile",
+            export_format: "pdf",
+            exported_at: "2026-03-30T14:00:00.000Z",
+            family_id: "family-1",
+            integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
+            signing_key_id: "messaging-export-key-v1",
+            manifest_hash: "manifest-hash-123",
+            manifest_hash_algorithm: "sha256",
+            receipt_signature: "signature-123",
+            receipt_signature_algorithm: "ed25519",
+            record_count: 1,
+            record_end: "2026-03-30T10:45:00.000Z",
+            record_start: "2026-03-30T10:45:00.000Z",
+            schema_version: "coparrent.messaging-thread-export/v3",
+            source_id: "direct-thread-jessica",
+            source_type: "message_thread",
+            thread_display_name: "Jessica Morgan",
+            thread_id: "direct-thread-jessica",
+            thread_type: "direct_message",
+            total_messages: 1,
+            total_system_events: 0,
+          },
+        },
+        error: null,
+      };
+    }
+
+    if (body?.action === "verify") {
+      return {
+        data: {
+          computed_hash: "hash-123",
+          export: {
+            artifact_hash: "artifact-hash-123",
+            artifact_hash_algorithm: "sha256",
+            artifact_type: "json_evidence_package",
+            canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
+            content_hash: "hash-123",
+            export_format: "pdf",
+            exported_at: "2026-03-30T14:00:00.000Z",
+            family_id: "family-1",
+            hash_algorithm: "sha256",
+            id: "export-record-1",
+            integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
+            manifest_hash: "manifest-hash-123",
+            manifest_hash_algorithm: "sha256",
+            record_count: 1,
+            signature_algorithm: "ed25519",
+            signing_key_id: "messaging-export-key-v1",
+            signature_present: true,
+            thread_display_name: "Jessica Morgan",
+            thread_id: "direct-thread-jessica",
+            thread_type: "direct_message",
+            total_messages: 1,
+            total_system_events: 0,
+          },
+          status: "match",
+          stored_hash: "hash-123",
+          verification_layers: {
+            artifact_hash: {
+              algorithm: "sha256",
+              computed: "artifact-hash-123",
+              label: "JSON evidence package hash",
+              matches: true,
+              note: null,
+              status: "match",
+              stored: "artifact-hash-123",
+            },
+            canonical_content_hash: {
+              algorithm: "sha256",
+              computed: "hash-123",
+              label: "Canonical content hash",
+              matches: true,
+              note: null,
+              status: "match",
+              stored: "hash-123",
+            },
+            manifest_hash: {
+              algorithm: "sha256",
+              computed: "manifest-hash-123",
+              label: "Manifest hash",
+              matches: true,
+              note: null,
+              status: "match",
+              stored: "manifest-hash-123",
+            },
+            receipt_signature: {
+              algorithm: "ed25519",
+              note: "The stored export receipt server signature is valid.",
+              present: true,
+              status: "match",
+              valid: true,
+            },
+          },
+          verification_mode: "stored_source",
+        },
+        error: null,
+      };
+    }
+
+    return {
+      data: {
+        exports: [
+          {
+            artifact_hash: "artifact-hash-123",
+            artifact_hash_algorithm: "sha256",
+            artifact_type: "json_evidence_package",
+            canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
+            content_hash: "hash-123",
+            export_format: "pdf",
+            exported_at: "2026-03-30T14:00:00.000Z",
+            family_id: "family-1",
+            hash_algorithm: "sha256",
+            id: "export-record-1",
+            integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
+            manifest_hash: "manifest-hash-123",
+            manifest_hash_algorithm: "sha256",
+            record_count: 3,
+            signature_algorithm: "ed25519",
+            signing_key_id: "messaging-export-key-v1",
+            signature_present: true,
+            thread_display_name: "Jessica Morgan",
+            thread_id: "direct-thread-jessica",
+            thread_type: "direct_message",
+            total_messages: 2,
+            total_system_events: 1,
+          },
+        ],
+      },
+      error: null,
+    };
+  }),
+}));
+
 vi.mock("framer-motion", () => ({
   motion: {
     div: ({ children, ...props }: { children?: ReactNode }) => <div {...props}>{children}</div>,
@@ -122,12 +365,14 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   DropdownMenuItem: ({
     children,
+    disabled,
     onClick,
   }: {
     children?: ReactNode;
+    disabled?: boolean;
     onClick?: () => void;
   }) => (
-    <button onClick={onClick} type="button">
+    <button disabled={disabled} onClick={onClick} type="button">
       {children}
     </button>
   ),
@@ -283,6 +528,14 @@ vi.mock("@/hooks/useCallSessions", () => ({
   }),
 }));
 
+vi.mock("@/integrations/supabase/client", () => ({
+  supabase: {
+    functions: {
+      invoke: supabaseMockState.invoke,
+    },
+  },
+}));
+
 vi.mock("@/components/feedback/useProblemReport", () => ({
   useProblemReport: () => ({
     openReportModal: vi.fn(),
@@ -293,7 +546,6 @@ vi.mock("@/hooks/useMessagingHub", async () => {
   const React = await import("react");
 
   const commonState = {
-    activeFamilyId: "family-1",
     createGroupChat: vi.fn(async () => null),
     ensureFamilyChannel: vi.fn(async () => messagingMockState.familyChannel),
     familyChannel: messagingMockState.familyChannel,
@@ -345,6 +597,7 @@ vi.mock("@/hooks/useMessagingHub", async () => {
       if (messagingMockState.mockScenario.mode === "error") {
         return {
           ...commonState,
+          activeFamilyId: messagingMockState.activeFamilyId,
           activeThread: messagingMockState.directThread,
           activeThreadLoadError:
             "The recorded thread could not be loaded right now. Refresh before replying.",
@@ -356,6 +609,7 @@ vi.mock("@/hooks/useMessagingHub", async () => {
 
       return {
         ...commonState,
+        activeFamilyId: messagingMockState.activeFamilyId,
         activeThread,
         activeThreadLoadError,
         activeThreadLoading,
@@ -409,8 +663,10 @@ describe("MessagingHubPage", () => {
   let root: Root | null = null;
 
   beforeEach(() => {
+    messagingMockState.activeFamilyId = "family-1";
     messagingMockState.mockScenario.mode = "interactive";
     messagingMockState.viewport.isMobile = false;
+    supabaseMockState.invoke.mockClear();
     vi.useFakeTimers();
   });
 
@@ -471,5 +727,57 @@ describe("MessagingHubPage", () => {
     expect(rendered.textContent).toContain("The recorded thread could not be loaded right now. Refresh before replying.");
     expect(rendered.textContent).not.toContain("This record is open and ready for the first message.");
     expect(rendered.querySelector('[data-testid="composer"]')?.getAttribute("data-disabled")).toBe("true");
+  });
+
+  it("routes evidence export through the server-backed export record flow", async () => {
+    const rendered = await renderPage();
+    const exportButton = Array.from(rendered.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Export evidence package"),
+    );
+
+    expect(exportButton).toBeTruthy();
+
+    await act(async () => {
+      exportButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(supabaseMockState.invoke).toHaveBeenCalledWith(
+      "messaging-thread-export",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          action: "create",
+          family_id: "family-1",
+        }),
+      }),
+    );
+  });
+
+  it("fails closed when family scope is missing before export begins", async () => {
+    messagingMockState.activeFamilyId = null;
+    const rendered = await renderPage();
+    const exportButton = Array.from(rendered.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Export evidence package"),
+    ) as HTMLButtonElement | undefined;
+
+    expect(exportButton?.disabled).toBe(true);
+    expect(
+      supabaseMockState.invoke.mock.calls.some(
+        ([name, payload]) =>
+          name === "messaging-thread-export" &&
+          (payload as { body?: { action?: string } })?.body?.action === "create",
+      ),
+    ).toBe(false);
+  });
+
+  it("shows the stored export receipt context instead of a generic export strip", async () => {
+    const rendered = await renderPage();
+
+    expect(rendered.textContent).toContain("Tamper-evident export receipts");
+    expect(rendered.textContent).toContain("Latest receipt export-r… recorded for this thread");
+    expect(rendered.textContent).toContain("canonical hash");
+    expect(rendered.textContent).toContain("Receipt ID");
+    expect(rendered.textContent).toContain("Signing key");
   });
 });

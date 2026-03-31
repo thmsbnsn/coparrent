@@ -1,10 +1,19 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { webcrypto } from "node:crypto";
+import { generateKeyPairSync, webcrypto } from "node:crypto";
 import type { MessageTimelineItem } from "@/components/messages/threadTimeline";
 import {
   buildMessagingThreadExportPackage,
+  getMessagingThreadExportArtifactPayloadJson,
+  getMessagingThreadExportManifestJson,
+  getMessagingThreadExportPayloadJson,
+  MESSAGING_THREAD_EXPORT_CANONICALIZATION_VERSION,
+  MESSAGING_THREAD_EXPORT_INTEGRITY_MODEL_VERSION,
+  MESSAGING_THREAD_EXPORT_PACKAGE_SCHEMA_VERSION,
+  MESSAGING_THREAD_EXPORT_SCHEMA_VERSION,
+  signMessagingThreadExportReceiptPayload,
   stableStringifyForIntegrity,
   verifyMessagingThreadExportPackage,
+  verifyMessagingThreadExportReceiptSignature,
 } from "@/components/messages/exportIntegrity";
 import type { MessageThread } from "@/hooks/useMessagingHub";
 
@@ -15,7 +24,23 @@ beforeAll(() => {
       value: webcrypto,
     });
   }
+
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  signingKeys.privateKeyPkcs8Base64 = privateKey
+    .export({ format: "der", type: "pkcs8" })
+    .toString("base64");
+  signingKeys.publicKeySpkiBase64 = publicKey
+    .export({ format: "der", type: "spki" })
+    .toString("base64");
 });
+
+const signingKeys: {
+  privateKeyPkcs8Base64: string;
+  publicKeySpkiBase64: string;
+} = {
+  privateKeyPkcs8Base64: "",
+  publicKeySpkiBase64: "",
+};
 
 const activeThread: MessageThread = {
   created_at: "2026-03-30T13:00:00.000Z",
@@ -82,55 +107,48 @@ const timelineItems: MessageTimelineItem[] = [
   },
 ];
 
+const buildPackage = (overrides?: Partial<Parameters<typeof buildMessagingThreadExportPackage>[0]>) =>
+  buildMessagingThreadExportPackage({
+    activeFamilyId: "family-1",
+    activeThread,
+    exportId: "export-one",
+    exportedAt: "2026-03-30T14:00:00.000Z",
+    exportedByUserId: "user-taylor",
+    exportedByProfileId: "profile-taylor",
+    timelineItems,
+    ...overrides,
+  });
+
 describe("buildMessagingThreadExportPackage", () => {
-  it("builds a deterministic canonical payload and hash for identical inputs", async () => {
-    const exportedAt = "2026-03-30T14:00:00.000Z";
-
-    const firstExport = await buildMessagingThreadExportPackage({
-      activeFamilyId: "family-1",
-      activeThread,
-      exportedAt,
-      exportedByProfileId: "profile-taylor",
-      timelineItems,
-    });
-
-    const secondExport = await buildMessagingThreadExportPackage({
-      activeFamilyId: "family-1",
-      activeThread,
-      exportedAt,
-      exportedByProfileId: "profile-taylor",
-      timelineItems,
+  it("keeps the same canonical hash for the same logical content even when receipt metadata changes", async () => {
+    const firstExport = await buildPackage();
+    const secondExport = await buildPackage({
+      exportId: "export-two",
+      exportedAt: "2026-03-30T16:00:00.000Z",
+      exportedByProfileId: "profile-jessica",
     });
 
     expect(firstExport.canonicalPayloadJson).toBe(secondExport.canonicalPayloadJson);
-    expect(firstExport.integrityHash).toBe(secondExport.integrityHash);
+    expect(firstExport.contentHash).toBe(secondExport.contentHash);
+    expect(firstExport.manifestHash).not.toBe(secondExport.manifestHash);
+    expect(firstExport.artifactHash).not.toBe(secondExport.artifactHash);
     expect(stableStringifyForIntegrity(firstExport.canonicalPayload)).toBe(
       firstExport.canonicalPayloadJson,
     );
   });
 
-  it("changes the hash when the exported record content changes", async () => {
-    const exportedAt = "2026-03-30T14:00:00.000Z";
-    const messageToEdit = timelineItems[2];
-
-    if (messageToEdit.kind !== "message") {
+  it("changes the canonical hash when recorded content changes", async () => {
+    const originalExport = await buildPackage();
+    const thirdTimelineItem = timelineItems[2];
+    if (thirdTimelineItem.kind !== "message") {
       throw new Error("Expected the third timeline item to be a message.");
     }
-
-    const originalExport = await buildMessagingThreadExportPackage({
-      activeFamilyId: "family-1",
-      activeThread,
-      exportedAt,
-      exportedByProfileId: "profile-taylor",
-      timelineItems,
-    });
-
     const changedTimelineItems: MessageTimelineItem[] = [
       ...timelineItems.slice(0, 2),
       {
-        ...messageToEdit,
+        ...thirdTimelineItem,
         message: {
-          ...messageToEdit.message,
+          ...thirdTimelineItem.message,
           content: "Confirmed. I will be there at 6:00 PM instead.",
         },
       },
@@ -139,95 +157,101 @@ describe("buildMessagingThreadExportPackage", () => {
     const changedExport = await buildMessagingThreadExportPackage({
       activeFamilyId: "family-1",
       activeThread,
-      exportedAt,
+      exportId: "export-two",
+      exportedAt: "2026-03-30T14:00:00.000Z",
       exportedByProfileId: "profile-taylor",
       timelineItems: changedTimelineItems,
     });
 
-    expect(changedExport.integrityHash).not.toBe(originalExport.integrityHash);
+    expect(changedExport.contentHash).not.toBe(originalExport.contentHash);
   });
 
-  it("produces a manifest with the record range and included ids", async () => {
-    const exportPackage = await buildMessagingThreadExportPackage({
-      activeFamilyId: "family-1",
-      activeThread,
-      exportedAt: "2026-03-30T14:00:00.000Z",
-      exportedByProfileId: "profile-taylor",
-      timelineItems,
-    });
+  it("exposes explicit integrity-model and canonicalization versions in the receipt package", async () => {
+    const exportPackage = await buildPackage();
 
+    expect(exportPackage.canonicalPayload).toMatchObject({
+      canonicalization_version: MESSAGING_THREAD_EXPORT_CANONICALIZATION_VERSION,
+      schema_version: MESSAGING_THREAD_EXPORT_SCHEMA_VERSION,
+    });
     expect(exportPackage.manifest).toMatchObject({
-      canonical_payload_hash: exportPackage.integrityHash,
-      export_generated_at: "2026-03-30T14:00:00.000Z",
-      family_id: "family-1",
-      hash_algorithm: "SHA-256",
-      record_end: "2026-03-30T13:06:00.000Z",
-      record_start: "2026-03-30T13:00:00.000Z",
-      thread_display_name: "Jessica Morgan",
-      thread_id: "thread-direct-jessica",
-      thread_type: "direct_message",
-      total_entries: 3,
-      total_messages: 2,
-      total_system_events: 1,
+      canonicalization_version: MESSAGING_THREAD_EXPORT_CANONICALIZATION_VERSION,
+      integrity_model_version: MESSAGING_THREAD_EXPORT_INTEGRITY_MODEL_VERSION,
+      schema_version: MESSAGING_THREAD_EXPORT_SCHEMA_VERSION,
+    });
+    expect(exportPackage.receipt).toMatchObject({
+      canonicalization_version: MESSAGING_THREAD_EXPORT_CANONICALIZATION_VERSION,
+      integrity_model_version: MESSAGING_THREAD_EXPORT_INTEGRITY_MODEL_VERSION,
+    });
+    expect(exportPackage.evidencePackage.package_schema_version).toBe(
+      MESSAGING_THREAD_EXPORT_PACKAGE_SCHEMA_VERSION,
+    );
+  });
+
+  it("keeps the canonical hash stable while manifest-only metadata changes", async () => {
+    const firstExport = await buildPackage();
+    const secondExport = await buildPackage({
+      exportedAt: "2026-03-31T09:15:00.000Z",
     });
 
-    expect(exportPackage.manifest.included_message_ids).toEqual([
-      "message-1",
-      "message-2",
-    ]);
-    expect(exportPackage.manifest.included_system_event_ids).toEqual([
-      "system-conversation-started",
-    ]);
-    expect(exportPackage.manifest.verification_notes).toHaveLength(3);
+    expect(firstExport.contentHash).toBe(secondExport.contentHash);
+    expect(firstExport.manifestHash).not.toBe(secondExport.manifestHash);
+    expect(firstExport.artifactHash).not.toBe(secondExport.artifactHash);
   });
 });
 
-describe("verifyMessagingThreadExportPackage", () => {
-  it("confirms the manifest hash for an unchanged canonical payload", async () => {
-    const exportPackage = await buildMessagingThreadExportPackage({
-      activeFamilyId: "family-1",
-      activeThread,
-      exportedAt: "2026-03-30T14:00:00.000Z",
-      exportedByProfileId: "profile-taylor",
-      timelineItems,
-    });
+describe("receipt helpers", () => {
+  it("verifies the canonical payload against the stored receipt hash", async () => {
+    const exportPackage = await buildPackage();
 
     const verificationResult = await verifyMessagingThreadExportPackage(
       exportPackage.canonicalPayload,
-      exportPackage.manifest,
+      exportPackage.receipt,
     );
 
     expect(verificationResult).toEqual({
-      computedHash: exportPackage.integrityHash,
+      computedHash: exportPackage.contentHash,
       matches: true,
       reason: null,
     });
   });
 
-  it("detects when the canonical payload no longer matches the manifest", async () => {
-    const exportPackage = await buildMessagingThreadExportPackage({
-      activeFamilyId: "family-1",
-      activeThread,
-      exportedAt: "2026-03-30T14:00:00.000Z",
-      exportedByProfileId: "profile-taylor",
-      timelineItems,
-    });
+  it("extracts the canonical payload, manifest, and artifact strings from the evidence package", async () => {
+    const exportPackage = await buildPackage();
 
-    const verificationResult = await verifyMessagingThreadExportPackage(
-      {
-        ...exportPackage.canonicalPayload,
-        entries: exportPackage.canonicalPayload.entries.map((entry) =>
-          entry.kind === "message" && entry.entry_id === "message-2"
-            ? { ...entry, content: "Modified after export" }
-            : entry,
-        ),
-      },
-      exportPackage.manifest,
+    expect(getMessagingThreadExportPayloadJson(exportPackage.evidencePackage)).toBe(
+      exportPackage.canonicalPayloadJson,
+    );
+    expect(getMessagingThreadExportManifestJson(exportPackage.evidencePackage)).toBe(
+      exportPackage.manifestJson,
+    );
+    expect(getMessagingThreadExportArtifactPayloadJson(exportPackage.evidencePackage)).toBe(
+      exportPackage.artifactPayloadJson,
+    );
+  });
+
+  it("signs and verifies the deterministic receipt payload", async () => {
+    const exportPackage = await buildPackage();
+    const signature = await signMessagingThreadExportReceiptPayload(
+      exportPackage.receiptPayloadJson,
+      signingKeys.privateKeyPkcs8Base64,
     );
 
-    expect(verificationResult.matches).toBe(false);
-    expect(verificationResult.reason).toBe(
-      "Canonical payload hash does not match the manifest.",
-    );
+    expect(signature.length).toBeGreaterThan(40);
+    await expect(
+      verifyMessagingThreadExportReceiptSignature(
+        exportPackage.receiptPayloadJson,
+        signingKeys.publicKeySpkiBase64,
+        signature,
+      ),
+    ).resolves.toBe(true);
+    await expect(
+      verifyMessagingThreadExportReceiptSignature(
+        exportPackage.receiptPayloadJson,
+        generateKeyPairSync("ed25519").publicKey
+          .export({ format: "der", type: "spki" })
+          .toString("base64"),
+        signature,
+      ),
+    ).resolves.toBe(false);
   });
 });

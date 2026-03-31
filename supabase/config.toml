@@ -111,3 +111,6 @@ verify_jwt = true
 
 [functions.sync-push-subscription]
 verify_jwt = true
+
+[functions.messaging-thread-export]
+verify_jwt = true
