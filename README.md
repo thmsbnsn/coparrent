@@ -4,14 +4,14 @@ CoParrent is a Vite/React + Supabase web application for co-parenting operations
 
 ## Current Repo Status
 
-Last reviewed: 2026-03-31
+Last reviewed: 2026-04-01
 
 This README is intentionally limited to repo-confirmed statements plus clearly labeled historical evidence.
 
-- The current mainline codebase has been reviewed locally on 2026-03-31.
+- The current mainline codebase has been reviewed locally on 2026-04-01.
 - `npm run lint` passes locally.
 - `npm run build` passes locally.
-- `npm run test -- --run` passes locally with 58 test files and 229 tests.
+- `npm run test -- --run` passes locally with 60 test files and 241 tests.
 - The repo includes verification helpers for preview smoke, Stripe, invites, Daily calling, AI runtime, Messaging Hub, and push/PWA checks.
 - Historical live verification artifacts from March 2026 exist in [docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md).
 - Those external checks were not rerun as part of this documentation cleanup. Treat them as evidence on file, not as a fresh guarantee.
@@ -22,7 +22,7 @@ This README is intentionally limited to repo-confirmed statements plus clearly l
 - Auth and onboarding: email/password auth, Google OAuth, invite acceptance, onboarding, and family selection.
 - Family operations: dashboard, calendar, children, documents, expenses, sports, gift lists, journal, notifications, and child-oriented views.
 - Messaging and calling: Messaging Hub, family/direct/group threads, message drafting aids, and Daily-backed calling flows with persisted session/event state.
-- Export and evidence flows: server-signed Messaging Hub export receipts with server-generated PDF artifacts, a separate client-generated document court-export PDF flow, and expense report generation.
+- Export and evidence flows: server-generated Messaging Hub evidence packages, server-generated family-wide court-record exports, verification-backed PDF and evidence-package downloads, and expense report generation.
 - Support and admin: admin dashboard, law-library management, problem reporting, and PWA diagnostics.
 
 The current route map is defined in [src/App.tsx](src/App.tsx).
@@ -61,8 +61,9 @@ These are still open or require user-assisted confirmation:
 - Final deployed auth posture confirmation, especially captcha and localhost-origin behavior.
 - Final canonical-host posture confirmation for public deployment.
 - Final passkey posture. The repo contains passkey-related UI, but deployment support and launch messaging still need a clear decision.
-- Unifying the older document court-export PDF flow with the stronger Messaging Hub receipt/integrity model.
-- Deciding whether call evidence remains timeline/status based or grows into a dedicated export surface. The current repo does not include call recording or transcripts.
+- Fresh deployed verification of the Object Lock-backed export path after any meaningful release.
+- Deciding whether legacy pre-Object-Lock export artifacts remain read-only legacy records or are migrated into the newer storage posture.
+- Deciding whether call evidence remains timeline/status based or grows into a dedicated media export surface. The current repo does not include call recording or transcripts.
 
 See [docs/project/CURRENT_STATUS.md](docs/project/CURRENT_STATUS.md) and [docs/project/next-10-tasks.md](docs/project/next-10-tasks.md).
 

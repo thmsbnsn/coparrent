@@ -1,12 +1,22 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { generateKeyPairSync, webcrypto } from "node:crypto";
 import { __resetCreateClientImplementation, __setCreateClientImplementation } from "./test-shims/supabaseEdge";
+import { __resetS3MockHandlers, __setS3MockHandlers } from "./test-shims/awsS3";
 
 type JsonRecord = Record<string, unknown>;
 
 interface TestState {
   authUsers: Record<string, { id: string } | null>;
   rpcCalls: Array<{ args: JsonRecord; name: string }>;
+  s3Downloads: Array<{ bucket: string; key: string; versionId: string }>;
+  s3Objects: Map<string, { contentType: string; data: Uint8Array; retainUntil: string; versionId: string }>;
+  s3Uploads: Array<{
+    bucket: string;
+    contentType: string | null;
+    key: string;
+    versionId: string;
+  }>;
+  s3VersionCounter: number;
   storageDownloads: Array<{ bucket: string; path: string }>;
   storageObjects: Map<string, { contentType: string; data: Uint8Array }>;
   storageUploads: Array<{
@@ -19,6 +29,8 @@ interface TestState {
 }
 
 const storageKey = (bucket: string, path: string) => `${bucket}:${path}`;
+const s3StorageKey = (bucket: string, key: string, versionId: string) =>
+  `${bucket}:${key}:${versionId}`;
 
 const textEncoder = new TextEncoder();
 
@@ -256,6 +268,10 @@ const signingKeyConfig = {
 };
 
 const envValues: Record<string, string | undefined> = {
+  AWS_ACCESS_KEY_ID: "aws-access-key-id",
+  AWS_REGION: "us-east-2",
+  AWS_S3_BUCKET_NAME: "coparrent-court-records-prod",
+  AWS_SECRET_ACCESS_KEY: "aws-secret-access-key",
   MESSAGING_THREAD_EXPORT_SIGNING_KEY: "server-signing-secret",
   MESSAGING_THREAD_EXPORT_SIGNING_KEY_ID: signingKeyConfig.keyId,
   MESSAGING_THREAD_EXPORT_SIGNING_PRIVATE_KEY_PKCS8_B64:
@@ -273,6 +289,10 @@ const buildState = (): TestState => ({
     "parent-token": { id: "user-1" },
   },
   rpcCalls: [],
+  s3Downloads: [],
+  s3Objects: new Map(),
+  s3Uploads: [],
+  s3VersionCounter: 1,
   storageDownloads: [],
   storageObjects: new Map(),
   storageUploads: [],
@@ -328,24 +348,39 @@ const buildState = (): TestState => ({
     ],
     profiles: [
       {
+        access_grace_until: null,
         account_role: null,
         email: "taylor@example.com",
+        free_premium_access: false,
         full_name: "Taylor Parent",
         id: "profile-taylor",
+        subscription_status: "active",
+        subscription_tier: "power",
+        trial_ends_at: null,
         user_id: "user-1",
       },
       {
+        access_grace_until: null,
         account_role: null,
         email: "jessica@example.com",
+        free_premium_access: false,
         full_name: "Jessica Morgan",
         id: "profile-jessica",
+        subscription_status: "active",
+        subscription_tier: "power",
+        trial_ends_at: null,
         user_id: "user-2",
       },
       {
+        access_grace_until: null,
         account_role: null,
         email: "guardian@example.com",
+        free_premium_access: false,
         full_name: "Jordan Guardian",
         id: "profile-guardian",
+        subscription_status: "active",
+        subscription_tier: "power",
+        trial_ends_at: null,
         user_id: "user-3",
       },
     ],
@@ -367,6 +402,7 @@ const buildState = (): TestState => ({
         thread_id: "thread-direct-jessica",
       },
     ],
+    user_roles: [],
   },
 });
 
@@ -428,6 +464,70 @@ describe("messaging-thread-export", () => {
       signingKeyConfig.publicKeySpkiBase64;
     __resetCreateClientImplementation();
     __setCreateClientImplementation(() => new MockSupabaseClient(state));
+    __resetS3MockHandlers();
+    __setS3MockHandlers({
+      getObject: async (input) => {
+        const bucket = String(input.Bucket ?? "");
+        const key = String(input.Key ?? "");
+        const versionId = String(input.VersionId ?? "");
+        state.s3Downloads.push({ bucket, key, versionId });
+        const stored = state.s3Objects.get(s3StorageKey(bucket, key, versionId));
+        if (!stored) {
+          throw new Error("Object not found");
+        }
+
+        return {
+          Body: stored.data,
+          ContentType: stored.contentType,
+          ObjectLockMode: "COMPLIANCE",
+          ObjectLockRetainUntilDate: new Date(stored.retainUntil),
+        };
+      },
+      headObject: async (input) => {
+        const bucket = String(input.Bucket ?? "");
+        const key = String(input.Key ?? "");
+        const versionId = String(input.VersionId ?? "");
+        const stored = state.s3Objects.get(s3StorageKey(bucket, key, versionId));
+        if (!stored) {
+          throw new Error("Object not found");
+        }
+
+        return {
+          ContentType: stored.contentType,
+          ObjectLockMode: "COMPLIANCE",
+          ObjectLockRetainUntilDate: new Date(stored.retainUntil),
+        };
+      },
+      putObject: async (input) => {
+        const bucket = String(input.Bucket ?? "");
+        const key = String(input.Key ?? "");
+        const versionId = `version-${state.s3VersionCounter++}`;
+        const data = await encodeStoragePayload(
+          input.Body as Blob | File | Uint8Array | ArrayBuffer | ArrayBufferView | string,
+        );
+        const retainUntil = "2033-04-01T00:00:00.000Z";
+
+        state.s3Uploads.push({
+          bucket,
+          contentType: typeof input.ContentType === "string" ? input.ContentType : null,
+          key,
+          versionId,
+        });
+        state.s3Objects.set(s3StorageKey(bucket, key, versionId), {
+          contentType:
+            typeof input.ContentType === "string"
+              ? input.ContentType
+              : "application/octet-stream",
+          data,
+          retainUntil,
+          versionId,
+        });
+
+        return {
+          VersionId: versionId,
+        };
+      },
+    });
   });
 
   it("fails explicitly when family scope is missing", async () => {
@@ -444,6 +544,35 @@ describe("messaging-thread-export", () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({
       error: "family_id is required.",
+      success: false,
+    });
+  });
+
+  it("requires a Power subscription for messaging export creation", async () => {
+    const exporter = state.tables.profiles.find((row) => row.id === "profile-taylor");
+    if (!exporter) {
+      throw new Error("Expected seeded exporter profile.");
+    }
+
+    exporter.free_premium_access = false;
+    exporter.subscription_status = "none";
+    exporter.subscription_tier = "free";
+    exporter.trial_ends_at = null;
+
+    const response = await handler(
+      buildRequest(
+        {
+          action: "create",
+          family_id: "family-1",
+          thread_id: "thread-direct-jessica",
+        },
+        "parent-token",
+      ),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "This feature requires a Power subscription.",
       success: false,
     });
   });
@@ -478,13 +607,13 @@ describe("messaging-thread-export", () => {
       thread_id: "thread-direct-jessica",
     });
     expect(body.manifest).toMatchObject({
-      artifact_storage_bucket: "court-export-artifacts",
+      artifact_storage_bucket: "coparrent-court-records-prod",
       canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
       family_id: "family-1",
       integrity_model_version: "coparrent.messaging-thread-export-receipt/v4",
       pdf_artifact_hash: expect.any(String),
       pdf_hash_algorithm: "sha256",
-      pdf_storage_bucket: "court-export-artifacts",
+      pdf_storage_bucket: "coparrent-court-records-prod",
       thread_id: "thread-direct-jessica",
       total_entries: 3,
       total_messages: 2,
@@ -492,13 +621,13 @@ describe("messaging-thread-export", () => {
     });
     expect(body.receipt).toMatchObject({
       artifact_hash: expect.any(String),
-      artifact_storage_bucket: "court-export-artifacts",
+      artifact_storage_bucket: "coparrent-court-records-prod",
       canonical_content_hash: body.export.content_hash,
       created_by_user_id: "user-1",
       pdf_artifact_hash: expect.any(String),
       pdf_artifact_type: "server_generated_pdf_artifact",
       pdf_hash_algorithm: "sha256",
-      pdf_storage_bucket: "court-export-artifacts",
+      pdf_storage_bucket: "coparrent-court-records-prod",
       manifest_hash: body.export.manifest_hash,
       receipt_signature: expect.any(String),
       receipt_signature_algorithm: "ed25519",
@@ -516,17 +645,17 @@ describe("messaging-thread-export", () => {
     expect(body.canonical_payload.entries).toHaveLength(3);
     expect(body.evidence_package_json).toContain("\"receipt\"");
     expect(state.tables.court_exports).toHaveLength(1);
-    expect(state.storageUploads).toEqual(
+    expect(state.s3Uploads).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          bucket: "court-export-artifacts",
+          bucket: "coparrent-court-records-prod",
           contentType: "application/json; charset=utf-8",
-          upsert: false,
+          key: expect.stringContaining("court-exports"),
         }),
         expect.objectContaining({
-          bucket: "court-export-artifacts",
+          bucket: "coparrent-court-records-prod",
           contentType: "application/pdf",
-          upsert: false,
+          key: expect.stringContaining("court-exports"),
         }),
       ]),
     );
@@ -829,7 +958,7 @@ describe("messaging-thread-export", () => {
       },
       verification_mode: "stored_pdf_artifact",
     });
-    expect(state.storageDownloads.some((download) => download.path.endsWith(".pdf"))).toBe(true);
+    expect(state.s3Downloads.some((download) => download.key.endsWith(".pdf"))).toBe(true);
   });
 
   it("returns a mismatch when uploaded PDF bytes no longer match the stored receipt hash", async () => {
@@ -931,15 +1060,15 @@ describe("messaging-thread-export", () => {
     );
     expect(secondCreate.status).toBe(200);
 
-    const pdfUploadPaths = state.storageUploads
+    const pdfUploadPaths = state.s3Uploads
       .filter((upload) => upload.contentType === "application/pdf")
-      .map((upload) => upload.path);
-    const jsonUploadPaths = state.storageUploads
+      .map((upload) => upload.key);
+    const jsonUploadPaths = state.s3Uploads
       .filter((upload) => upload.contentType === "application/json; charset=utf-8")
-      .map((upload) => upload.path);
+      .map((upload) => upload.key);
 
     expect(new Set(pdfUploadPaths).size).toBe(2);
     expect(new Set(jsonUploadPaths).size).toBe(2);
-    expect(state.storageUploads.every((upload) => upload.upsert === false)).toBe(true);
+    expect(state.s3Uploads.every((upload) => upload.versionId.startsWith("version-"))).toBe(true);
   });
 });

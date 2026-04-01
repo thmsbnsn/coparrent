@@ -1,6 +1,6 @@
 # Security Model
 
-Last reviewed: 2026-03-31
+Last reviewed: 2026-04-01
 
 This document defines the current security architecture and trust boundaries for CoParrent. It is written to stay aligned with the repo rather than with older assumptions or aspirational deployment claims.
 
@@ -134,27 +134,36 @@ Primary source:
 
 ## Export And Evidence Security
 
-Messaging Hub export integrity work is now a significant part of the security posture for recorded communication.
+Messaging Hub and family-wide court-record export integrity are now a significant part of the security posture for recorded communication and review packages.
 
 Repo-confirmed controls include:
 
 - explicit `family_id` requirement for export operations
+- server-side role and Power-entitlement checks for export creation, listing, download, and verification
 - server-generated evidence packages
 - server-generated PDF artifacts
+- immutable artifact uploads with stored object-version and retention metadata for new exports
 - receipt verification paths
 - receipt and artifact hashing metadata
 
 Primary sources:
 
 - [../../supabase/functions/messaging-thread-export/index.ts](../../supabase/functions/messaging-thread-export/index.ts)
+- [../../supabase/functions/court-record-export/index.ts](../../supabase/functions/court-record-export/index.ts)
+- [../../supabase/functions/_shared/courtExportAccess.ts](../../supabase/functions/_shared/courtExportAccess.ts)
+- [../../supabase/functions/_shared/courtExportS3.ts](../../supabase/functions/_shared/courtExportS3.ts)
 - [../../supabase/functions/_shared/messagingThreadExportIntegrity.ts](../../supabase/functions/_shared/messagingThreadExportIntegrity.ts)
 - [../../supabase/functions/_shared/messagingThreadExportPdf.ts](../../supabase/functions/_shared/messagingThreadExportPdf.ts)
+- [../../supabase/functions/_shared/courtRecordExportIntegrity.ts](../../supabase/functions/_shared/courtRecordExportIntegrity.ts)
+- [../../supabase/functions/_shared/courtRecordExportPdf.ts](../../supabase/functions/_shared/courtRecordExportPdf.ts)
+- [../../supabase/migrations/20260401193000_unify_court_exports_for_object_lock.sql](../../supabase/migrations/20260401193000_unify_court_exports_for_object_lock.sql)
 
 Important boundaries:
 
-- This stronger integrity model currently applies to Messaging Hub exports, not to every record-export surface in the repo.
-- The documents-page court export remains a separate client-generated PDF flow and should not be described as having the same receipt-verification guarantees.
-- Daily calling persists session, participant, and event data, and call-related system events can be included in Messaging Hub evidence exports, but the repo does not include call recording, transcripts, or a standalone immutable call-history export.
+- New Messaging Hub exports and new family-wide court-record exports now share the same server-side receipt, hash, verification, and immutable-artifact model.
+- Daily calling persists session, participant, and event data, and call evidence in the unified export remains session/event history only. The repo does not include call recording or transcripts.
+- Family-wide court-record exports include document metadata and access history, not raw document binaries.
+- Legacy pre-cutover export artifacts can still exist outside the newer immutable-storage path. That compatibility posture should not be confused with the write-once handling used for newly generated exports.
 
 ## Storage And File Posture
 

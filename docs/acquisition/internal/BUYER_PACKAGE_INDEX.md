@@ -1,6 +1,6 @@
 # CoParrent Buyer Package Index
 
-Last updated: 2026-03-31
+Last updated: 2026-04-01
 
 ## Purpose
 
@@ -23,7 +23,7 @@ Current support for that posture:
 - the repo has current local verification for lint, build, and test status
 - core product, billing, and security documentation exist
 - a March 2026 live verification log exists for selected flows
-- the recordkeeping story is strongest for Messaging Hub export integrity and less complete for the older documents-page court export and standalone call evidence
+- the repo now supports one unified server-generated court-record export path across Messaging Hub, call-event evidence, and broader family records, with limits on call media and raw document binaries stated explicitly
 - the remaining buyer-sensitive open items are concentrated in device validation, deployment confirmation, and buyer-demo packaging
 
 See:

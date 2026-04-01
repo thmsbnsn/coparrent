@@ -9,6 +9,7 @@ import {
   FileText,
   Shield,
   Calendar,
+  Phone,
   Receipt,
   Clock,
   ArrowRight,
@@ -23,11 +24,22 @@ const capturedRecords = [
     icon: MessageSquare,
     title: "Documented messaging",
     description:
-      "Messages are timestamped, threaded, and preserved in order. Message records are the strongest immutable part of the current record stack.",
+      "Messages are timestamped, threaded, and preserved in order. They anchor the unified server-generated export timeline.",
     points: [
       "Chronological conversation history",
       "Sender attribution and channel context",
       "Read-receipt data included in exports",
+    ],
+  },
+  {
+    icon: Phone,
+    title: "Call session activity",
+    description:
+      "Call attempts, answers, declines, and related session events are preserved as timeline evidence for the selected family.",
+    points: [
+      "Session and event timestamps",
+      "Participant and status context",
+      "No recordings or transcripts claimed",
     ],
   },
   {
@@ -71,12 +83,20 @@ const exportSections = [
     body: "Messages are exported in chronological order with sender attribution and timestamps.",
   },
   {
+    label: "Call activity",
+    body: "Call evidence is exported as persisted session and event history with timestamps and status context only.",
+  },
+  {
     label: "Schedule change requests",
     body: "Requests show original date, proposed date, request type, requesting party, and resulting status.",
   },
   {
     label: "Exchange check-ins",
     body: "Check-ins include exchange date, recorded time, and optional notes.",
+  },
+  {
+    label: "Document references",
+    body: "Document metadata is included so the export can reference titles, categories, and upload context without embedding raw document files.",
   },
   {
     label: "Document access logs",
@@ -96,6 +116,8 @@ const guardrails = [
   "CoParrent is a recordkeeping and coordination tool, not legal advice.",
   "Admissibility of any export depends on the rules of the court or jurisdiction reviewing it.",
   "Journal entries are intentionally excluded from court exports today to preserve privacy.",
+  "Call evidence reflects session and event history only. CoParrent does not claim call recordings or transcripts.",
+  "Document references and access logs can be exported, but raw document files are not embedded in the court-record package.",
   "Exchange check-ins are timestamp-based only and should not be described as GPS-verified.",
 ];
 
@@ -113,7 +135,7 @@ const recordHighlights = [
   {
     icon: Scale,
     title: "Clearer review package",
-    description: "The goal is to reduce ambiguity by presenting related records together in one chronological PDF package.",
+    description: "The server generates a PDF artifact and evidence package together so the review copy can be verified later.",
   },
 ];
 
@@ -148,7 +170,7 @@ const CourtRecordsPage = () => {
                 transition={{ delay: 0.1 }}
                 className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto leading-relaxed"
               >
-                CoParrent is designed so messages, schedule events, document access,
+                CoParrent is designed so messages, call activity, schedule events, document access,
                 and expense history are easier to review later when a mediator, attorney,
                 or court needs a cleaner picture of what happened.
               </motion.p>
@@ -222,15 +244,14 @@ const CourtRecordsPage = () => {
               <div>
                 <h2 className="text-3xl font-display font-bold mb-5">What a court-ready export includes</h2>
                 <p className="text-lg text-muted-foreground leading-relaxed mb-6">
-                  The current export flow is designed to generate a single PDF package around a selected date range.
-                  Families can include the sections that matter to the period under review instead of exporting everything blindly.
+                  The current export flow is generated on the server around a selected family and date range.
+                  Families can include the sections that matter to the period under review, then retain both a PDF artifact and a verification-backed evidence package.
                 </p>
                 <div className="rounded-2xl border border-border bg-card p-6">
                   <h3 className="font-display font-semibold mb-3">Important precision</h3>
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    Messaging is intentionally immutable after send. Other exported sections are compiled from
-                    stored timestamps and activity history, but the product should not claim that every record type
-                    has the same immutability guarantees as messages.
+                    The export is built server-side from stored family records and verified later against its receipt.
+                    Call evidence remains session/event history only, and document coverage is limited to metadata and access history rather than raw file binaries.
                   </p>
                 </div>
               </div>

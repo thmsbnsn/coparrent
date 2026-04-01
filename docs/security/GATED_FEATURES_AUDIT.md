@@ -1,7 +1,7 @@
 # Gated Features Audit
 
-> **Audit Date**: 2026-03-30
-> **Status**: Updated after family-scope runtime Tickets 1-5 and Chore Chart removal
+> **Audit Date**: 2026-04-01
+> **Status**: Updated after unified court-record export and Object Lock cutover
 > **Auditor**: System
 
 ---
@@ -22,7 +22,7 @@ These invariants are enforced in `src/lib/subscriptionInvariants.ts` and all ser
 ## Audit Summary
 
 This document provides a comprehensive audit of all gated features, verifying:
-1. ✅ UI gate exists (RoleGate / PremiumFeatureGate / AdminGate)
+1. ✅ UI or route gate exists where applicable (RoleGate / PremiumFeatureGate / AdminGate / route allowlist / permission gate)
 2. ✅ Server enforcement exists (RLS or aiGuard)
 3. ✅ Failure returns structured `{ error, code }`
 
@@ -52,7 +52,7 @@ Current addendum:
 | Feature | UI Gate | Server Gate | Structured Error | Status |
 |---------|---------|-------------|------------------|--------|
 | **Expense Tracking** | ✅ `ExpensesPage.tsx` - PremiumFeatureGate | ✅ RLS `is_parent_or_guardian()` | ✅ RLS rejects | ✅ PASS |
-| **Court Exports** | ✅ `CourtExportDialog.tsx` - PremiumFeatureGate | ✅ RLS on export data | ✅ Client-side gate | ✅ PASS |
+| **Court Exports** | ✅ Route/permission gating in documents flow and family-scoped export actions in Messaging Hub | ✅ `court-record-export` + `messaging-thread-export` enforce explicit family scope, role/thread access, and Power entitlement server-side | ✅ Function rejects with 403 error | ✅ PASS |
 | **Sports & Events Hub** | ✅ `SportsPage.tsx` - PremiumFeatureGate | ✅ RLS on `child_activities` | ✅ RLS rejects | ⚠️ PARTIAL |
 | **Nurse Nancy AI** | ✅ `NurseNancyPage.tsx` - PremiumFeatureGate + RoleGate | ✅ `aiGuard` in edge function | ✅ `{ code: "PREMIUM_REQUIRED" }` | ✅ PASS |
 | **Coloring Page Creator** | ✅ `ColoringPagesPage.tsx` - PremiumFeatureGate + RoleGate | ✅ `aiGuard` in edge function | ✅ `{ code: "PREMIUM_REQUIRED" }` | ✅ PASS |

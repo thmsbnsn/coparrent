@@ -1,6 +1,6 @@
 # CoParrent Next 10 Tasks
 
-Last updated: 2026-03-31
+Last updated: 2026-04-01
 
 Ranked by immediate value after the docs cleanup and current green local verification baseline.
 
@@ -33,44 +33,44 @@ Owner: Mixed
 - Re-run the relevant smoke and workflow verifiers after material production-facing changes.
 - Keep the evidence log current so the project story stays tied to actual proof.
 
-## 5. Decide The Court-Record Unification Direction
+## 5. Verify The Deployed Object-Lock Export Path
 
 Owner: Mixed
 
-- Decide whether the documents-page court export remains a convenience PDF flow or is rebuilt onto the same signed-receipt model as Messaging Hub exports.
-- Decide whether call evidence remains timeline/status based or becomes a dedicated export/reporting surface.
+- Run create, download, and verify flows against the deployed export functions after the new storage path is released.
+- Capture dated evidence for S3 object versioning and retention metadata instead of relying on repo-only claims.
 
-## 6. Prepare A Stable Buyer Demo Target
+## 6. Decide The Legacy Export Artifact Policy
+
+Owner: Mixed
+
+- Decide whether pre-cutover export artifacts remain readable legacy records or are migrated into the newer immutable-storage posture.
+- Keep buyer and operator docs explicit about the difference until that decision is closed.
+
+## 7. Decide The Call-Evidence Expansion Boundary
+
+Owner: Mixed
+
+- Decide whether call evidence remains session/event history only or grows into a dedicated media export/reporting surface.
+- Do not let product copy imply call recording or transcripts unless they are actually built.
+
+## 8. Prepare A Stable Buyer Demo Target
 
 Owner: Mixed
 
 - Keep one clean demo family and a short walkthrough path ready.
 - Avoid depending on ad hoc test accounts or fragile setup steps during a demo.
 
-## 7. Capture Buyer Demo Assets
+## 9. Capture Buyer Demo Assets
 
 Owner: Mixed
 
 - Capture current screenshots from the strongest public and in-app surfaces.
 - Record a short walkthrough that matches the current repo and evidence log.
 
-## 8. Tighten The Buyer Package
+## 10. Tighten The Buyer Package
 
 Owner: Mixed
 
 - Keep the package concise.
 - Remove duplicated status language and stale claims whenever the repo changes.
-
-## 9. Add Lightweight Production Observability
-
-Owner: Mixed
-
-- Decide whether to wire a minimal production error-monitoring layer before the next significant deployment.
-- Keep the scope operational, not platform-rebuild sized.
-
-## 10. Keep Documentation Aligned With Claim Quality
-
-Owner: Codex-friendly
-
-- Continue preferring repo-confirmed facts, dated evidence, and explicit open items.
-- Do not let status docs drift into unverifiable narrative.

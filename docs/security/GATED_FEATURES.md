@@ -1,6 +1,6 @@
 # Gated Features
 
-Last reviewed: 2026-03-31
+Last reviewed: 2026-04-01
 
 This document summarizes the current feature-gating model in the repo. It focuses on where access is enforced and avoids claiming stronger enforcement than the code currently proves.
 
@@ -77,17 +77,18 @@ High-level summary:
 | AI message analyze / rephrase / draft | Parent/guardian flow with premium entitlement | `aiGuard` |
 | AI schedule suggest | Parent/guardian flow with premium entitlement | `aiGuard` |
 | Messaging Hub access | Family-scoped route for permitted roles | route allowlist plus thread-level server access |
-| Messaging export receipts | Family-scoped server flow in Messaging Hub | `messaging-thread-export` edge function requiring explicit `family_id`, thread access, and stored receipt verification |
+| Messaging export receipts | Family-scoped thread export with Power entitlement | `messaging-thread-export` edge function requiring explicit `family_id`, thread access, server-side Power entitlement, and stored receipt verification |
 | Daily calling | Family-scoped parent/guardian/third-party flow | callable-member checks plus `call_sessions` and `call_events` access limited to participants |
-| Document export dialog | Present in the documents flow | Current repo has a separate client-generated PDF export flow; this doc does not claim the same integrity or premium-enforcement model as Messaging Hub receipts |
+| Document export dialog | Parent/guardian family-wide export with Power entitlement | `PermissionButton` UX plus `court-record-export` edge function requiring explicit `family_id`, parent/guardian membership, server-side Power entitlement, immutable artifact storage, and stored receipt verification |
 | Admin dashboard and admin management | Admin only | `AdminGate`, `is_admin()` checks, admin-backed queries/functions |
 
 ## Important Accuracy Notes
 
-- `courtExports` exists as a plan entitlement in code, but export functionality currently spans more than one surface. This document only claims explicit enforcement where the code path is easy to point to.
-- Messaging export receipts and the older document-export PDF flow are not the same implementation.
-- Messaging Hub receipts are the strongest current export-integrity path. The older documents-page court export is report tooling, not the same signed-artifact system.
+- `courtExports` is enforced server-side for both Messaging Hub export receipts and the family-wide court-record export flow.
+- Export entry points are not identical on the client. Some surfaces still rely on backend denial instead of a dedicated `PremiumFeatureGate`, but the server is the authoritative enforcement layer.
+- New court-record exports now share the same server-authoritative receipt, hashing, verification, and immutable-artifact model across Messaging Hub and the broader family export flow.
 - Daily calling persists participant-visible session and event state, but the repo does not include recording, transcripts, or a dedicated immutable call-history export surface.
+- Family-wide court-record exports include call session/event evidence only and document metadata/access history only. They do not include call media or raw document binaries.
 - Historical docs that claimed broader third-party route access than `routeAccess.ts` are outdated. The route allowlist file is the current source of truth.
 
 ## Related Docs

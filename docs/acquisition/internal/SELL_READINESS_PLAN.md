@@ -1,6 +1,6 @@
 # CoParrent Sale Readiness Plan
 
-Last updated: 2026-03-31
+Last updated: 2026-04-01
 
 ## Purpose
 
@@ -25,7 +25,7 @@ It is not a justification for indefinite feature expansion.
 
 - Real-device push/PWA behavior is still not closed with physical-device evidence.
 - Some deployment-sensitive claims still depend on user-assisted confirmation rather than repo inspection.
-- The broader court-record story is still uneven across surfaces: strongest in Messaging Hub exports, partial in calling, and weaker in the older documents-page court-export flow.
+- The broader court-record story is now unified at the export layer, but buyers still need clear disclosure that call evidence is session/event history only and raw document binaries are excluded from the export package.
 - Buyer-demo preparation still needs a stable walkthrough target and polished demo assets.
 - The data-room structure exists, but a buyer still benefits from a tighter, more curated package rather than a large pile of docs.
 

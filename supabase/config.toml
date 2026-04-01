@@ -114,3 +114,6 @@ verify_jwt = true
 
 [functions.messaging-thread-export]
 verify_jwt = true
+
+[functions.court-record-export]
+verify_jwt = true

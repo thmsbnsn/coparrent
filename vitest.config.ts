@@ -36,6 +36,10 @@ export default {
         find: "https://deno.land/x/zod@v3.22.4/mod.ts",
         replacement: `${rootDir}/supabase/functions/_shared/test-shims/zodShim.ts`,
       },
+      {
+        find: "npm:@aws-sdk/client-s3",
+        replacement: `${rootDir}/supabase/functions/_shared/test-shims/awsS3.ts`,
+      },
     ],
   },
 };

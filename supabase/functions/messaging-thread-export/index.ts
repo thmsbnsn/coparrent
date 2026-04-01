@@ -27,6 +27,14 @@ import {
 } from "../_shared/messagingThreadExportIntegrity.ts";
 import { generateMessagingThreadExportPdf } from "../_shared/messagingThreadExportPdf.ts";
 import {
+  downloadImmutableCourtExportObject,
+  getCourtExportObjectLockBucketName,
+  uploadImmutableCourtExportObject,
+} from "../_shared/courtExportS3.ts";
+import {
+  requireCourtExportPowerAccess,
+} from "../_shared/courtExportAccess.ts";
+import {
   getActiveMembershipForUser,
   HttpError,
   requireAuthenticatedProfile,
@@ -85,16 +93,24 @@ type CallEventRow = {
 type CourtExportRow = {
   artifact_hash: string | null;
   artifact_hash_algorithm: string | null;
+  artifact_object_lock_mode: string | null;
+  artifact_retain_until: string | null;
+  artifact_storage_bucket: string | null;
+  artifact_storage_key: string | null;
+  artifact_storage_provider: string | null;
+  artifact_storage_version_id: string | null;
   artifact_type: string | null;
   canonicalization_version: string | null;
   content_hash: string;
   created_by_user_id: string | null;
   created_by_profile_id: string;
   export_format: "json_manifest" | "pdf";
+  export_scope: "family_unified" | "message_thread";
   exported_at: string;
   family_id: string;
   hash_algorithm: string;
   id: string;
+  included_sections: string[] | null;
   integrity_model_version: string | null;
   manifest_hash: string | null;
   manifest_hash_algorithm: string | null;
@@ -103,6 +119,12 @@ type CourtExportRow = {
   pdf_hash_algorithm: string | null;
   pdf_bytes_size: number | null;
   pdf_generated_at: string | null;
+  pdf_object_lock_mode: string | null;
+  pdf_retain_until: string | null;
+  pdf_storage_bucket: string | null;
+  pdf_storage_key: string | null;
+  pdf_storage_provider: string | null;
+  pdf_storage_version_id: string | null;
   record_count: number;
   record_range_end: string | null;
   record_range_start: string | null;
@@ -110,8 +132,9 @@ type CourtExportRow = {
   signing_key_id: string | null;
   receipt_signature: string | null;
   receipt_signature_algorithm: string | null;
-  source_id: string;
+  source_id: string | null;
   source_type: "message_thread";
+  thread_id: string | null;
   thread_type: "family_channel" | "direct_message" | "group_chat" | null;
 };
 
@@ -297,7 +320,7 @@ const getReceiptVerificationPublicKey = (signingKeyId: string | null | undefined
   return null;
 };
 
-const COURT_EXPORT_ARTIFACT_BUCKET = "court-export-artifacts";
+const LEGACY_COURT_EXPORT_ARTIFACT_BUCKET = "court-export-artifacts";
 
 const COURT_EXPORT_SELECT_COLUMNS = [
   "id",
@@ -306,6 +329,8 @@ const COURT_EXPORT_SELECT_COLUMNS = [
   "created_by_profile_id",
   "source_type",
   "source_id",
+  "export_scope",
+  "thread_id",
   "thread_type",
   "export_format",
   "hash_algorithm",
@@ -317,10 +342,22 @@ const COURT_EXPORT_SELECT_COLUMNS = [
   "artifact_hash_algorithm",
   "artifact_hash",
   "artifact_type",
+  "artifact_storage_provider",
+  "artifact_storage_bucket",
+  "artifact_storage_key",
+  "artifact_storage_version_id",
+  "artifact_object_lock_mode",
+  "artifact_retain_until",
   "pdf_hash_algorithm",
   "pdf_artifact_hash",
   "pdf_bytes_size",
   "pdf_generated_at",
+  "pdf_storage_provider",
+  "pdf_storage_bucket",
+  "pdf_storage_key",
+  "pdf_storage_version_id",
+  "pdf_object_lock_mode",
+  "pdf_retain_until",
   "signing_key_id",
   "receipt_signature_algorithm",
   "receipt_signature",
@@ -329,6 +366,7 @@ const COURT_EXPORT_SELECT_COLUMNS = [
   "record_count",
   "record_range_start",
   "record_range_end",
+  "included_sections",
   "exported_at",
 ].join(", ");
 
@@ -378,24 +416,29 @@ const sanitizeArtifactFileSegment = (value: string) =>
 
 const buildArtifactPaths = (options: {
   exportId: string;
+  exportedAt: string;
   familyId: string;
   threadDisplayName: string;
   threadId: string;
 }) => {
+  const bucket = getCourtExportObjectLockBucketName();
   const safeThreadName = sanitizeArtifactFileSegment(options.threadDisplayName);
   const pdfFileName = `${safeThreadName}-${options.exportId}.pdf`;
   const packageFileName = `${safeThreadName}-${options.exportId}-evidence-package.json`;
-  const basePath = `families/${options.familyId}/threads/${options.threadId}/exports/${options.exportId}`;
+  const timestampSegment = options.exportedAt
+    .replace(/[:.]/g, "-")
+    .replace(/\+/g, "plus");
+  const basePath = `families/${options.familyId}/court-exports/${options.exportId}/${timestampSegment}`;
 
   return {
     evidencePackage: {
-      bucket: COURT_EXPORT_ARTIFACT_BUCKET,
+      bucket,
       contentType: "application/json; charset=utf-8",
       fileName: packageFileName,
       path: `${basePath}/${packageFileName}`,
     },
     pdf: {
-      bucket: COURT_EXPORT_ARTIFACT_BUCKET,
+      bucket,
       contentType: "application/pdf",
       fileName: pdfFileName,
       path: `${basePath}/${pdfFileName}`,
@@ -724,6 +767,7 @@ async function createExportPackage(
   const exportedAt = options.exportedAt ?? new Date().toISOString();
   const artifactPaths = buildArtifactPaths({
     exportId,
+    exportedAt,
     familyId: options.familyId,
     threadDisplayName: displayName,
     threadId: thread.id,
@@ -868,48 +912,27 @@ async function createExportPackage(
 }
 
 async function storeExportArtifacts(
-  supabaseAdmin: ReturnType<typeof createClient>,
   options: Awaited<ReturnType<typeof createExportPackage>>,
 ) {
-  const uploads: Array<{
-    bucket: string;
-    contentType: string;
-    path: string;
-    payload: Blob | Uint8Array;
-  }> = [
-    {
-      bucket: options.artifactPaths.evidencePackage.bucket,
-      contentType: options.artifactPaths.evidencePackage.contentType,
-      path: options.artifactPaths.evidencePackage.path,
-      payload: new Blob([options.packageData.evidencePackageJson], {
-        type: options.artifactPaths.evidencePackage.contentType,
-      }),
-    },
-  ];
+  const evidencePackageBytes = new TextEncoder().encode(options.packageData.evidencePackageJson);
+  const evidencePackage = await uploadImmutableCourtExportObject({
+    bytes: evidencePackageBytes,
+    contentType: options.artifactPaths.evidencePackage.contentType,
+    key: options.artifactPaths.evidencePackage.path,
+  });
 
-  if (options.pdfArtifact) {
-    uploads.push({
-      bucket: options.pdfArtifact.storageBucket,
-      contentType: options.pdfArtifact.contentType,
-      path: options.pdfArtifact.storagePath,
-      payload: options.pdfArtifact.bytes,
-    });
-  }
+  const pdfArtifact = options.pdfArtifact
+    ? await uploadImmutableCourtExportObject({
+        bytes: options.pdfArtifact.bytes,
+        contentType: options.pdfArtifact.contentType,
+        key: options.pdfArtifact.storagePath,
+      })
+    : null;
 
-  for (const upload of uploads) {
-    const { error } = await supabaseAdmin.storage.from(upload.bucket).upload(
-      upload.path,
-      upload.payload,
-      {
-        contentType: upload.contentType,
-        upsert: false,
-      },
-    );
-
-    if (error) {
-      throw new HttpError(500, error.message);
-    }
-  }
+  return {
+    evidencePackage,
+    pdfArtifact,
+  };
 }
 
 const getStoredArtifactPath = (
@@ -917,24 +940,45 @@ const getStoredArtifactPath = (
   row: CourtExportRow,
   artifactKind: "json_evidence_package" | "pdf",
 ) => {
+  const rowBucket =
+    artifactKind === "pdf" ? row.pdf_storage_bucket : row.artifact_storage_bucket;
+  const rowPath =
+    artifactKind === "pdf" ? row.pdf_storage_key : row.artifact_storage_key;
+  const rowProvider =
+    artifactKind === "pdf" ? row.pdf_storage_provider : row.artifact_storage_provider;
+  const rowVersionId =
+    artifactKind === "pdf" ? row.pdf_storage_version_id : row.artifact_storage_version_id;
   const bucketKey =
     artifactKind === "pdf" ? "pdf_storage_bucket" : "artifact_storage_bucket";
   const pathKey =
     artifactKind === "pdf" ? "pdf_storage_path" : "artifact_storage_path";
 
   const storageBucket =
-    typeof (receipt as Record<string, unknown>)[bucketKey] === "string"
+    rowBucket ??
+    (typeof (receipt as Record<string, unknown>)[bucketKey] === "string"
       ? ((receipt as Record<string, unknown>)[bucketKey] as string)
-      : COURT_EXPORT_ARTIFACT_BUCKET;
+      : LEGACY_COURT_EXPORT_ARTIFACT_BUCKET);
   const storagePath =
-    typeof (receipt as Record<string, unknown>)[pathKey] === "string"
+    rowPath ??
+    (typeof (receipt as Record<string, unknown>)[pathKey] === "string"
       ? ((receipt as Record<string, unknown>)[pathKey] as string)
-      : null;
+      : null);
+
+  if (storagePath && rowProvider === "aws_s3_object_lock" && rowVersionId) {
+    return {
+      bucket: storageBucket,
+      provider: rowProvider,
+      path: storagePath,
+      versionId: rowVersionId,
+    };
+  }
 
   if (storagePath) {
     return {
       bucket: storageBucket,
+      provider: rowProvider,
       path: storagePath,
+      versionId: rowVersionId,
     };
   }
 
@@ -948,19 +992,24 @@ const getStoredArtifactPath = (
 
   const artifactPaths = buildArtifactPaths({
     exportId,
+    exportedAt: row.exported_at,
     familyId: row.family_id,
     threadDisplayName,
-    threadId: row.source_id,
+    threadId: row.thread_id ?? row.source_id ?? row.id,
   });
 
   return artifactKind === "pdf"
     ? {
         bucket: artifactPaths.pdf.bucket,
+        provider: null,
         path: artifactPaths.pdf.path,
+        versionId: null,
       }
     : {
         bucket: artifactPaths.evidencePackage.bucket,
+        provider: null,
         path: artifactPaths.evidencePackage.path,
+        versionId: null,
       };
 };
 
@@ -977,19 +1026,35 @@ async function downloadStoredArtifact(
     options.exportRecord,
     options.artifactKind,
   );
+  let bytes: Uint8Array;
+  let contentType: string;
 
-  const { data, error } = await supabaseAdmin.storage
-    .from(artifactPath.bucket)
-    .download(artifactPath.path);
+  if (artifactPath.provider === "aws_s3_object_lock" && artifactPath.versionId) {
+    const download = await downloadImmutableCourtExportObject({
+      bucket: artifactPath.bucket,
+      key: artifactPath.path,
+      versionId: artifactPath.versionId,
+    });
+    bytes = download.bytes;
+    contentType = download.contentType;
+  } else {
+    const { data, error } = await supabaseAdmin.storage
+      .from(artifactPath.bucket)
+      .download(artifactPath.path);
 
-  if (error) {
-    throw new HttpError(
-      error.message.toLowerCase().includes("not found") ? 404 : 500,
-      error.message,
-    );
+    if (error) {
+      throw new HttpError(
+        error.message.toLowerCase().includes("not found") ? 404 : 500,
+        error.message,
+      );
+    }
+
+    bytes = new Uint8Array(await data.arrayBuffer());
+    contentType =
+      options.artifactKind === "pdf"
+        ? "application/pdf"
+        : "application/json; charset=utf-8";
   }
-
-  const bytes = new Uint8Array(await data.arrayBuffer());
   const fileName = artifactPath.path.split("/").pop() ?? `${options.exportRecord.id}.bin`;
   const hashAlgorithm =
     options.artifactKind === "pdf"
@@ -1005,10 +1070,7 @@ async function downloadStoredArtifact(
     bucket: artifactPath.bucket,
     bytes,
     bytesSize: bytes.byteLength,
-    contentType:
-      options.artifactKind === "pdf"
-        ? "application/pdf"
-        : "application/json; charset=utf-8",
+    contentType,
     fileName,
     hash,
     hashAlgorithm,
@@ -1018,9 +1080,10 @@ async function downloadStoredArtifact(
 
 async function persistCourtExport(
   supabaseAdmin: ReturnType<typeof createClient>,
-  options: Awaited<ReturnType<typeof createExportPackage>>,
+  exportArtifacts: Awaited<ReturnType<typeof createExportPackage>>,
+  storedArtifacts: Awaited<ReturnType<typeof storeExportArtifacts>>,
 ) {
-  const { packageData } = options;
+  const { packageData } = exportArtifacts;
 
   const { data, error } = await supabaseAdmin
     .from("court_exports")
@@ -1031,6 +1094,8 @@ async function persistCourtExport(
       created_by_profile_id: packageData.manifest.exported_by_profile_id,
       source_type: "message_thread",
       source_id: packageData.manifest.thread_id,
+      export_scope: "message_thread",
+      thread_id: packageData.manifest.thread_id,
       thread_type: packageData.manifest.thread_type,
       export_format: packageData.receipt.export_format,
       hash_algorithm: packageData.hashAlgorithm,
@@ -1042,10 +1107,22 @@ async function persistCourtExport(
       artifact_hash_algorithm: packageData.receipt.artifact_hash_algorithm,
       artifact_hash: packageData.receipt.artifact_hash,
       artifact_type: packageData.receipt.artifact_type,
+      artifact_storage_provider: storedArtifacts.evidencePackage.provider,
+      artifact_storage_bucket: storedArtifacts.evidencePackage.bucket,
+      artifact_storage_key: storedArtifacts.evidencePackage.key,
+      artifact_storage_version_id: storedArtifacts.evidencePackage.versionId,
+      artifact_object_lock_mode: storedArtifacts.evidencePackage.objectLockMode,
+      artifact_retain_until: storedArtifacts.evidencePackage.retainUntil,
       pdf_hash_algorithm: packageData.receipt.pdf_hash_algorithm,
       pdf_artifact_hash: packageData.receipt.pdf_artifact_hash,
       pdf_bytes_size: packageData.receipt.pdf_bytes_size,
       pdf_generated_at: packageData.receipt.pdf_generated_at,
+      pdf_storage_provider: storedArtifacts.pdfArtifact?.provider ?? null,
+      pdf_storage_bucket: storedArtifacts.pdfArtifact?.bucket ?? null,
+      pdf_storage_key: storedArtifacts.pdfArtifact?.key ?? null,
+      pdf_storage_version_id: storedArtifacts.pdfArtifact?.versionId ?? null,
+      pdf_object_lock_mode: storedArtifacts.pdfArtifact?.objectLockMode ?? null,
+      pdf_retain_until: storedArtifacts.pdfArtifact?.retainUntil ?? null,
       signing_key_id: packageData.receipt.signing_key_id,
       receipt_signature_algorithm: packageData.receipt.receipt_signature_algorithm,
       receipt_signature: packageData.receipt.receipt_signature,
@@ -1104,13 +1181,15 @@ const getReceiptFromRow = (row: CourtExportRow): MessagingThreadExportReceipt =>
     artifact_hash_algorithm: row.artifact_hash_algorithm,
     artifact_type: row.artifact_type,
     artifact_storage_bucket:
-      typeof manifest.artifact_storage_bucket === "string"
+      row.artifact_storage_bucket ??
+      (typeof manifest.artifact_storage_bucket === "string"
         ? manifest.artifact_storage_bucket
-        : null,
+        : null),
     artifact_storage_path:
-      typeof manifest.artifact_storage_path === "string"
+      row.artifact_storage_key ??
+      (typeof manifest.artifact_storage_path === "string"
         ? manifest.artifact_storage_path
-        : null,
+        : null),
     canonical_content_hash: row.content_hash,
     canonical_hash_algorithm: row.hash_algorithm,
     canonicalization_version:
@@ -1136,13 +1215,15 @@ const getReceiptFromRow = (row: CourtExportRow): MessagingThreadExportReceipt =>
       row.pdf_hash_algorithm ??
       (typeof manifest.pdf_hash_algorithm === "string" ? manifest.pdf_hash_algorithm : null),
     pdf_storage_bucket:
-      typeof manifest.pdf_storage_bucket === "string"
+      row.pdf_storage_bucket ??
+      (typeof manifest.pdf_storage_bucket === "string"
         ? manifest.pdf_storage_bucket
-        : null,
+        : null),
     pdf_storage_path:
-      typeof manifest.pdf_storage_path === "string"
+      row.pdf_storage_key ??
+      (typeof manifest.pdf_storage_path === "string"
         ? manifest.pdf_storage_path
-        : null,
+        : null),
     signing_key_id: row.signing_key_id,
     receipt_signature: row.receipt_signature,
     receipt_signature_algorithm: row.receipt_signature_algorithm,
@@ -1153,14 +1234,16 @@ const getReceiptFromRow = (row: CourtExportRow): MessagingThreadExportReceipt =>
       typeof manifest.schema_version === "string"
         ? manifest.schema_version
         : MESSAGING_THREAD_EXPORT_SCHEMA_VERSION,
-    source_id: row.source_id,
+    source_id: row.source_id ?? row.thread_id ?? "",
     source_type: row.source_type,
     thread_display_name:
       typeof manifest.thread_display_name === "string"
         ? manifest.thread_display_name
         : "Recorded thread",
     thread_id:
-      typeof manifest.thread_id === "string" ? manifest.thread_id : row.source_id,
+      typeof manifest.thread_id === "string"
+        ? manifest.thread_id
+        : row.thread_id ?? row.source_id ?? "",
     thread_type: row.thread_type ?? (typeof manifest.thread_type === "string" ? manifest.thread_type as MessageThreadRow["thread_type"] : "direct_message"),
     total_messages:
       typeof manifest.total_messages === "number" ? manifest.total_messages : row.record_count,
@@ -1238,12 +1321,31 @@ const buildExportSummary = (row: CourtExportRow) => {
         ? receipt.receipt_signature
         : row.receipt_signature,
     ),
+    artifact_storage: {
+      bucket: row.artifact_storage_bucket,
+      key: row.artifact_storage_key,
+      object_lock_mode: row.artifact_object_lock_mode,
+      provider: row.artifact_storage_provider,
+      retain_until: row.artifact_retain_until,
+      version_id: row.artifact_storage_version_id,
+    },
+    pdf_storage: {
+      bucket: row.pdf_storage_bucket,
+      key: row.pdf_storage_key,
+      object_lock_mode: row.pdf_object_lock_mode,
+      provider: row.pdf_storage_provider,
+      retain_until: row.pdf_retain_until,
+      version_id: row.pdf_storage_version_id,
+    },
+    export_scope: row.export_scope,
     thread_display_name:
       typeof manifest.thread_display_name === "string"
         ? manifest.thread_display_name
         : "Recorded thread",
     thread_id:
-      typeof manifest.thread_id === "string" ? manifest.thread_id : row.source_id,
+      typeof manifest.thread_id === "string"
+        ? manifest.thread_id
+        : row.thread_id ?? row.source_id,
     thread_type:
       typeof manifest.thread_type === "string" ? manifest.thread_type : "direct_message",
     total_messages:
@@ -1521,6 +1623,7 @@ serve(async (req) => {
 
     const familyId = requireFamilyId(body.family_id);
     await getActiveMembershipForUser(supabaseAdmin, familyId, user.id);
+    await requireCourtExportPowerAccess(supabaseAdmin, profile);
 
     logStep("request", {
       action: body.action,
@@ -1542,8 +1645,12 @@ serve(async (req) => {
         threadId,
         viewerProfileId: profile.id,
       });
-      await storeExportArtifacts(supabaseAdmin, exportArtifacts);
-      const exportRecord = await persistCourtExport(supabaseAdmin, exportArtifacts);
+      const storedArtifacts = await storeExportArtifacts(exportArtifacts);
+      const exportRecord = await persistCourtExport(
+        supabaseAdmin,
+        exportArtifacts,
+        storedArtifacts,
+      );
 
       await logAudit(supabaseAdmin, {
         action: "COURT_EXPORT_CREATED",
@@ -1559,11 +1666,13 @@ serve(async (req) => {
           integrity_model_version: exportArtifacts.packageData.receipt.integrity_model_version,
           manifest_hash: exportArtifacts.packageData.receipt.manifest_hash,
           pdf_artifact_hash: exportArtifacts.packageData.receipt.pdf_artifact_hash,
+          pdf_storage_key: storedArtifacts.pdfArtifact?.key ?? null,
           record_count: exportRecord.record_count,
           signing_key_id: exportArtifacts.packageData.receipt.signing_key_id,
           signature_present: Boolean(exportArtifacts.packageData.receipt.receipt_signature),
           source_id: exportRecord.source_id,
           source_type: exportRecord.source_type,
+          storage_provider: storedArtifacts.evidencePackage.provider,
         },
       });
 
@@ -1602,6 +1711,7 @@ serve(async (req) => {
         .from("court_exports")
         .select(COURT_EXPORT_SELECT_COLUMNS)
         .eq("family_id", familyId)
+        .eq("export_scope", "message_thread")
         .eq("source_type", "message_thread")
         .eq("source_id", threadId)
         .order("exported_at", { ascending: false })
@@ -1630,7 +1740,11 @@ serve(async (req) => {
         });
       }
 
-      const thread = await loadThread(supabaseAdmin, familyId, exportRecord.source_id);
+      const exportThreadId = exportRecord.thread_id ?? exportRecord.source_id;
+      if (!exportThreadId) {
+        throw new HttpError(500, "The stored export record is missing thread metadata.");
+      }
+      const thread = await loadThread(supabaseAdmin, familyId, exportThreadId);
       await assertThreadAccess(supabaseAdmin, profile.id, thread);
       const receipt = getReceiptFromRow(exportRecord);
 
@@ -1685,7 +1799,11 @@ serve(async (req) => {
         });
       }
 
-      const thread = await loadThread(supabaseAdmin, familyId, exportRecord.source_id);
+      const exportThreadId = exportRecord.thread_id ?? exportRecord.source_id;
+      if (!exportThreadId) {
+        throw new HttpError(500, "The stored export record is missing thread metadata.");
+      }
+      const thread = await loadThread(supabaseAdmin, familyId, exportThreadId);
       await assertThreadAccess(supabaseAdmin, profile.id, thread);
 
       const receipt = getReceiptFromRow(exportRecord);
@@ -2128,7 +2246,7 @@ serve(async (req) => {
           typeof storedManifest.thread_display_name === "string"
             ? storedManifest.thread_display_name
             : undefined,
-        threadId: exportRecord.source_id,
+        threadId: exportRecord.thread_id ?? exportRecord.source_id ?? "",
         viewerProfileId: profile.id,
       });
 
