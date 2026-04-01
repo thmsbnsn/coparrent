@@ -2741,6 +2741,7 @@ export type Database = {
         Row: {
           access_reason: string | null
           account_role: string | null
+          access_grace_until: string | null
           avatar_url: string | null
           co_parent_id: string | null
           created_at: string
@@ -2752,6 +2753,7 @@ export type Database = {
           login_enabled: boolean | null
           notification_preferences: Json | null
           preferences: Json | null
+          stripe_customer_id: string | null
           subscription_status: string | null
           subscription_tier: string | null
           trial_ends_at: string | null
@@ -2762,6 +2764,7 @@ export type Database = {
         Insert: {
           access_reason?: string | null
           account_role?: string | null
+          access_grace_until?: string | null
           avatar_url?: string | null
           co_parent_id?: string | null
           created_at?: string
@@ -2773,6 +2776,7 @@ export type Database = {
           login_enabled?: boolean | null
           notification_preferences?: Json | null
           preferences?: Json | null
+          stripe_customer_id?: string | null
           subscription_status?: string | null
           subscription_tier?: string | null
           trial_ends_at?: string | null
@@ -2783,6 +2787,7 @@ export type Database = {
         Update: {
           access_reason?: string | null
           account_role?: string | null
+          access_grace_until?: string | null
           avatar_url?: string | null
           co_parent_id?: string | null
           created_at?: string
@@ -2794,6 +2799,7 @@ export type Database = {
           login_enabled?: boolean | null
           notification_preferences?: Json | null
           preferences?: Json | null
+          stripe_customer_id?: string | null
           subscription_status?: string | null
           subscription_tier?: string | null
           trial_ends_at?: string | null

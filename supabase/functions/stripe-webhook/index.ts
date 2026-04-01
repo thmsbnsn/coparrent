@@ -1,22 +1,19 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from "https://esm.sh/stripe@18.5.0";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
-import { 
-  checkIdempotency, 
-  markEventProcessed, 
-  markEventFailed 
+import {
+  checkIdempotency,
+  markEventFailed,
+  markEventProcessed,
 } from "../_shared/webhookIdempotency.ts";
-
-/**
- * Stripe Webhook Handler
- * 
- * BILLING INTEGRITY INVARIANTS:
- * 1. Webhook is source of truth for subscription state
- * 2. Events are processed exactly once (idempotency)
- * 3. Signature is verified before processing
- * 4. No sensitive data logged
- * 5. Safe logging only (no emails, tokens, etc.)
- */
+import {
+  getTierFromProductId,
+  isKnownStripeSubscriptionStatus,
+  mapStripeSubscriptionStatus,
+  normalizeStripeTimestamp,
+  resolvePastDueGraceUntil,
+  SYSTEM_ACTOR_USER_ID,
+} from "../_shared/subscriptionBilling.ts";
 
 const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
   apiVersion: "2025-08-27.basil",
@@ -26,318 +23,711 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false }
+  auth: { persistSession: false },
 });
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
 
-// Safe logging - never log sensitive data
+interface ProfileRow {
+  access_grace_until: string | null;
+  email: string | null;
+  full_name: string | null;
+  id: string;
+  stripe_customer_id: string | null;
+  subscription_status: string | null;
+  subscription_tier: string | null;
+  trial_ends_at: string | null;
+  user_id: string;
+}
+
+interface HandlerResult {
+  action: string;
+  customerEmail?: string | null;
+  entityId?: string | null;
+  metadata: Record<string, unknown>;
+  profile?: ProfileRow | null;
+}
+
+interface ProfilePatch {
+  access_grace_until?: string | null;
+  stripe_customer_id?: string | null;
+  subscription_status?: string | null;
+  subscription_tier?: string | null;
+  trial_ends_at?: string | null;
+}
+
+type EmailType = "cancel" | "support" | "update" | "welcome";
+
+const EMAIL_FROM: Record<EmailType, string> = {
+  cancel: "CoParrent <hello@coparrent.com>",
+  support: "CoParrent <support@coparrent.com>",
+  update: "CoParrent <noreply@coparrent.com>",
+  welcome: "CoParrent <hello@coparrent.com>",
+};
+
 const logStep = (step: string, details?: Record<string, unknown>) => {
-  // Filter out any sensitive fields
-  const safeDetails = details ? Object.fromEntries(
-    Object.entries(details).filter(([key]) => 
-      !["email", "token", "key", "secret"].some(s => key.toLowerCase().includes(s))
-    )
-  ) : undefined;
-  
+  const safeDetails = details
+    ? Object.fromEntries(
+        Object.entries(details).filter(
+          ([key]) => !["email", "key", "secret", "token"].some((needle) => key.toLowerCase().includes(needle)),
+        ),
+      )
+    : undefined;
+
   const detailsStr = safeDetails ? ` - ${JSON.stringify(safeDetails)}` : "";
   console.log(`[STRIPE-WEBHOOK] ${step}${detailsStr}`);
 };
 
-// All products map to Power tier (the only paid tier)
-// Includes legacy products for migration safety
-const PRODUCT_TIERS: Record<string, string> = {
-  // Current live Power product
-  "prod_TwwA5VNxPgt62D": "Power",
-  // Previous live Power product
-  "prod_Tpx49PIJ26wzPc": "Power",
-  // Legacy Live mode products (display as Power for migration)
-  "prod_TnoLYRDnjKqtA8": "Power", // Old Premium
-  "prod_TnoLKasOQOvLwL": "Power", // Old MVP
-  // Legacy Test mode products
-  "prod_Tf1Qq9jGVEyUOM": "Power", // Old Premium (test)
-  "prod_Tf1QUUhL8Tx1Ks": "Power", // Old MVP (test)
+const getProductId = (
+  product: string | Stripe.Product | Stripe.DeletedProduct | null | undefined,
+): string | null => {
+  if (!product) {
+    return null;
+  }
+
+  if (typeof product === "string") {
+    return product;
+  }
+
+  if ("id" in product && typeof product.id === "string") {
+    return product.id;
+  }
+
+  return null;
 };
 
-// Database tier values (normalized to "power")
-const TIER_DB_VALUES: Record<string, string> = {
-  // Current live Power product
-  "prod_TwwA5VNxPgt62D": "power",
-  // Previous live Power product
-  "prod_Tpx49PIJ26wzPc": "power",
-  // Legacy products (all map to power)
-  "prod_TnoLYRDnjKqtA8": "power",
-  "prod_TnoLKasOQOvLwL": "power",
-  "prod_Tf1Qq9jGVEyUOM": "power",
-  "prod_Tf1QUUhL8Tx1Ks": "power",
-};
-
-type EmailType = "welcome" | "update" | "support" | "cancel";
-
-const EMAIL_FROM: Record<EmailType, string> = {
-  welcome: "CoParrent <hello@coparrent.com>",
-  update: "CoParrent <noreply@coparrent.com>",
-  support: "CoParrent <support@coparrent.com>",
-  cancel: "CoParrent <hello@coparrent.com>",
-};
-
-async function sendEmail(to: string, subject: string, html: string, type: EmailType = "update") {
+async function sendEmail(
+  to: string,
+  subject: string,
+  html: string,
+  type: EmailType = "update",
+): Promise<void> {
   if (!RESEND_API_KEY) {
     logStep("RESEND_API_KEY not configured, skipping email");
-    return null;
+    return;
   }
 
   try {
-    const response = await fetch("https://api.resend.com/emails", {
+    await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
       },
       body: JSON.stringify({
         from: EMAIL_FROM[type],
-        to: [to],
-        subject,
         html,
+        subject,
+        to: [to],
       }),
     });
-
-    const data = await response.json();
-    logStep("Email sent", { subject, status: response.status });
-    return data;
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("Email send error", { errorType: typeof error });
-    return null;
+  } catch (error) {
+    logStep("Email send failed", {
+      error: error instanceof Error ? error.message : String(error),
+      subject,
+    });
   }
 }
 
-/**
- * Update profile subscription state
- * 
- * INVARIANT: This is the ONLY place subscription state should be modified
- * (outside of admin tools). All changes come through webhooks.
- */
-async function updateProfileSubscription(
-  email: string,
-  status: string,
-  tier: string | null
-) {
-  logStep("Updating profile", { status, tier });
-  
-  const { error } = await supabaseAdmin
+async function fetchProfileByEmail(email: string): Promise<ProfileRow | null> {
+  const { data, error } = await supabaseAdmin
     .from("profiles")
-    .update({
-      subscription_status: status,
-      subscription_tier: tier,
-    })
-    .eq("email", email);
+    .select(
+      "id, user_id, email, full_name, stripe_customer_id, subscription_status, subscription_tier, trial_ends_at, access_grace_until",
+    )
+    .eq("email", email)
+    .maybeSingle();
 
   if (error) {
-    logStep("Error updating profile", { code: error.code });
     throw error;
   }
-  
-  logStep("Profile updated successfully");
+
+  return (data as ProfileRow | null) ?? null;
 }
 
-async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
-  logStep("Checkout completed", { sessionId: session.id });
-  
-  const customerEmail = session.customer_email || session.customer_details?.email;
-  if (!customerEmail) {
-    logStep("No customer email found");
-    return;
+async function fetchProfileByStripeCustomerId(customerId: string): Promise<ProfileRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select(
+      "id, user_id, email, full_name, stripe_customer_id, subscription_status, subscription_tier, trial_ends_at, access_grace_until",
+    )
+    .eq("stripe_customer_id", customerId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
   }
 
-  if (session.subscription) {
-    const subscription = await stripe.subscriptions.retrieve(
-      session.subscription as string
-    );
-    const productId = subscription.items.data[0]?.price?.product as string;
-    const tier = TIER_DB_VALUES[productId] || "power";
-    const tierName = PRODUCT_TIERS[productId] || "Power";
-    
-    await updateProfileSubscription(customerEmail, "active", tier);
+  return (data as ProfileRow | null) ?? null;
+}
 
-    await sendEmail(
+async function fetchProfileByUserId(userId: string): Promise<ProfileRow | null> {
+  const { data, error } = await supabaseAdmin
+    .from("profiles")
+    .select(
+      "id, user_id, email, full_name, stripe_customer_id, subscription_status, subscription_tier, trial_ends_at, access_grace_until",
+    )
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as ProfileRow | null) ?? null;
+}
+
+async function fetchCustomerEmail(customerId: string): Promise<string | null> {
+  const customer = await stripe.customers.retrieve(customerId);
+  if (customer.deleted) {
+    return null;
+  }
+
+  return customer.email;
+}
+
+async function updateProfileSubscription(profileId: string, patch: ProfilePatch): Promise<void> {
+  const { error } = await supabaseAdmin.from("profiles").update(patch).eq("id", profileId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function resolveProfileForStripeCustomer(
+  customerId: string | null,
+  options?: {
+    customerEmail?: string | null;
+    userId?: string | null;
+  },
+): Promise<ProfileRow | null> {
+  if (customerId) {
+    const linkedProfile = await fetchProfileByStripeCustomerId(customerId);
+    if (linkedProfile) {
+      return linkedProfile;
+    }
+  }
+
+  if (options?.userId) {
+    const profileByUserId = await fetchProfileByUserId(options.userId);
+    if (profileByUserId) {
+      if (customerId && profileByUserId.stripe_customer_id !== customerId) {
+        await updateProfileSubscription(profileByUserId.id, { stripe_customer_id: customerId });
+        return {
+          ...profileByUserId,
+          stripe_customer_id: customerId,
+        };
+      }
+
+      return profileByUserId;
+    }
+  }
+
+  if (options?.customerEmail) {
+    const profileByEmail = await fetchProfileByEmail(options.customerEmail);
+    if (profileByEmail && customerId && profileByEmail.stripe_customer_id !== customerId) {
+      await updateProfileSubscription(profileByEmail.id, { stripe_customer_id: customerId });
+      return {
+        ...profileByEmail,
+        stripe_customer_id: customerId,
+      };
+    }
+
+    return profileByEmail;
+  }
+
+  return null;
+}
+
+async function insertAuditLog(
+  action: string,
+  entityId: string | null,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  const { error } = await supabaseAdmin.from("audit_logs").insert({
+    action,
+    actor_role_at_action: "system",
+    actor_user_id: SYSTEM_ACTOR_USER_ID,
+    entity_id: entityId,
+    entity_type: "subscription",
+    metadata,
+  });
+
+  if (error) {
+    logStep("Audit log insert failed", {
+      action,
+      error: error.message,
+    });
+  }
+}
+
+async function insertTrialEndingNotification(
+  profile: ProfileRow,
+  subscription: Stripe.Subscription,
+): Promise<void> {
+  const trialEndsAt = normalizeStripeTimestamp(subscription.trial_end);
+  const trialEndDate = trialEndsAt ? new Date(trialEndsAt) : null;
+  const daysRemaining = trialEndDate
+    ? Math.max(0, Math.ceil((trialEndDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+    : 0;
+
+  const { error } = await supabaseAdmin.from("notifications").insert({
+    message:
+      daysRemaining === 0
+        ? "Your CoParrent Power trial is ending soon. Add a payment method to keep Power access active."
+        : `Your CoParrent Power trial ends in ${daysRemaining} day${daysRemaining === 1 ? "" : "s"}. Add a payment method to keep Power access active.`,
+    related_id: subscription.id,
+    title: "Trial ending soon",
+    type: "trial_ending",
+    user_id: profile.id,
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
+function buildSubscriptionPatchFromStripeState(
+  profile: ProfileRow,
+  subscription: Stripe.Subscription,
+): ProfilePatch {
+  const internalStatus = mapStripeSubscriptionStatus(subscription.status);
+  const productId = getProductId(subscription.items.data[0]?.price?.product);
+  const paidTier = getTierFromProductId(productId);
+
+  if (internalStatus === "trial") {
+    return {
+      access_grace_until: null,
+      subscription_status: "trial",
+      subscription_tier: paidTier,
+      trial_ends_at: normalizeStripeTimestamp(subscription.trial_end),
+    };
+  }
+
+  if (internalStatus === "past_due") {
+    return {
+      access_grace_until: resolvePastDueGraceUntil(profile.access_grace_until),
+      subscription_status: "past_due",
+      subscription_tier: paidTier,
+      trial_ends_at: null,
+    };
+  }
+
+  if (internalStatus === "active") {
+    return {
+      access_grace_until: null,
+      subscription_status: "active",
+      subscription_tier: paidTier,
+      trial_ends_at: null,
+    };
+  }
+
+  return {
+    access_grace_until: null,
+    subscription_status: internalStatus,
+    subscription_tier: "free",
+    trial_ends_at: null,
+  };
+}
+
+async function handleCheckoutCompleted(session: Stripe.Checkout.Session): Promise<HandlerResult> {
+  const customerId = typeof session.customer === "string" ? session.customer : null;
+  const customerEmail = session.customer_email || session.customer_details?.email || null;
+  const userId = typeof session.metadata?.user_id === "string" ? session.metadata.user_id : null;
+
+  if (!session.subscription) {
+    return {
+      action: "SUBSCRIPTION_CHECKOUT_COMPLETED",
       customerEmail,
-      "Welcome to CoParrent Power! 🎉",
+      entityId: typeof session.subscription === "string" ? session.subscription : session.id,
+      metadata: {
+        outcome: "skipped_missing_subscription",
+        session_id: session.id,
+      },
+      profile: null,
+    };
+  }
+
+  const profile = await resolveProfileForStripeCustomer(customerId, {
+    customerEmail,
+    userId,
+  });
+  if (!profile) {
+    return {
+      action: "SUBSCRIPTION_CHECKOUT_COMPLETED",
+      customerEmail,
+      entityId: typeof session.subscription === "string" ? session.subscription : session.id,
+      metadata: {
+        outcome: "profile_not_found",
+        stripe_customer_id: customerId,
+        session_id: session.id,
+      },
+      profile: null,
+    };
+  }
+
+  const subscription = await stripe.subscriptions.retrieve(session.subscription as string);
+  const productId = getProductId(subscription.items.data[0]?.price?.product);
+  const tier = getTierFromProductId(productId);
+  const recipientEmail = customerEmail ?? profile.email;
+
+  await updateProfileSubscription(profile.id, {
+    access_grace_until: null,
+    stripe_customer_id: customerId ?? profile.stripe_customer_id,
+    subscription_status: "active",
+    subscription_tier: tier,
+    trial_ends_at: null,
+  });
+
+  if (recipientEmail) {
+    await sendEmail(
+      recipientEmail,
+      "Welcome to CoParrent Power",
       `
         <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-          <h1 style="color: #6366f1;">Welcome to CoParrent Power!</h1>
-          <p>Thank you for subscribing to CoParrent. Your ${tierName} subscription is now active.</p>
-          <p>You now have access to all Power features including:</p>
-          <ul>
-            <li>Expense tracking & reports</li>
-            <li>Court-ready document exports</li>
-            <li>Sports & events hub</li>
-            <li>AI message assistance</li>
-            <li>Up to 6 child profiles</li>
-            <li>Up to 6 family member accounts</li>
-          </ul>
-          <p>If you have any questions, feel free to reach out to our support team at <a href="mailto:support@coparrent.com">support@coparrent.com</a>.</p>
+          <h1 style="color: #1e3a5f;">Welcome to CoParrent Power</h1>
+          <p>Your subscription is now active and your Power features are ready.</p>
+          <p>You can now use expenses, court exports, Sports Hub, and the full Power toolkit.</p>
           <p>Best regards,<br>The CoParrent Team</p>
         </div>
       `,
-      "welcome"
+      "welcome",
     );
   }
+
+  return {
+    action: "SUBSCRIPTION_CHECKOUT_COMPLETED",
+    customerEmail,
+    entityId: subscription.id,
+    metadata: {
+      outcome: "updated",
+      session_id: session.id,
+      stripe_customer_id: customerId,
+      subscription_status: "active",
+      subscription_tier: tier,
+    },
+    profile,
+  };
 }
 
-async function handleSubscriptionUpdated(subscription: Stripe.Subscription) {
-  logStep("Subscription updated", { 
-    subscriptionId: subscription.id, 
-    status: subscription.status 
+async function handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<HandlerResult> {
+  const customerId = typeof subscription.customer === "string" ? subscription.customer : null;
+  const customerEmail = customerId ? await fetchCustomerEmail(customerId) : null;
+  const userId = typeof subscription.metadata?.user_id === "string" ? subscription.metadata.user_id : null;
+
+  if (!customerId && !customerEmail) {
+    return {
+      action: "SUBSCRIPTION_STATUS_UPDATED",
+      entityId: subscription.id,
+      metadata: {
+        outcome: "skipped_missing_customer_identity",
+        stripe_status: subscription.status,
+      },
+      profile: null,
+    };
+  }
+
+  const profile = await resolveProfileForStripeCustomer(customerId, {
+    customerEmail,
+    userId,
+  });
+  if (!profile) {
+    return {
+      action: "SUBSCRIPTION_STATUS_UPDATED",
+      customerEmail,
+      entityId: subscription.id,
+      metadata: {
+        outcome: "profile_not_found",
+        stripe_customer_id: customerId,
+        stripe_status: subscription.status,
+      },
+      profile: null,
+    };
+  }
+
+  const patch = buildSubscriptionPatchFromStripeState(profile, subscription);
+  const recipientEmail = customerEmail ?? profile.email;
+  await updateProfileSubscription(profile.id, {
+    ...patch,
+    stripe_customer_id: customerId ?? profile.stripe_customer_id,
   });
 
-  const customer = await stripe.customers.retrieve(
-    subscription.customer as string
-  );
-  
-  if (customer.deleted) {
-    logStep("Customer was deleted");
-    return;
+  const nextStatus = patch.subscription_status ?? profile.subscription_status ?? "none";
+
+  if (recipientEmail && nextStatus === "active" && profile.subscription_status !== "active") {
+    await sendEmail(
+      recipientEmail,
+      "Your CoParrent subscription is active",
+      `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #1e3a5f;">Subscription active</h1>
+          <p>Your CoParrent subscription is active and your Power access is current.</p>
+          <p>Best regards,<br>The CoParrent Team</p>
+        </div>
+      `,
+      "update",
+    );
   }
 
-  const email = customer.email;
-  if (!email) {
-    logStep("No customer email found");
-    return;
+  if (recipientEmail && nextStatus === "past_due" && profile.subscription_status !== "past_due") {
+    await sendEmail(
+      recipientEmail,
+      "Payment issue with your CoParrent subscription",
+      `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #b45309;">Payment issue</h1>
+          <p>We were unable to process your latest subscription payment.</p>
+          <p>Your Power access remains available during the retry grace period. Please update your payment method to avoid interruption.</p>
+          <p>Best regards,<br>The CoParrent Team</p>
+        </div>
+      `,
+      "support",
+    );
   }
 
-  const productId = subscription.items.data[0]?.price?.product as string;
-  const tier = TIER_DB_VALUES[productId] || "power";
-  const tierName = PRODUCT_TIERS[productId] || "Power";
-  
-  let status = subscription.status;
-  let shouldSendEmail = false;
-  let emailSubject = "";
-  let emailHtml = "";
-
-  if (status === "active" || status === "trialing") {
-    status = "active";
-    shouldSendEmail = true;
-    emailSubject = `Your CoParrent subscription is now active`;
-    emailHtml = `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #6366f1;">Subscription Active!</h1>
-        <p>Your CoParrent ${tierName} subscription is now active.</p>
-        <p>Enjoy all your Power features! Thank you for being a valued member.</p>
-        <p>Best regards,<br>The CoParrent Team</p>
-      </div>
-    `;
-  } else if (status === "past_due") {
-    status = "past_due";
-    shouldSendEmail = true;
-    emailSubject = "⚠️ Action Required: Payment Issue with Your CoParrent Subscription";
-    emailHtml = `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #f59e0b;">Payment Issue</h1>
-        <p>We were unable to process your latest payment for your CoParrent subscription.</p>
-        <p>Please update your payment method to avoid service interruption.</p>
-        <p>You can update your payment details by visiting your account settings.</p>
-        <p>If you have any questions, please contact our support team.</p>
-        <p>Best regards,<br>The CoParrent Team</p>
-      </div>
-    `;
-  } else if (status === "canceled" || status === "unpaid") {
-    status = "canceled";
-  }
-
-  await updateProfileSubscription(email, status, tier);
-
-  if (shouldSendEmail) {
-    const emailType: EmailType = status === "past_due" ? "support" : "update";
-    await sendEmail(email, emailSubject, emailHtml, emailType);
-  }
-}
-
-async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
-  logStep("Subscription deleted", { subscriptionId: subscription.id });
-
-  const customer = await stripe.customers.retrieve(
-    subscription.customer as string
-  );
-  
-  if (customer.deleted) {
-    logStep("Customer was deleted");
-    return;
-  }
-
-  const email = customer.email;
-  if (!email) {
-    logStep("No customer email found");
-    return;
-  }
-
-  // On cancellation, revert to free tier
-  // INVARIANT: Downgrade removes access immediately
-  await updateProfileSubscription(email, "canceled", "free");
-
-  await sendEmail(
-    email,
-    "Your CoParrent subscription has been canceled",
-    `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #6366f1;">Subscription Canceled</h1>
-        <p>Your CoParrent subscription has been canceled.</p>
-        <p>We're sorry to see you go! Your Power features will remain active until the end of your current billing period.</p>
-        <p>After that, you'll continue to have access to all Free features including:</p>
-        <ul>
-          <li>Up to 4 child profiles</li>
-          <li>Custody calendar</li>
-          <li>Messaging</li>
-          <li>Document vault</li>
-          <li>Photo gallery</li>
-        </ul>
-        <p>If you change your mind, you can resubscribe at any time from your account settings.</p>
-        <p>We'd love to hear your feedback on how we can improve. Feel free to reach out to us at <a href="mailto:hello@coparrent.com">hello@coparrent.com</a>.</p>
-        <p>Best regards,<br>The CoParrent Team</p>
-      </div>
-    `,
-    "cancel"
-  );
-}
-
-async function handleInvoicePaymentFailed(invoice: Stripe.Invoice) {
-  logStep("Invoice payment failed", { invoiceId: invoice.id });
-
-  const customerEmail = invoice.customer_email;
-  if (!customerEmail) {
-    logStep("No customer email found");
-    return;
-  }
-
-  // INVARIANT: Payment failure sets past_due, but user keeps access (grace period)
-  await updateProfileSubscription(customerEmail, "past_due", "power");
-
-  await sendEmail(
+  return {
+    action: "SUBSCRIPTION_STATUS_UPDATED",
     customerEmail,
-    "⚠️ Payment Failed - Action Required",
-    `
-      <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
-        <h1 style="color: #ef4444;">Payment Failed</h1>
-        <p>We were unable to process your payment of $${((invoice.amount_due || 0) / 100).toFixed(2)} for your CoParrent subscription.</p>
-        <p>Please update your payment method as soon as possible to avoid losing access to Power features.</p>
-        <p>Common reasons for payment failure:</p>
-        <ul>
-          <li>Expired credit card</li>
-          <li>Insufficient funds</li>
-          <li>Card declined by your bank</li>
-        </ul>
-        <p>You can update your payment details by visiting your account settings and clicking "Manage Subscription".</p>
-        <p>If you need assistance, please contact us at <a href="mailto:support@coparrent.com">support@coparrent.com</a>.</p>
-        <p>Best regards,<br>The CoParrent Team</p>
-      </div>
-    `,
-    "support"
-  );
+    entityId: subscription.id,
+    metadata: {
+      access_grace_until: patch.access_grace_until ?? null,
+      outcome: "updated",
+      stripe_customer_id: customerId,
+      subscription_status: nextStatus,
+      subscription_tier: patch.subscription_tier ?? profile.subscription_tier ?? "free",
+      stripe_status: subscription.status,
+      stripe_status_known: isKnownStripeSubscriptionStatus(subscription.status),
+      trial_ends_at: patch.trial_ends_at ?? null,
+    },
+    profile,
+  };
+}
+
+async function handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<HandlerResult> {
+  const customerId = typeof subscription.customer === "string" ? subscription.customer : null;
+  const customerEmail = customerId ? await fetchCustomerEmail(customerId) : null;
+  const userId = typeof subscription.metadata?.user_id === "string" ? subscription.metadata.user_id : null;
+
+  if (!customerId && !customerEmail) {
+    return {
+      action: "SUBSCRIPTION_CANCELED",
+      entityId: subscription.id,
+      metadata: {
+        outcome: "skipped_missing_customer_identity",
+      },
+      profile: null,
+    };
+  }
+
+  const profile = await resolveProfileForStripeCustomer(customerId, {
+    customerEmail,
+    userId,
+  });
+  if (!profile) {
+    return {
+      action: "SUBSCRIPTION_CANCELED",
+      customerEmail,
+      entityId: subscription.id,
+      metadata: {
+        outcome: "profile_not_found",
+        stripe_customer_id: customerId,
+      },
+      profile: null,
+    };
+  }
+
+  const wasTrialCancellation = profile.subscription_status === "trial";
+  const recipientEmail = customerEmail ?? profile.email;
+
+  await updateProfileSubscription(profile.id, {
+    access_grace_until: null,
+    stripe_customer_id: customerId ?? profile.stripe_customer_id,
+    subscription_status: "canceled",
+    subscription_tier: "free",
+    trial_ends_at: null,
+  });
+
+  if (recipientEmail) {
+    await sendEmail(
+      recipientEmail,
+      "Your CoParrent subscription has been canceled",
+      `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #1e3a5f;">Subscription canceled</h1>
+          <p>Your CoParrent subscription has been canceled and your account has returned to the Free plan.</p>
+          <p>You can resubscribe at any time from Settings.</p>
+          <p>Best regards,<br>The CoParrent Team</p>
+        </div>
+      `,
+      "cancel",
+    );
+  }
+
+  return {
+    action: "SUBSCRIPTION_CANCELED",
+    customerEmail,
+    entityId: subscription.id,
+    metadata: {
+      outcome: "updated",
+      stripe_customer_id: customerId,
+      subscription_status: "canceled",
+      subscription_tier: "free",
+      trial_cancellation: wasTrialCancellation,
+      trial_ends_at_cleared: wasTrialCancellation,
+    },
+    profile,
+  };
+}
+
+async function handlePaymentIssue(
+  invoice: Stripe.Invoice,
+  eventType: "invoice.payment_action_required" | "invoice.payment_failed",
+): Promise<HandlerResult> {
+  const customerId = typeof invoice.customer === "string" ? invoice.customer : null;
+  const customerEmail =
+    invoice.customer_email ||
+    (customerId ? await fetchCustomerEmail(customerId) : null);
+
+  if (!customerId && !customerEmail) {
+    return {
+      action: "SUBSCRIPTION_PAYMENT_FAILED",
+      entityId: invoice.id,
+      metadata: {
+        event_type: eventType,
+        outcome: "skipped_missing_customer_identity",
+      },
+      profile: null,
+    };
+  }
+
+  const profile = await resolveProfileForStripeCustomer(customerId, {
+    customerEmail,
+  });
+  if (!profile) {
+    return {
+      action: "SUBSCRIPTION_PAYMENT_FAILED",
+      customerEmail,
+      entityId: invoice.id,
+      metadata: {
+        event_type: eventType,
+        outcome: "profile_not_found",
+        stripe_customer_id: customerId,
+      },
+      profile: null,
+    };
+  }
+
+  const graceUntil = resolvePastDueGraceUntil(profile.access_grace_until);
+  const recipientEmail = customerEmail ?? profile.email;
+
+  await updateProfileSubscription(profile.id, {
+    access_grace_until: graceUntil,
+    stripe_customer_id: customerId ?? profile.stripe_customer_id,
+    subscription_status: "past_due",
+    subscription_tier: profile.subscription_tier || "power",
+    trial_ends_at: null,
+  });
+
+  if (recipientEmail && profile.subscription_status !== "past_due") {
+    await sendEmail(
+      recipientEmail,
+      "Payment action needed for your CoParrent subscription",
+      `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
+          <h1 style="color: #b45309;">Payment action needed</h1>
+          <p>We could not complete your latest subscription payment.</p>
+          <p>Your Power access stays available during the retry grace period. Please update your payment method to avoid interruption.</p>
+          <p>Best regards,<br>The CoParrent Team</p>
+        </div>
+      `,
+      "support",
+    );
+  }
+
+  return {
+    action: "SUBSCRIPTION_PAYMENT_FAILED",
+    customerEmail,
+    entityId: invoice.id,
+    metadata: {
+      access_grace_until: graceUntil,
+      amount_due: invoice.amount_due ?? null,
+      event_type: eventType,
+      outcome: "updated",
+      stripe_customer_id: customerId,
+      subscription_status: "past_due",
+      subscription_tier: profile.subscription_tier || "power",
+    },
+    profile,
+  };
+}
+
+async function handleTrialWillEnd(subscription: Stripe.Subscription): Promise<HandlerResult> {
+  const customerId = typeof subscription.customer === "string" ? subscription.customer : null;
+  const customerEmail = customerId ? await fetchCustomerEmail(customerId) : null;
+  const userId = typeof subscription.metadata?.user_id === "string" ? subscription.metadata.user_id : null;
+
+  if (!customerId && !customerEmail) {
+    return {
+      action: "SUBSCRIPTION_TRIAL_ENDING_NOTICE",
+      entityId: subscription.id,
+      metadata: {
+        outcome: "skipped_missing_customer_identity",
+      },
+      profile: null,
+    };
+  }
+
+  const profile = await resolveProfileForStripeCustomer(customerId, {
+    customerEmail,
+    userId,
+  });
+  if (!profile) {
+    return {
+      action: "SUBSCRIPTION_TRIAL_ENDING_NOTICE",
+      customerEmail,
+      entityId: subscription.id,
+      metadata: {
+        outcome: "profile_not_found",
+        stripe_customer_id: customerId,
+      },
+      profile: null,
+    };
+  }
+
+  await insertTrialEndingNotification(profile, subscription);
+
+  const trialEndsAt = normalizeStripeTimestamp(subscription.trial_end);
+  const daysRemaining = trialEndsAt
+    ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (24 * 60 * 60 * 1000)))
+    : 0;
+
+  return {
+    action: "SUBSCRIPTION_TRIAL_ENDING_NOTICE",
+    customerEmail,
+    entityId: subscription.id,
+    metadata: {
+      days_remaining: daysRemaining,
+      outcome: "notification_created",
+      stripe_customer_id: customerId,
+      trial_ends_at: trialEndsAt,
+    },
+    profile,
+  };
+}
+
+async function logHandledEvent(
+  event: Stripe.Event,
+  result: HandlerResult,
+): Promise<void> {
+  await insertAuditLog(result.action, result.profile?.id ?? result.entityId ?? null, {
+    ...result.metadata,
+    profile_id: result.profile?.id ?? null,
+    stripe_event_id: event.id,
+    stripe_event_type: event.type,
+  });
 }
 
 serve(async (req) => {
-  // ============ STEP 1: Verify Signature ============
-  // INVARIANT: Never process unverified webhooks
   const signature = req.headers.get("stripe-signature");
   const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
 
@@ -348,57 +738,77 @@ serve(async (req) => {
 
   let event: Stripe.Event;
   let body: string;
-  
+
   try {
     body = await req.text();
     event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown";
-    logStep("Signature verification failed", { errorType: typeof error });
+    logStep("Signature verification failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
     return new Response("Invalid signature", { status: 400 });
   }
-  
-  logStep("Received event", { type: event.type, id: event.id });
 
-  // ============ STEP 2: Check Idempotency ============
-  // INVARIANT: Process each event exactly once
-  const { shouldProcess, alreadyProcessed } = await checkIdempotency(
+  logStep("Received event", { id: event.id, type: event.type });
+
+  const { shouldProcess } = await checkIdempotency(
     event.id,
     event.type,
     supabaseUrl,
-    supabaseServiceKey
+    supabaseServiceKey,
   );
-  
+
   if (!shouldProcess) {
-    logStep("Event already processed, skipping", { id: event.id });
     return new Response(JSON.stringify({ received: true, skipped: true }), {
       headers: { "Content-Type": "application/json" },
       status: 200,
     });
   }
 
-  // ============ STEP 3: Process Event ============
   try {
+    let result: HandlerResult;
+
     switch (event.type) {
       case "checkout.session.completed":
-        await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
+        result = await handleCheckoutCompleted(event.data.object as Stripe.Checkout.Session);
         break;
       case "customer.subscription.updated":
-        await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
+        result = await handleSubscriptionUpdated(event.data.object as Stripe.Subscription);
         break;
       case "customer.subscription.deleted":
-        await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+        result = await handleSubscriptionDeleted(event.data.object as Stripe.Subscription);
+        break;
+      case "customer.subscription.trial_will_end":
+        result = await handleTrialWillEnd(event.data.object as Stripe.Subscription);
+        break;
+      case "invoice.payment_action_required":
+        result = await handlePaymentIssue(
+          event.data.object as Stripe.Invoice,
+          "invoice.payment_action_required",
+        );
         break;
       case "invoice.payment_failed":
-        await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+        result = await handlePaymentIssue(
+          event.data.object as Stripe.Invoice,
+          "invoice.payment_failed",
+        );
         break;
       default:
-        logStep("Unhandled event type", { type: event.type });
+        result = {
+          action: "STRIPE_WEBHOOK_EVENT_IGNORED",
+          entityId: null,
+          metadata: { outcome: "ignored_unhandled_event_type" },
+          profile: null,
+        };
+        break;
     }
 
-    // ============ STEP 4: Mark as Processed ============
+    await logHandledEvent(event, result);
     await markEventProcessed(event.id, supabaseUrl, supabaseServiceKey, {
-      outcome: "success",
+      action: result.action,
+      customer_email: result.customerEmail ?? null,
+      outcome: result.metadata.outcome ?? "handled",
+      stripe_event_type: event.type,
     });
 
     return new Response(JSON.stringify({ received: true }), {
@@ -407,14 +817,16 @@ serve(async (req) => {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    logStep("Webhook processing error", { errorType: typeof error });
-    
-    // Mark as failed for debugging
+
+    await insertAuditLog("STRIPE_WEBHOOK_PROCESSING_FAILED", null, {
+      error: errorMessage,
+      stripe_event_id: event.id,
+      stripe_event_type: event.type,
+    });
+
     await markEventFailed(event.id, supabaseUrl, supabaseServiceKey, errorMessage);
-    
-    // Still return 200 to prevent Stripe retries (we've logged the error)
-    // This is intentional - failed events can be investigated via logs
-    return new Response(JSON.stringify({ received: true, error: true }), {
+
+    return new Response(JSON.stringify({ error: true, received: true }), {
       headers: { "Content-Type": "application/json" },
       status: 200,
     });

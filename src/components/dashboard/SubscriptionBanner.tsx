@@ -1,5 +1,6 @@
+import { useEffect, useState } from "react";
 import { differenceInDays, format } from "date-fns";
-import { Clock, Crown, AlertTriangle, Sparkles, Gift, CreditCard } from "lucide-react";
+import { Clock, Crown, AlertTriangle, Sparkles, Gift, CreditCard, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ import { getSubscriptionTierLabel } from "@/lib/displayLabels";
 
 export const SubscriptionBanner = () => {
   const { 
+    accessGraceUntil,
     tier, 
     subscribed, 
     loading, 
@@ -18,7 +20,22 @@ export const SubscriptionBanner = () => {
     trial,
     trialEndsAt,
     pastDue,
+    isGracePeriod,
   } = useSubscription();
+  const [dismissedGraceBanner, setDismissedGraceBanner] = useState(false);
+
+  useEffect(() => {
+    if (!isGracePeriod || !accessGraceUntil) {
+      setDismissedGraceBanner(false);
+      window.localStorage.removeItem("coparrent-subscription-grace-banner-dismissed-until");
+      return;
+    }
+
+    const dismissedUntil = window.localStorage.getItem(
+      "coparrent-subscription-grace-banner-dismissed-until",
+    );
+    setDismissedGraceBanner(dismissedUntil === accessGraceUntil);
+  }, [accessGraceUntil, isGracePeriod]);
 
   // Don't show anything while loading
   if (loading) return null;
@@ -26,14 +43,19 @@ export const SubscriptionBanner = () => {
   const tierLabel = STRIPE_TIERS[tier]?.name || getSubscriptionTierLabel(tier);
 
   // Past due warning banner
-  if (pastDue && subscribed) {
+  if (pastDue && isGracePeriod && subscribed && !dismissedGraceBanner) {
+    const graceEndDate = accessGraceUntil ? new Date(accessGraceUntil) : null;
+    const graceDaysRemaining = graceEndDate
+      ? Math.max(0, differenceInDays(graceEndDate, new Date()))
+      : null;
+
     return (
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         className="rounded-2xl border border-warning bg-warning/5 p-4"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
               <CreditCard className="w-5 h-5 text-warning" />
@@ -44,7 +66,58 @@ export const SubscriptionBanner = () => {
                 <Badge variant="outline" className="border-warning text-warning text-xs">{tierLabel}</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
-                Please update your payment method to avoid service interruption.
+                Please update your payment method to avoid losing Power access.
+              </p>
+              {graceEndDate ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Grace period {graceDaysRemaining === 0 ? "ends soon" : `ends in ${graceDaysRemaining} day${graceDaysRemaining === 1 ? "" : "s"}`} on {format(graceEndDate, "MMM d")}.
+                </p>
+              ) : null}
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-muted-foreground"
+              onClick={() => {
+                if (accessGraceUntil) {
+                  window.localStorage.setItem(
+                    "coparrent-subscription-grace-banner-dismissed-until",
+                    accessGraceUntil,
+                  );
+                }
+                setDismissedGraceBanner(true);
+              }}
+            >
+              <X className="w-4 h-4" />
+              <span className="sr-only">Dismiss payment warning</span>
+            </Button>
+            <Button variant="outline" size="sm" asChild className="shrink-0">
+              <Link to="/dashboard/settings">Update Payment</Link>
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (pastDue && !isGracePeriod && !subscribed) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-2xl border border-warning bg-warning/5 p-4"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
+              <AlertTriangle className="w-5 h-5 text-warning" />
+            </div>
+            <div>
+              <h3 className="font-display font-semibold text-warning">Power access paused</h3>
+              <p className="text-sm text-muted-foreground">
+                Your payment grace period has ended. Update billing to restore Power features.
               </p>
             </div>
           </div>

@@ -4,57 +4,21 @@ import { useAuth } from "@/contexts/AuthContext";
 import { STRIPE_TIERS, StripeTier } from "@/lib/stripe";
 import { useToast } from "@/hooks/use-toast";
 import { ERROR_MESSAGES } from "@/lib/errorMessages";
-
-interface SubscriptionStatus {
-  subscribed: boolean;
-  tier: StripeTier | "free";
-  subscriptionEnd: string | null;
-  loading: boolean;
-  freeAccess: boolean;
-  accessReason: string | null;
-  error: string | null;
-  trial: boolean;
-  trialEndsAt: string | null;
-  pastDue: boolean;
-}
-
-type SubscriptionSnapshot = Omit<SubscriptionStatus, "loading" | "error">;
+import {
+  cloneSnapshot,
+  FREE_SUBSCRIPTION_SNAPSHOT,
+  normalizeSubscriptionSnapshot,
+  type SubscriptionSnapshot,
+  type SubscriptionStatus,
+} from "@/hooks/subscriptionSnapshot";
 
 const SUBSCRIPTION_CACHE_TTL_MS = 30_000;
-
-const FREE_SUBSCRIPTION_SNAPSHOT: SubscriptionSnapshot = {
-  subscribed: false,
-  tier: "free",
-  subscriptionEnd: null,
-  freeAccess: false,
-  accessReason: null,
-  trial: false,
-  trialEndsAt: null,
-  pastDue: false,
-};
 
 let cachedSubscriptionUserId: string | null = null;
 let cachedSubscriptionSnapshot: SubscriptionSnapshot | null = null;
 let cachedSubscriptionAt = 0;
 let inFlightSubscriptionUserId: string | null = null;
 let inFlightSubscriptionPromise: Promise<SubscriptionSnapshot> | null = null;
-
-function cloneSnapshot(snapshot: SubscriptionSnapshot): SubscriptionSnapshot {
-  return { ...snapshot };
-}
-
-function normalizeSubscriptionSnapshot(data: Record<string, unknown>): SubscriptionSnapshot {
-  return {
-    subscribed: Boolean(data.subscribed || data.free_access),
-    tier: ((data.tier as StripeTier | "free") || "free"),
-    subscriptionEnd: typeof data.subscription_end === "string" ? data.subscription_end : null,
-    freeAccess: Boolean(data.free_access),
-    accessReason: typeof data.access_reason === "string" ? data.access_reason : null,
-    trial: Boolean(data.trial),
-    trialEndsAt: typeof data.trial_ends_at === "string" ? data.trial_ends_at : null,
-    pastDue: Boolean(data.past_due),
-  };
-}
 
 function readCachedSubscriptionSnapshot(userId: string): SubscriptionSnapshot | null {
   if (

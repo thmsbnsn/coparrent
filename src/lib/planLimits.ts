@@ -7,6 +7,15 @@
  */
 
 export type PlanTier = "free" | "power";
+export type PlanSubscriptionStatus =
+  | "active"
+  | "canceled"
+  | "expired"
+  | "none"
+  | "past_due"
+  | "trial"
+  | null
+  | undefined;
 
 export interface PlanLimits {
   maxKids: number;
@@ -55,32 +64,59 @@ export const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
  * Get plan limits for a given tier
  * Handles legacy tier names (premium, mvp) by mapping to power
  */
-export function getPlanLimits(tier: string | null | undefined): PlanLimits {
-  if (!tier || tier === "free") {
-    return PLAN_LIMITS.free;
+export function isGracePeriodActive(
+  subscriptionStatus: PlanSubscriptionStatus,
+  accessGraceUntil?: string | Date | null,
+  now: Date = new Date(),
+): boolean {
+  if (subscriptionStatus !== "past_due" || !accessGraceUntil) {
+    return false;
   }
-  
-  // Map legacy tiers to power
-  if (tier === "premium" || tier === "mvp" || tier === "power") {
-    return PLAN_LIMITS.power;
-  }
-  
-  return PLAN_LIMITS.free;
+
+  const candidate = accessGraceUntil instanceof Date ? accessGraceUntil : new Date(accessGraceUntil);
+  return Number.isFinite(candidate.getTime()) && candidate.getTime() > now.getTime();
+}
+
+export function getPlanLimits(
+  tier: string | null | undefined,
+  subscriptionStatus?: PlanSubscriptionStatus,
+  accessGraceUntil?: string | Date | null,
+  now: Date = new Date(),
+): PlanLimits {
+  return PLAN_LIMITS[normalizeTier(tier, subscriptionStatus, accessGraceUntil, now)];
 }
 
 /**
  * Normalize tier name from legacy values
  */
-export function normalizeTier(tier: string | null | undefined): PlanTier {
-  if (!tier || tier === "free") {
+export function normalizeTier(
+  tier: string | null | undefined,
+  subscriptionStatus?: PlanSubscriptionStatus,
+  accessGraceUntil?: string | Date | null,
+  now: Date = new Date(),
+): PlanTier {
+  if (subscriptionStatus === "past_due") {
+    return isGracePeriodActive(subscriptionStatus, accessGraceUntil, now) ? "power" : "free";
+  }
+
+  if (subscriptionStatus === "trial") {
+    return "power";
+  }
+
+  if (subscriptionStatus === "active") {
+    if (tier === "premium" || tier === "mvp" || tier === "power") {
+      return "power";
+    }
+  }
+
+  if (subscriptionStatus === "canceled" || subscriptionStatus === "expired" || subscriptionStatus === "none") {
     return "free";
   }
-  
-  // Map legacy tiers to power
+
   if (tier === "premium" || tier === "mvp" || tier === "power") {
     return "power";
   }
-  
+
   return "free";
 }
 
@@ -88,10 +124,13 @@ export function normalizeTier(tier: string | null | undefined): PlanTier {
  * Check if a specific feature is available for a tier
  */
 export function hasFeatureAccess(
-  tier: string | null | undefined, 
-  feature: keyof PlanLimits["features"]
+  tier: string | null | undefined,
+  subscriptionStatus: PlanSubscriptionStatus,
+  feature: keyof PlanLimits["features"],
+  accessGraceUntil?: string | Date | null,
+  now: Date = new Date(),
 ): boolean {
-  const limits = getPlanLimits(tier);
+  const limits = getPlanLimits(tier, subscriptionStatus, accessGraceUntil, now);
   return limits.features[feature];
 }
 

@@ -29,6 +29,10 @@ export default {
         replacement: `${rootDir}/supabase/functions/_shared/test-shims/supabaseEdge.ts`,
       },
       {
+        find: "https://esm.sh/stripe@18.5.0",
+        replacement: `${rootDir}/supabase/functions/_shared/test-shims/stripeShim.ts`,
+      },
+      {
         find: "https://deno.land/x/zod@v3.22.4/mod.ts",
         replacement: `${rootDir}/supabase/functions/_shared/test-shims/zodShim.ts`,
       },
