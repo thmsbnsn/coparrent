@@ -1,330 +1,214 @@
 # Security Model
 
-This document defines the **security architecture, enforcement layers, and trust boundaries** of CoParrent.
+Last reviewed: 2026-03-31
 
-It is intentionally explicit. Security decisions in CoParrent are **designed, not implied**.
+This document defines the current security architecture and trust boundaries for CoParrent. It is written to stay aligned with the repo rather than with older assumptions or aspirational deployment claims.
 
----
+## Claim Levels
 
-## Security Philosophy
+Security documentation in this repo should distinguish between:
 
-CoParrent follows a **defense-in-depth** model with the following principles:
+- Repo-confirmed controls: code, tests, migrations, and configuration present in this tree.
+- Evidence-backed live checks: dated verification captured in the diligence evidence log.
+- User-assisted confirmations still required: deployment posture or device behavior that repo inspection cannot settle alone.
 
-- **Zero implicit trust in the client**
-- **Server-enforced rules over UI checks**
-- **Least-privilege access by default**
-- **Private-by-default data ownership**
-- **Explicit sharing with revocable access**
+## Core Principles
 
-All sensitive decisions are enforced **server-side**.
+- Zero implicit trust in the client.
+- Server-enforced rules over UI-only checks.
+- Least privilege by default.
+- Explicit family scope for family-operational data.
+- Private-by-default ownership for generated or user-specific content.
 
----
+## Trust Boundaries
 
-## Identity & Authentication
+### Client
 
-- Authentication is handled via a trusted identity provider.
-- Each authenticated user has a unique `auth.uid`.
-- Authentication alone does **not** grant access to data or features.
+The client may reflect state, but it is not trusted to define:
 
-Authentication answers *who you are*.  
-Authorization answers *what you are allowed to do*.
+- authorization
+- role
+- subscription status
+- plan entitlements
+- family scope for privileged operations
 
----
+### Server
 
-## Authorization Layers
+Authoritative enforcement lives in:
 
-Authorization is enforced through **multiple independent layers**:
-
-### 1. Route Guards (UI Layer)
-- Prevent navigation to unauthorized pages
-- Improve UX and reduce accidental access
-- **Not trusted as a security boundary**
-
-### 2. Edge Functions / RPC (Server Logic Layer)
-- Enforce:
-  - Subscription tier limits
-  - Role restrictions
-  - Rate limits
-  - AI safety constraints
-- Reject invalid requests regardless of client behavior
-
-### 3. Row Level Security (RLS) — Primary Enforcement
-- Enforced directly at the database level
-- Cannot be bypassed by client manipulation
-- Applies to:
-  - Reads
-  - Writes
-  - Updates
-  - Deletes
-
-If RLS denies access, the operation **cannot succeed**.
-
----
-
-## Role Model
-
-CoParrent supports multiple roles with **strict capability separation**:
-
-| Role | Description |
-|-----|------------|
-| Parent | Parent member with family-scoped write access where allowed |
-| Guardian | Guardian member with family-scoped write access where allowed |
-| Third-Party | Read-only invited participant |
-| Child | Restricted account with no data creation rights |
-
-Roles are enforced server-side and cannot be escalated client-side.
+- edge functions
+- RPCs and database functions
+- Row Level Security
+- storage policy and bucket configuration
 
 ## Family-Scoped Authorization
 
-CoParrent now enforces authorization against the user's **active family membership**, not only against a global account label.
+Family-scoped operations use:
 
-- Parent and guardian accounts may bootstrap their first family membership server-side.
-- Invited co-parents and third-party users must join an existing family through an invitation.
-- Family-gated features should assume that `auth.uid()` alone is not enough; the user must also have the correct role inside the active family.
-- Invitation rows should carry `family_id` so acceptance resolves into the intended family rather than creating ambiguous membership state.
+- `activeFamilyId` on the client
+- explicit `family_id` on the server
 
-## Family-Scoped Architecture
+Rules:
 
-`activeFamilyId` in the client and explicit `family_id` on the server are the only valid scope inputs for family operations.
+- family scope must be explicit
+- cross-family inference is not allowed
+- missing or ambiguous family scope should fail closed
+- legacy profile-pair or `co_parent_id` inference is not part of the intended model
 
-- Core flows do not infer scope from legacy relationship linkage or other global profile assumptions.
-- Multi-family users must supply explicit family context for reads, writes, notifications, and AI authorization.
-- If family scope is missing or ambiguous, the operation should fail closed rather than guess.
+## Authorization Layers
 
----
+### 1. Route And UI Gates
 
-## Data Ownership Model
+Current sources:
 
-- Family-operational records are bound to a single `family_id`.
-- Private content remains owner-scoped until explicitly shared.
-- Ownership and family scope determine:
-  - Edit permissions
-  - Delete permissions
-  - Sharing authority
+- [../../src/lib/routeAccess.ts](../../src/lib/routeAccess.ts)
+- [../../src/components/ProtectedRoute.tsx](../../src/components/ProtectedRoute.tsx)
+- [../../src/components/gates/RoleGate.tsx](../../src/components/gates/RoleGate.tsx)
+- [../../src/components/gates/ChildAccountGate.tsx](../../src/components/gates/ChildAccountGate.tsx)
+- [../../src/components/gates/AdminGate.tsx](../../src/components/gates/AdminGate.tsx)
 
-Family scope is explicit. Visibility should never be inferred across families.
+These layers improve UX and fail closed for navigation, but they are not the final security boundary.
 
----
+### 2. Edge Functions And RPCs
 
-## Sharing Model
+Current server-side examples include:
 
-- All data is **private by default**
-- Sharing is:
-  - Explicit
-  - Item-level
-  - Revocable
-- Shared users receive:
-  - Read access
-  - Export / print access (where applicable)
-- Shared users **cannot**:
-  - Edit
-  - Delete
-  - Regenerate
-  - Move content
+- `aiGuard` for AI role and entitlement checks
+- `check-subscription` and `stripe-webhook` for billing state
+- `messaging-thread-export` for family-scoped export creation, download, and verification
+- invite and notification functions that validate family membership and ownership server-side
 
-Sharing is enforced via server-side policies and RLS joins.
+### 3. Row Level Security
 
----
+RLS remains the primary data-enforcement layer. If RLS denies a read or mutation, client-side behavior does not matter.
 
-## Subscription Enforcement
+## Role Model
 
-Subscription tiers are enforced **server-side**, never trusted to the client.
+Current roles in the repo:
 
-Enforcement points:
-- Edge functions
-- RPC validation
-- Database constraints
-- RLS where applicable
+- parent
+- guardian
+- third-party
+- child
+- admin
 
-A client claiming a higher tier does not grant access.
+Important points:
 
-Complimentary Power granted by validated access codes is treated as a server-side subscription entitlement and should satisfy the same gates as a paid Power subscription.
+- admin access is backed by `user_roles` and server-side checks
+- child accounts have a smaller route and capability surface
+- third-party users are limited to a narrower protected-route allowlist than parents and guardians
 
----
+## Subscription And Billing Security
 
-## AI Tool Security
+The current billing model is enforced server-side.
 
-AI-powered features follow strict safety boundaries:
+Repo-confirmed behavior includes:
 
-- AI outputs are **non-diagnostic and non-authoritative**
-- No medical, legal, or treatment advice is provided
-- Emergency scenarios defer immediately to local emergency services
-- AI prompts and system instructions are locked server-side
-- User input is sanitized and validated
-- Requests are rate-limited per user
+- durable Stripe customer linking
+- status normalization for active, trial, past-due, canceled, expired, and none
+- past-due grace handling
+- webhook idempotency tracking
+- complimentary access handled as a server-side entitlement, not a client flag
 
-AI tools are treated as **support tools**, not decision-makers.
+Primary sources:
 
----
+- [../../supabase/functions/check-subscription/index.ts](../../supabase/functions/check-subscription/index.ts)
+- [../../supabase/functions/stripe-webhook/index.ts](../../supabase/functions/stripe-webhook/index.ts)
 
-## Push Notification Security
+## AI Security Model
 
-Push notifications follow the same zero-trust model as other features:
+AI features are treated as constrained support tools, not autonomous decision-makers.
 
-### Subscription Storage
-- Push subscriptions are stored in `push_subscriptions` table
-- RLS ensures users can only manage their own subscriptions
-- Subscription endpoints and keys are never exposed to the client after registration
+Repo-confirmed controls include:
 
-### VAPID Key Handling
-- VAPID keys are stored as server-side secrets (`VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`)
-- Public key is exposed only during subscription registration
-- Private key never leaves the server environment
+- JWT validation
+- explicit family-scope checks
+- role checks
+- subscription checks
+- per-action allowlists
+- input-length and usage-limit enforcement
 
-### Admin Push Testing
-- Admin-only test push tool requires `is_admin()` check
-- Test sends are audit-logged with action `TEST_PUSH_SENT`
-- Rate-limited server-side to prevent abuse
+Primary source:
 
-### Notification Payload Safety
-- Notification bodies are sanitized (emails, phone numbers stripped)
-- Maximum payload length enforced (200 chars)
-- No private message content in push payloads
-- Deep links are relative paths, resolved within authenticated session
+- [../../supabase/functions/_shared/aiGuard.ts](../../supabase/functions/_shared/aiGuard.ts)
 
-### Platform Support
-- **Android**: Full Web Push support in browser and PWA
-- **iOS**: Requires PWA installation (Add to Home Screen) on iOS 16.4+
-- Browser-based iOS Safari does not support push
+## Export And Evidence Security
 
----
+Messaging Hub export integrity work is now a significant part of the security posture for recorded communication.
 
-## Deployment/Auth Posture
+Repo-confirmed controls include:
 
-The repo baseline is intentionally stricter than the old QA posture, but deployed confirmation still requires evidence.
+- explicit `family_id` requirement for export operations
+- server-generated evidence packages
+- server-generated PDF artifacts
+- receipt verification paths
+- receipt and artifact hashing metadata
 
-Repo-confirmable defaults:
-- Production auth captcha defaults to required and should remain configured in deployed environments.
-- Shared edge-function CORS defaults allow only the narrow production host list unless explicit env configuration adds more.
-- Localhost origins are opt-in via `ALLOW_LOCALHOST_ORIGINS=true` or local-development runtime, not part of the permanent default posture.
-- Hosted passkeys are not a confirmed live capability for this project while Supabase still lacks WebAuthn/passkey enrollment.
+Primary sources:
 
-User-assisted confirmation still required:
-- apex-host behavior and canonical-host decision
-- deployed hCaptcha presence on the public auth surface
-- final localhost-origin / preview-origin disposition
-- final launch passkey posture
+- [../../supabase/functions/messaging-thread-export/index.ts](../../supabase/functions/messaging-thread-export/index.ts)
+- [../../supabase/functions/_shared/messagingThreadExportIntegrity.ts](../../supabase/functions/_shared/messagingThreadExportIntegrity.ts)
+- [../../supabase/functions/_shared/messagingThreadExportPdf.ts](../../supabase/functions/_shared/messagingThreadExportPdf.ts)
 
-Use `docs/project/DEPLOYMENT_AUTH_CONFIRMATION_CHECKLIST.md` as the evidence standard before marking those items complete.
+Important boundaries:
 
----
+- This stronger integrity model currently applies to Messaging Hub exports, not to every record-export surface in the repo.
+- The documents-page court export remains a separate client-generated PDF flow and should not be described as having the same receipt-verification guarantees.
+- Daily calling persists session, participant, and event data, and call-related system events can be included in Messaging Hub evidence exports, but the repo does not include call recording, transcripts, or a standalone immutable call-history export.
 
-## Rate Limiting & Abuse Prevention
+## Storage And File Posture
 
-- Edge functions use centralized rate-limit helpers.
-- AI features enforce per-user limits server-side.
-- Invitation and notification flows are rate-limited independently from normal app reads.
-- `notify-third-party-added` intentionally keeps `verify_jwt=false` in `supabase/config.toml` so trusted internal callers can use a shared-secret header, but the function itself requires JWT-or-internal authorization, validates family/invitation ownership, rate-limits sends, and audit-logs every send attempt.
-- Temporary QA exceptions such as localhost origin allowances should be treated as operational risk, not permanent baseline behavior. Repo-side production auth captcha now defaults to enabled and should remain configured in deployed environments.
+Repo-confirmed storage-related surfaces include:
 
----
+- private problem-report screenshot storage
+- private messaging export artifact storage
+- admin-only law-library management paths
 
-## File & Storage Security
+These should be discussed as private-by-default storage surfaces unless a specific public-sharing mechanism is explicitly documented.
 
-- All generated files are stored in protected storage buckets
-- Access is restricted by:
-  - Owner identity
-  - Explicit share permissions
-- No public buckets
-- No anonymous access
-- File URLs are scoped and revocable
+## Push And Notification Security
 
-Exported documents never expose internal identifiers.
+Repo-confirmed push-related pieces include:
 
----
+- `push_subscriptions` usage
+- `sync-push-subscription`
+- shared push helpers
+- server-side notification send paths
 
-## Logging & Observability
+Physical-device validation is still separate from repo confirmation.
 
-- Sensitive content is not logged in plaintext
-- Logs capture:
-  - Operation type
-  - Actor role
-  - Timestamp
-  - Success/failure
-- AI prompts and outputs are not persisted beyond operational need
+## Deployment Posture: What Is Still Not Fully Closed
 
-Logs are designed for **auditability**, not surveillance.
+The repo currently supports a stricter auth and origin posture than older versions, but some items still require user-assisted confirmation:
 
----
+- deployed captcha configuration
+- deployed localhost-origin posture
+- final canonical public host posture
+- final passkey posture
 
-## Intentional Security Limitations
-
-The following limitations are intentional:
-
-- No public share links
-- No client-controlled permission elevation
-- No child-initiated data creation
-- No background monitoring of user activity
-- No automated decision-making affecting custody or care
-
----
+These are deployment questions, not code-only questions.
 
 ## Failure Handling
 
-When security rules block an action:
-- The system fails **closed**
-- Users receive clear, non-technical messaging
-- No internal state or identifiers are exposed
+Security-sensitive failures should prefer:
 
-Security errors are handled as product behavior, not exceptions.
+- fail closed over silent fallback
+- explicit error handling over guessed scope
+- server logging over swallowed errors
 
----
+Missing family scope, failed authorization, or ambiguous ownership should not silently continue.
 
-_Last Updated: 2026-03-30_
+## Executable References
 
----
+Helpful repo references:
 
-## Review & Evolution
+- [../../src/lib/securityAssertions.ts](../../src/lib/securityAssertions.ts)
+- [../../src/lib/routeAccess.ts](../../src/lib/routeAccess.ts)
+- [../../supabase/functions/_shared/checkSubscription.test.ts](../../supabase/functions/_shared/checkSubscription.test.ts)
+- [../../supabase/functions/_shared/stripeWebhook.test.ts](../../supabase/functions/_shared/stripeWebhook.test.ts)
+- [../../supabase/functions/_shared/messagingThreadExport.test.ts](../../supabase/functions/_shared/messagingThreadExport.test.ts)
 
-This security model evolves intentionally.
+## Related Docs
 
-Changes require:
-- Architectural review
-- RLS validation
-- Documentation updates
-
-Security changes are considered **breaking changes** unless explicitly backward compatible.
-
----
-
-## Executable Assertion Tests
-
-This security model is enforced by executable tests in:
-
-- `src/lib/securityAssertions.ts` — Runtime assertion tests for all security invariants
-- `src/lib/securityGuards.ts` — Server-verified guard functions
-- `src/lib/securityInvariants.ts` — Invariant enforcement utilities
-- `src/hooks/useSecurityContext.ts` — React hook for security context
-- `src/components/gates/SecurityBoundary.tsx` — Error boundary for security violations
-
-### Invariants Tested
-
-| Invariant | Code Reference | Enforcement Layer |
-|-----------|---------------|-------------------|
-| Third-party cannot write | `THIRD_PARTY_RESTRICTED_ACTIONS` | RLS + Edge Functions |
-| Child cannot access parent routes | `PARENT_ONLY_ROUTES` | ProtectedRoute + ChildAccountGate |
-| Child cannot create data | `assertChildCannotCreateData()` | RLS + UI Gate |
-| Admin via user_roles only | `assertAdminAccessSource()` | is_admin() RPC |
-| Client gating never trusted alone | `SERVER_ENFORCED_FEATURES` | RLS + Edge Functions |
-| Subscription from server only | `assertSubscriptionNotClientTrusted()` | Profile DB |
-| Trial expiry checked real-time | `assertTrialExpiryCheckedRealtime()` | aiGuard |
-| Fail closed on error | `assertFailClosed()` | All guards |
-
-### Failure Conditions
-
-Every assertion explicitly fails if:
-- A role escalation bug is introduced
-- A new route is added without enforcement
-- A server endpoint trusts client input
-
----
-
-## Related Documentation
-
-- `README.md` — Design principles and product intent  
-- `GATED_FEATURES.md` — Feature access and enforcement rules  
-- `GATED_FEATURES_AUDIT.md` — Audit verification status
-
----
-
-_End of Security Model_
+- Feature gating: [GATED_FEATURES.md](GATED_FEATURES.md)
+- Current project snapshot: [../project/CURRENT_STATUS.md](../project/CURRENT_STATUS.md)
