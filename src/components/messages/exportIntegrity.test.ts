@@ -177,10 +177,13 @@ describe("buildMessagingThreadExportPackage", () => {
       canonicalization_version: MESSAGING_THREAD_EXPORT_CANONICALIZATION_VERSION,
       integrity_model_version: MESSAGING_THREAD_EXPORT_INTEGRITY_MODEL_VERSION,
       schema_version: MESSAGING_THREAD_EXPORT_SCHEMA_VERSION,
+      pdf_artifact_hash: null,
     });
     expect(exportPackage.receipt).toMatchObject({
       canonicalization_version: MESSAGING_THREAD_EXPORT_CANONICALIZATION_VERSION,
       integrity_model_version: MESSAGING_THREAD_EXPORT_INTEGRITY_MODEL_VERSION,
+      pdf_artifact_hash: null,
+      pdf_hash_algorithm: null,
     });
     expect(exportPackage.evidencePackage.package_schema_version).toBe(
       MESSAGING_THREAD_EXPORT_PACKAGE_SCHEMA_VERSION,

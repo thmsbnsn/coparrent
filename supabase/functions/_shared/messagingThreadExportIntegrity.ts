@@ -1,16 +1,18 @@
 export const MESSAGING_THREAD_EXPORT_SCHEMA_VERSION =
   "coparrent.messaging-thread-export/v3";
 export const MESSAGING_THREAD_EXPORT_INTEGRITY_MODEL_VERSION =
-  "coparrent.messaging-thread-export-receipt/v3";
+  "coparrent.messaging-thread-export-receipt/v4";
 export const MESSAGING_THREAD_EXPORT_CANONICALIZATION_VERSION =
   "coparrent.messaging-thread-export-canonical/v2";
 export const MESSAGING_THREAD_EXPORT_PACKAGE_SCHEMA_VERSION =
-  "coparrent.messaging-thread-export-package/v3";
+  "coparrent.messaging-thread-export-package/v4";
 export const MESSAGING_THREAD_EXPORT_HASH_ALGORITHM = "sha256";
 export const MESSAGING_THREAD_EXPORT_SIGNATURE_ALGORITHM = "ed25519";
 export const MESSAGING_THREAD_EXPORT_LEGACY_SIGNATURE_ALGORITHM =
   "hmac-sha256";
 export const MESSAGING_THREAD_EXPORT_ARTIFACT_TYPE = "json_evidence_package";
+export const MESSAGING_THREAD_EXPORT_PDF_ARTIFACT_TYPE =
+  "server_generated_pdf_artifact";
 
 const HASH_ALGORITHM_LABEL = "SHA-256";
 
@@ -84,6 +86,14 @@ export interface MessagingThreadExportManifest {
   included_message_ids: string[];
   included_system_event_ids: string[];
   included_timeline_entry_ids: string[];
+  artifact_storage_bucket: string | null;
+  artifact_storage_path: string | null;
+  pdf_hash_algorithm: string | null;
+  pdf_artifact_hash: string | null;
+  pdf_bytes_size: number | null;
+  pdf_generated_at: string | null;
+  pdf_storage_bucket: string | null;
+  pdf_storage_path: string | null;
   verification_notes: string[];
 }
 
@@ -114,6 +124,15 @@ export interface MessagingThreadExportReceiptPayload {
   artifact_hash_algorithm: string;
   artifact_hash: string;
   artifact_type: string;
+  artifact_storage_bucket: string | null;
+  artifact_storage_path: string | null;
+  pdf_hash_algorithm: string | null;
+  pdf_artifact_hash: string | null;
+  pdf_artifact_type: string | null;
+  pdf_bytes_size: number | null;
+  pdf_generated_at: string | null;
+  pdf_storage_bucket: string | null;
+  pdf_storage_path: string | null;
   signing_key_id: string | null;
 }
 
@@ -199,12 +218,24 @@ export type MessagingThreadTimelineSourceItem =
 
 interface BuildMessagingThreadExportPackageArgs {
   applicationBuildId?: string | null;
+  artifactStorage?: {
+    bucket: string;
+    path: string;
+  } | null;
   exportFormat?: "json_manifest" | "pdf";
   exportId: string;
   exportedAt: string;
   exportedByUserId?: string | null;
   exportedByProfileId: string;
   familyId: string;
+  pdfArtifact?: {
+    bytesSize: number;
+    generatedAt: string;
+    hash: string;
+    hashAlgorithm?: string;
+    storageBucket: string;
+    storagePath: string;
+  } | null;
   receiptSignature?: {
     algorithm: string;
     signingKeyId?: string | null;
@@ -305,7 +336,7 @@ export const stableStringifyForIntegrity = (value: unknown) =>
 
 const digestHex = async (
   algorithm: AlgorithmIdentifier,
-  value: string,
+  value: string | BufferSource,
   mode: "digest" | "sign",
   key?: CryptoKey,
 ) => {
@@ -316,8 +347,15 @@ const digestHex = async (
 
   const buffer =
     mode === "digest"
-      ? await subtle.digest(algorithm, encodeUtf8(value))
-      : await subtle.sign(algorithm, key!, encodeUtf8(value));
+      ? await subtle.digest(
+          algorithm,
+          typeof value === "string" ? encodeUtf8(value) : value,
+        )
+      : await subtle.sign(
+          algorithm,
+          key!,
+          typeof value === "string" ? encodeUtf8(value) : value,
+        );
 
   return Array.from(new Uint8Array(buffer))
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -325,6 +363,9 @@ const digestHex = async (
 };
 
 export const sha256Hex = async (value: string) =>
+  digestHex(HASH_ALGORITHM_LABEL, value, "digest");
+
+export const sha256HexFromBytes = async (value: BufferSource) =>
   digestHex(HASH_ALGORITHM_LABEL, value, "digest");
 
 const importLegacyReceiptSignatureKey = async (secret: string) => {
@@ -484,7 +525,9 @@ const getVerificationNotes = () => [
   "Generated from server-authoritative thread records scoped to the selected family.",
   "The canonical content hash covers the normalized record payload only. Export metadata is hashed separately in the receipt layers.",
   "The paired JSON evidence package includes the canonical payload string and receipt metadata required for later verification.",
-  "The receipt signature covers the export receipt metadata, not the rendered PDF bytes.",
+  "The server-signed export receipt covers the canonical record hash, manifest hash, JSON evidence-package hash, and exact PDF artifact hash.",
+  "The exact PDF artifact hash is computed from the final server-generated PDF bytes after rendering.",
+  "The PDF file does not contain an embedded Acrobat-style digital signature. Verification is performed against the stored server-signed receipt.",
   "This export is tamper-evident evidence support. It is not notarization, legal certification, or legal advice.",
 ];
 
@@ -505,12 +548,14 @@ const getArtifactPayloadJson = (options: {
 
 export const buildMessagingThreadExportPackage = async ({
   applicationBuildId = null,
+  artifactStorage = null,
   exportFormat = "pdf",
   exportId,
   exportedAt,
   exportedByUserId = null,
   exportedByProfileId,
   familyId,
+  pdfArtifact = null,
   receiptSignature = null,
   thread,
   timelineItems,
@@ -625,6 +670,14 @@ export const buildMessagingThreadExportPackage = async ({
       .filter((entry) => entry.kind === "system")
       .map((entry) => entry.entry_id),
     included_timeline_entry_ids: canonicalEntries.map((entry) => entry.entry_id),
+    artifact_storage_bucket: artifactStorage?.bucket ?? null,
+    artifact_storage_path: artifactStorage?.path ?? null,
+    pdf_hash_algorithm: pdfArtifact?.hashAlgorithm ?? null,
+    pdf_artifact_hash: pdfArtifact?.hash ?? null,
+    pdf_bytes_size: pdfArtifact?.bytesSize ?? null,
+    pdf_generated_at: pdfArtifact?.generatedAt ?? null,
+    pdf_storage_bucket: pdfArtifact?.storageBucket ?? null,
+    pdf_storage_path: pdfArtifact?.storagePath ?? null,
     verification_notes: verificationNotes,
   };
 
@@ -666,6 +719,15 @@ export const buildMessagingThreadExportPackage = async ({
     artifact_hash_algorithm: MESSAGING_THREAD_EXPORT_HASH_ALGORITHM,
     artifact_hash: artifactHash,
     artifact_type: MESSAGING_THREAD_EXPORT_ARTIFACT_TYPE,
+    artifact_storage_bucket: artifactStorage?.bucket ?? null,
+    artifact_storage_path: artifactStorage?.path ?? null,
+    pdf_hash_algorithm: pdfArtifact?.hashAlgorithm ?? null,
+    pdf_artifact_hash: pdfArtifact?.hash ?? null,
+    pdf_artifact_type: pdfArtifact ? MESSAGING_THREAD_EXPORT_PDF_ARTIFACT_TYPE : null,
+    pdf_bytes_size: pdfArtifact?.bytesSize ?? null,
+    pdf_generated_at: pdfArtifact?.generatedAt ?? null,
+    pdf_storage_bucket: pdfArtifact?.storageBucket ?? null,
+    pdf_storage_path: pdfArtifact?.storagePath ?? null,
     signing_key_id: receiptSignature?.signingKeyId ?? null,
   };
 

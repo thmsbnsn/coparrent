@@ -97,8 +97,135 @@ const messagingMockState = vi.hoisted(() => ({
   },
 }));
 
-const supabaseMockState = vi.hoisted(() => ({
-  invoke: vi.fn(async (_name: string, payload?: { body?: Record<string, unknown> }) => {
+const supabaseMockState = vi.hoisted(() => {
+  const listExportRecord = {
+    artifact_hash: "artifact-hash-123",
+    artifact_hash_algorithm: "sha256",
+    artifact_type: "json_evidence_package",
+    canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
+    content_hash: "hash-123",
+    export_format: "pdf",
+    exported_at: "2026-03-30T14:00:00.000Z",
+    family_id: "family-1",
+    hash_algorithm: "sha256",
+    id: "export-record-1",
+    integrity_model_version: "coparrent.messaging-thread-export-receipt/v4",
+    manifest_hash: "manifest-hash-123",
+    manifest_hash_algorithm: "sha256",
+    pdf_artifact_hash: "pdf-hash-123",
+    pdf_hash_algorithm: "sha256",
+    pdf_bytes_size: 2048,
+    pdf_generated_at: "2026-03-30T14:00:00.000Z",
+    record_count: 3,
+    signature_algorithm: "ed25519",
+    signing_key_id: "messaging-export-key-v1",
+    signature_present: true,
+    thread_display_name: "Jessica Morgan",
+    thread_id: "direct-thread-jessica",
+    thread_type: "direct_message",
+    total_messages: 2,
+    total_system_events: 1,
+  };
+
+  const buildVerificationData = (
+    verificationMode:
+      | "provided_package_json"
+      | "provided_pdf_artifact"
+      | "stored_pdf_artifact"
+      | "stored_signature"
+      | "stored_source",
+    status:
+      | "artifact_not_found"
+      | "artifact_hash_unavailable"
+      | "match"
+      | "mismatch"
+      | "not_authorized"
+      | "pdf_hash_unavailable"
+      | "receipt_not_found"
+      | "signature_invalid"
+      | "verification_not_supported" = "match",
+  ) => {
+    const isPdfVerification =
+      verificationMode === "provided_pdf_artifact" || verificationMode === "stored_pdf_artifact";
+    const isMismatch = status === "mismatch";
+    const computedHash = isPdfVerification ? "pdf-hash-123" : "hash-123";
+
+    return {
+      computed_hash: computedHash,
+      export: {
+        ...listExportRecord,
+        record_count: 1,
+        total_messages: 1,
+        total_system_events: 0,
+      },
+      status,
+      stored_hash: isPdfVerification ? "pdf-hash-123" : "hash-123",
+      verification_layers: {
+        artifact_hash: {
+          algorithm: "sha256",
+          computed: "artifact-hash-123",
+          label: "JSON evidence package hash",
+          matches: !isMismatch,
+          note: isMismatch ? "The uploaded evidence package does not match the stored receipt." : null,
+          status: isMismatch ? "mismatch" : "match",
+          stored: "artifact-hash-123",
+        },
+        canonical_content_hash: {
+          algorithm: "sha256",
+          computed: isMismatch ? "hash-999" : "hash-123",
+          label: "Canonical content hash",
+          matches: !isMismatch,
+          note: isMismatch ? "The canonical record content no longer matches the stored receipt." : null,
+          status: isMismatch ? "mismatch" : "match",
+          stored: "hash-123",
+        },
+        manifest_hash: {
+          algorithm: "sha256",
+          computed: isMismatch ? "manifest-hash-999" : "manifest-hash-123",
+          label: "Manifest hash",
+          matches: !isMismatch,
+          note: isMismatch ? "The manifest hash no longer matches the stored receipt." : null,
+          status: isMismatch ? "mismatch" : "match",
+          stored: "manifest-hash-123",
+        },
+        pdf_artifact_hash: {
+          algorithm: "sha256",
+          computed: isMismatch ? "pdf-hash-999" : "pdf-hash-123",
+          label: "PDF artifact hash",
+          matches: !isMismatch,
+          note: isMismatch
+            ? "The checked PDF hash does not match the stored receipt."
+            : "The stored PDF artifact still matches the server-signed receipt.",
+          status: isMismatch ? "mismatch" : "match",
+          stored: "pdf-hash-123",
+        },
+        receipt_signature: {
+          algorithm: "ed25519",
+          note: isMismatch
+            ? "The stored export receipt signature is still valid, but one or more hashes do not match."
+            : "The stored export receipt server signature is valid.",
+          present: true,
+          status: "match",
+          valid: true,
+        },
+      },
+      verification_mode: verificationMode,
+    };
+  };
+
+  return {
+    exportList: [listExportRecord],
+    verificationOverride: null as
+      | {
+          data: unknown;
+          error: null;
+        }
+      | {
+          data: null;
+          error: unknown;
+        }
+      | null,
+    invoke: vi.fn(async (_name: string, payload?: { body?: Record<string, unknown> }) => {
     const body = payload?.body;
     if (body?.action === "create") {
       return {
@@ -144,7 +271,7 @@ const supabaseMockState = vi.hoisted(() => ({
             },
             manifest: {},
             manifest_json: "{\"manifest\":true}",
-            package_schema_version: "coparrent.messaging-thread-export-package/v3",
+            package_schema_version: "coparrent.messaging-thread-export-package/v4",
             receipt: {},
             verification_instructions: ["note-1"],
           },
@@ -160,9 +287,13 @@ const supabaseMockState = vi.hoisted(() => ({
             family_id: "family-1",
             hash_algorithm: "sha256",
             id: "export-record-1",
-            integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
+            integrity_model_version: "coparrent.messaging-thread-export-receipt/v4",
             manifest_hash: "manifest-hash-123",
             manifest_hash_algorithm: "sha256",
+            pdf_artifact_hash: "pdf-hash-123",
+            pdf_hash_algorithm: "sha256",
+            pdf_bytes_size: 2048,
+            pdf_generated_at: "2026-03-30T14:00:00.000Z",
             record_count: 1,
             signature_algorithm: "ed25519",
             signing_key_id: "messaging-export-key-v1",
@@ -181,10 +312,18 @@ const supabaseMockState = vi.hoisted(() => ({
             export_format: "pdf",
             exported_by_profile_id: "my-profile",
             family_id: "family-1",
-            integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
+            integrity_model_version: "coparrent.messaging-thread-export-receipt/v4",
             included_message_ids: ["direct-message-1"],
             included_system_event_ids: [],
             included_timeline_entry_ids: ["direct-message-1"],
+            artifact_storage_bucket: "court-export-artifacts",
+            artifact_storage_path: "families/family-1/threads/direct-thread-jessica/exports/export-record-1/direct-thread-jessica-export-record-1-evidence-package.json",
+            pdf_artifact_hash: "pdf-hash-123",
+            pdf_hash_algorithm: "sha256",
+            pdf_bytes_size: 2048,
+            pdf_generated_at: "2026-03-30T14:00:00.000Z",
+            pdf_storage_bucket: "court-export-artifacts",
+            pdf_storage_path: "families/family-1/threads/direct-thread-jessica/exports/export-record-1/direct-thread-jessica-export-record-1.pdf",
             record_end: "2026-03-30T10:45:00.000Z",
             record_start: "2026-03-30T10:45:00.000Z",
             schema_version: "coparrent.messaging-thread-export/v3",
@@ -203,6 +342,8 @@ const supabaseMockState = vi.hoisted(() => ({
             artifact_hash: "artifact-hash-123",
             artifact_hash_algorithm: "sha256",
             artifact_type: "json_evidence_package",
+            artifact_storage_bucket: "court-export-artifacts",
+            artifact_storage_path: "families/family-1/threads/direct-thread-jessica/exports/export-record-1/direct-thread-jessica-export-record-1-evidence-package.json",
             canonical_content_hash: "hash-123",
             canonical_hash_algorithm: "sha256",
             canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
@@ -210,10 +351,17 @@ const supabaseMockState = vi.hoisted(() => ({
             export_format: "pdf",
             exported_at: "2026-03-30T14:00:00.000Z",
             family_id: "family-1",
-            integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
+            integrity_model_version: "coparrent.messaging-thread-export-receipt/v4",
             signing_key_id: "messaging-export-key-v1",
             manifest_hash: "manifest-hash-123",
             manifest_hash_algorithm: "sha256",
+            pdf_artifact_hash: "pdf-hash-123",
+            pdf_artifact_type: "server_generated_pdf_artifact",
+            pdf_bytes_size: 2048,
+            pdf_generated_at: "2026-03-30T14:00:00.000Z",
+            pdf_hash_algorithm: "sha256",
+            pdf_storage_bucket: "court-export-artifacts",
+            pdf_storage_path: "families/family-1/threads/direct-thread-jessica/exports/export-record-1/direct-thread-jessica-export-record-1.pdf",
             receipt_signature: "signature-123",
             receipt_signature_algorithm: "ed25519",
             record_count: 1,
@@ -228,78 +376,72 @@ const supabaseMockState = vi.hoisted(() => ({
             total_messages: 1,
             total_system_events: 0,
           },
+          pdf_artifact: {
+            base64: "JVBERi0xLjQKJUZBS0U=",
+            bytes_size: 2048,
+            content_type: "application/pdf",
+            file_name: "messages-export-record-1.pdf",
+            generated_at: "2026-03-30T14:00:00.000Z",
+            hash: "pdf-hash-123",
+            hash_algorithm: "sha256",
+          },
+        },
+        error: null,
+      };
+    }
+
+    if (body?.action === "download") {
+      return {
+        data: {
+          artifact: {
+            base64:
+              body.artifact_kind === "pdf"
+                ? "JVBERi0xLjQKJUZBS0U="
+                : "eyJlZmlkZW5jZSI6dHJ1ZX0=",
+            bytes_size: body.artifact_kind === "pdf" ? 2048 : 128,
+            content_type:
+              body.artifact_kind === "pdf"
+                ? "application/pdf"
+                : "application/json;charset=utf-8",
+            file_name:
+              body.artifact_kind === "pdf"
+                ? "messages-export-record-1.pdf"
+                : "messages-export-record-1-evidence-package.json",
+            hash: body.artifact_kind === "pdf" ? "pdf-hash-123" : "artifact-hash-123",
+            hash_algorithm: "sha256",
+            kind: body.artifact_kind,
+          },
+          export: {
+            id: "export-record-1",
+          },
         },
         error: null,
       };
     }
 
     if (body?.action === "verify") {
+      const verificationMode =
+        (body.verification_mode as
+          | "provided_package_json"
+          | "provided_pdf_artifact"
+          | "stored_pdf_artifact"
+          | "stored_signature"
+          | "stored_source"
+          | undefined) ?? "stored_source";
+      const computedHash =
+        verificationMode === "provided_pdf_artifact" ||
+        verificationMode === "stored_pdf_artifact"
+          ? "pdf-hash-123"
+          : "hash-123";
+
+      if (supabaseMockState.verificationOverride) {
+        return supabaseMockState.verificationOverride;
+      }
+
       return {
         data: {
-          computed_hash: "hash-123",
-          export: {
-            artifact_hash: "artifact-hash-123",
-            artifact_hash_algorithm: "sha256",
-            artifact_type: "json_evidence_package",
-            canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
-            content_hash: "hash-123",
-            export_format: "pdf",
-            exported_at: "2026-03-30T14:00:00.000Z",
-            family_id: "family-1",
-            hash_algorithm: "sha256",
-            id: "export-record-1",
-            integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
-            manifest_hash: "manifest-hash-123",
-            manifest_hash_algorithm: "sha256",
-            record_count: 1,
-            signature_algorithm: "ed25519",
-            signing_key_id: "messaging-export-key-v1",
-            signature_present: true,
-            thread_display_name: "Jessica Morgan",
-            thread_id: "direct-thread-jessica",
-            thread_type: "direct_message",
-            total_messages: 1,
-            total_system_events: 0,
-          },
-          status: "match",
-          stored_hash: "hash-123",
-          verification_layers: {
-            artifact_hash: {
-              algorithm: "sha256",
-              computed: "artifact-hash-123",
-              label: "JSON evidence package hash",
-              matches: true,
-              note: null,
-              status: "match",
-              stored: "artifact-hash-123",
-            },
-            canonical_content_hash: {
-              algorithm: "sha256",
-              computed: "hash-123",
-              label: "Canonical content hash",
-              matches: true,
-              note: null,
-              status: "match",
-              stored: "hash-123",
-            },
-            manifest_hash: {
-              algorithm: "sha256",
-              computed: "manifest-hash-123",
-              label: "Manifest hash",
-              matches: true,
-              note: null,
-              status: "match",
-              stored: "manifest-hash-123",
-            },
-            receipt_signature: {
-              algorithm: "ed25519",
-              note: "The stored export receipt server signature is valid.",
-              present: true,
-              status: "match",
-              valid: true,
-            },
-          },
-          verification_mode: "stored_source",
+          ...buildVerificationData(verificationMode),
+          computed_hash: computedHash,
         },
         error: null,
       };
@@ -307,37 +449,13 @@ const supabaseMockState = vi.hoisted(() => ({
 
     return {
       data: {
-        exports: [
-          {
-            artifact_hash: "artifact-hash-123",
-            artifact_hash_algorithm: "sha256",
-            artifact_type: "json_evidence_package",
-            canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
-            content_hash: "hash-123",
-            export_format: "pdf",
-            exported_at: "2026-03-30T14:00:00.000Z",
-            family_id: "family-1",
-            hash_algorithm: "sha256",
-            id: "export-record-1",
-            integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
-            manifest_hash: "manifest-hash-123",
-            manifest_hash_algorithm: "sha256",
-            record_count: 3,
-            signature_algorithm: "ed25519",
-            signing_key_id: "messaging-export-key-v1",
-            signature_present: true,
-            thread_display_name: "Jessica Morgan",
-            thread_id: "direct-thread-jessica",
-            thread_type: "direct_message",
-            total_messages: 2,
-            total_system_events: 1,
-          },
-        ],
+        exports: supabaseMockState.exportList,
       },
       error: null,
     };
-  }),
-}));
+    }),
+  };
+});
 
 vi.mock("framer-motion", () => ({
   motion: {
@@ -661,13 +779,62 @@ vi.mock("jspdf-autotable", () => ({
 describe("MessagingHubPage", () => {
   let container: HTMLDivElement | null = null;
   let root: Root | null = null;
+  const createObjectUrl = vi.fn(() => "blob:mock");
+  const revokeObjectUrl = vi.fn();
+  const clipboardWriteText = vi.fn(async () => undefined);
 
   beforeEach(() => {
     messagingMockState.activeFamilyId = "family-1";
     messagingMockState.mockScenario.mode = "interactive";
     messagingMockState.viewport.isMobile = false;
+    supabaseMockState.exportList = [
+      {
+        artifact_hash: "artifact-hash-123",
+        artifact_hash_algorithm: "sha256",
+        artifact_type: "json_evidence_package",
+        canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
+        content_hash: "hash-123",
+        export_format: "pdf",
+        exported_at: "2026-03-30T14:00:00.000Z",
+        family_id: "family-1",
+        hash_algorithm: "sha256",
+        id: "export-record-1",
+        integrity_model_version: "coparrent.messaging-thread-export-receipt/v4",
+        manifest_hash: "manifest-hash-123",
+        manifest_hash_algorithm: "sha256",
+        pdf_artifact_hash: "pdf-hash-123",
+        pdf_hash_algorithm: "sha256",
+        pdf_bytes_size: 2048,
+        pdf_generated_at: "2026-03-30T14:00:00.000Z",
+        record_count: 3,
+        signature_algorithm: "ed25519",
+        signing_key_id: "messaging-export-key-v1",
+        signature_present: true,
+        thread_display_name: "Jessica Morgan",
+        thread_id: "direct-thread-jessica",
+        thread_type: "direct_message",
+        total_messages: 2,
+        total_system_events: 1,
+      },
+    ];
+    supabaseMockState.verificationOverride = null;
     supabaseMockState.invoke.mockClear();
+    clipboardWriteText.mockClear();
     vi.useFakeTimers();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: clipboardWriteText,
+      },
+    });
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectUrl,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectUrl,
+    });
   });
 
   afterEach(() => {
@@ -697,6 +864,22 @@ describe("MessagingHubPage", () => {
     });
 
     return container;
+  };
+
+  const findButton = (rendered: HTMLDivElement, text: string) =>
+    Array.from(rendered.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes(text),
+    ) as HTMLButtonElement | undefined;
+
+  const openVerifyDialog = async (rendered: HTMLDivElement) => {
+    const verifyReceiptButton = findButton(rendered, "Verify receipt");
+    expect(verifyReceiptButton).toBeTruthy();
+
+    await act(async () => {
+      verifyReceiptButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
   };
 
   it("opens an existing direct-message thread as a loading recorded thread instead of a fresh chat state", async () => {
@@ -771,13 +954,201 @@ describe("MessagingHubPage", () => {
     ).toBe(false);
   });
 
-  it("shows the stored export receipt context instead of a generic export strip", async () => {
+  it("renders the export receipt panel with latest receipt metadata and safe wording", async () => {
     const rendered = await renderPage();
 
-    expect(rendered.textContent).toContain("Tamper-evident export receipts");
-    expect(rendered.textContent).toContain("Latest receipt export-r… recorded for this thread");
-    expect(rendered.textContent).toContain("canonical hash");
+    expect(rendered.textContent).toContain("Export Receipt");
+    expect(rendered.textContent).toContain("Status unknown");
+    expect(rendered.textContent).toContain("Latest export receipt recorded Mar 30, 2026");
     expect(rendered.textContent).toContain("Receipt ID");
-    expect(rendered.textContent).toContain("Signing key");
+    expect(rendered.textContent).toContain("PDF Hash");
+    expect(rendered.textContent).toContain("messaging-export-key-v1");
+    expect(rendered.textContent).toContain("Copy hash");
+    expect(rendered.textContent).toContain("Copy receipt ID");
+    expect(rendered.textContent).toContain("The exact PDF bytes are generated on the server");
+    expect(rendered.textContent).toContain("does not contain an embedded Acrobat-style digital signature");
+    expect(rendered.textContent).not.toContain("notarized");
+    expect(rendered.textContent).not.toContain("court-certified");
+    expect(rendered.textContent).not.toContain("signed PDF");
+  });
+
+  it("shows a clean empty receipt state when no export has been created yet", async () => {
+    supabaseMockState.exportList = [];
+    const rendered = await renderPage();
+
+    expect(rendered.textContent).toContain("No export receipt recorded for this thread");
+    expect(rendered.textContent).toContain("No receipt yet");
+  });
+
+  it("fails explicitly in the receipt panel when family scope is missing", async () => {
+    messagingMockState.activeFamilyId = null;
+    const rendered = await renderPage();
+
+    expect(rendered.textContent).toContain("Family scope required");
+    expect(rendered.textContent).toContain("Messaging export actions require explicit family scope");
+  });
+
+  it("copies the PDF hash with explicit feedback", async () => {
+    const rendered = await renderPage();
+    const copyHashButton = rendered.querySelector('button[aria-label="Copy PDF hash"]') as HTMLButtonElement | null;
+
+    expect(copyHashButton).toBeTruthy();
+
+    await act(async () => {
+      copyHashButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(clipboardWriteText).toHaveBeenCalledWith("pdf-hash-123");
+    expect(copyHashButton?.textContent).toContain("Copied");
+  });
+
+  it("renders a clear verified state with a human-readable explanation", async () => {
+    const rendered = await renderPage();
+    await openVerifyDialog(rendered);
+    const verifyStoredPdfButton = findButton(rendered, "Verify stored PDF artifact");
+
+    expect(verifyStoredPdfButton).toBeTruthy();
+
+    await act(async () => {
+      verifyStoredPdfButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(supabaseMockState.invoke).toHaveBeenCalledWith(
+      "messaging-thread-export",
+      expect.objectContaining({
+        body: expect.objectContaining({
+          action: "verify",
+          export_id: "export-record-1",
+          family_id: "family-1",
+          verification_mode: "stored_pdf_artifact",
+        }),
+      }),
+    );
+    expect(rendered.textContent).toContain("Verified");
+    expect(rendered.textContent).toContain("Verification match. The stored PDF artifact still matches the stored export receipt.");
+    expect(rendered.textContent).toContain("Raw result: match");
+  });
+
+  it("renders a clear mismatch explanation for PDF verification", async () => {
+    supabaseMockState.verificationOverride = {
+      data: {
+        computed_hash: "pdf-hash-999",
+        export: {
+          ...supabaseMockState.exportList[0],
+        },
+        status: "mismatch",
+        stored_hash: "pdf-hash-123",
+        verification_layers: {
+          artifact_hash: {
+            algorithm: "sha256",
+            computed: "artifact-hash-123",
+            label: "JSON evidence package hash",
+            matches: true,
+            note: null,
+            status: "match",
+            stored: "artifact-hash-123",
+          },
+          canonical_content_hash: {
+            algorithm: "sha256",
+            computed: "hash-123",
+            label: "Canonical content hash",
+            matches: true,
+            note: null,
+            status: "match",
+            stored: "hash-123",
+          },
+          manifest_hash: {
+            algorithm: "sha256",
+            computed: "manifest-hash-123",
+            label: "Manifest hash",
+            matches: true,
+            note: null,
+            status: "match",
+            stored: "manifest-hash-123",
+          },
+          pdf_artifact_hash: {
+            algorithm: "sha256",
+            computed: "pdf-hash-999",
+            label: "PDF artifact hash",
+            matches: false,
+            note: "The checked PDF hash does not match the stored receipt.",
+            status: "mismatch",
+            stored: "pdf-hash-123",
+          },
+          receipt_signature: {
+            algorithm: "ed25519",
+            note: "The stored export receipt server signature is valid.",
+            present: true,
+            status: "match",
+            valid: true,
+          },
+        },
+        verification_mode: "stored_pdf_artifact",
+      },
+      error: null,
+    };
+
+    const rendered = await renderPage();
+    await openVerifyDialog(rendered);
+    const verifyStoredPdfButton = findButton(rendered, "Verify stored PDF artifact");
+
+    await act(async () => {
+      verifyStoredPdfButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(rendered.textContent).toContain(
+      "Verification mismatch. The file does not match the stored export receipt and may have been altered.",
+    );
+    expect(rendered.textContent).toContain("Raw result: mismatch");
+  });
+
+  it("renders human-readable not-authorized verification feedback", async () => {
+    supabaseMockState.verificationOverride = {
+      data: null,
+      error: {
+        context: new Response(
+          JSON.stringify({
+            error: "You do not have permission to verify this export.",
+            status: "not_authorized",
+          }),
+          {
+            headers: {
+              "Content-Type": "application/json",
+            },
+            status: 403,
+          },
+        ),
+        message: "Edge Function returned a non-2xx status code",
+      },
+    };
+
+    const rendered = await renderPage();
+    await openVerifyDialog(rendered);
+    const verifyCurrentRecordButton = findButton(rendered, "Verify current server record");
+
+    await act(async () => {
+      verifyCurrentRecordButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(rendered.textContent).toContain("Verification blocked");
+    expect(rendered.textContent).toContain("You do not have permission to verify this export.");
+    expect(rendered.textContent).toContain("Raw result: not_authorized");
+  });
+
+  it("keeps the export receipt surface readable on mobile", async () => {
+    messagingMockState.viewport.isMobile = true;
+    const rendered = await renderPage();
+
+    expect(rendered.textContent).toContain("Export Receipt");
+    expect(rendered.textContent).toContain("Copy hash");
+    expect(rendered.textContent).toContain("Latest export receipt recorded");
   });
 });

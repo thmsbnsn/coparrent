@@ -7,8 +7,46 @@ type JsonRecord = Record<string, unknown>;
 interface TestState {
   authUsers: Record<string, { id: string } | null>;
   rpcCalls: Array<{ args: JsonRecord; name: string }>;
+  storageDownloads: Array<{ bucket: string; path: string }>;
+  storageObjects: Map<string, { contentType: string; data: Uint8Array }>;
+  storageUploads: Array<{
+    bucket: string;
+    contentType: string | null;
+    path: string;
+    upsert: boolean;
+  }>;
   tables: Record<string, JsonRecord[]>;
 }
+
+const storageKey = (bucket: string, path: string) => `${bucket}:${path}`;
+
+const textEncoder = new TextEncoder();
+
+const encodeStoragePayload = async (
+  value: Blob | File | Uint8Array | ArrayBuffer | ArrayBufferView | string,
+) => {
+  if (typeof value === "string") {
+    return textEncoder.encode(value);
+  }
+
+  if (value instanceof Uint8Array) {
+    return value;
+  }
+
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return new Uint8Array(value);
+  }
+
+  if (value && typeof (value as Blob).arrayBuffer === "function") {
+    return new Uint8Array(await (value as Blob).arrayBuffer());
+  }
+
+  throw new TypeError("Unsupported storage payload type in messaging export test harness.");
+};
 
 class MockQueryBuilder {
   private filters: Array<(row: JsonRecord) => boolean> = [];
@@ -138,6 +176,57 @@ class MockSupabaseClient {
     },
   };
 
+  storage = {
+    from: (bucket: string) => ({
+      download: async (path: string) => {
+        this.state.storageDownloads.push({ bucket, path });
+        const stored = this.state.storageObjects.get(storageKey(bucket, path));
+        if (!stored) {
+          return {
+            data: null,
+            error: new Error("Object not found"),
+          };
+        }
+
+        return {
+          data: new Blob([stored.data], { type: stored.contentType }),
+          error: null,
+        };
+      },
+      upload: async (
+        path: string,
+        payload: Blob | File | Uint8Array,
+        options?: { contentType?: string; upsert?: boolean },
+      ) => {
+        const upsert = options?.upsert ?? false;
+        const key = storageKey(bucket, path);
+        this.state.storageUploads.push({
+          bucket,
+          contentType: options?.contentType ?? null,
+          path,
+          upsert,
+        });
+
+        if (!upsert && this.state.storageObjects.has(key)) {
+          return {
+            data: null,
+            error: new Error("The resource already exists"),
+          };
+        }
+
+        this.state.storageObjects.set(key, {
+          contentType: options?.contentType ?? "application/octet-stream",
+          data: await encodeStoragePayload(payload),
+        });
+
+        return {
+          data: { path },
+          error: null,
+        };
+      },
+    }),
+  };
+
   from(tableName: string) {
     const ensureTable = () => {
       if (!this.state.tables[tableName]) {
@@ -184,6 +273,9 @@ const buildState = (): TestState => ({
     "parent-token": { id: "user-1" },
   },
   rpcCalls: [],
+  storageDownloads: [],
+  storageObjects: new Map(),
+  storageUploads: [],
   tables: {
     call_events: [],
     call_sessions: [],
@@ -376,8 +468,9 @@ describe("messaging-thread-export", () => {
       artifact_hash: expect.any(String),
       canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
       family_id: "family-1",
-      integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
+      integrity_model_version: "coparrent.messaging-thread-export-receipt/v4",
       manifest_hash: expect.any(String),
+      pdf_artifact_hash: expect.any(String),
       record_count: 3,
       signing_key_id: "messaging-export-key-v1",
       signature_present: true,
@@ -385,9 +478,13 @@ describe("messaging-thread-export", () => {
       thread_id: "thread-direct-jessica",
     });
     expect(body.manifest).toMatchObject({
+      artifact_storage_bucket: "court-export-artifacts",
       canonicalization_version: "coparrent.messaging-thread-export-canonical/v2",
       family_id: "family-1",
-      integrity_model_version: "coparrent.messaging-thread-export-receipt/v3",
+      integrity_model_version: "coparrent.messaging-thread-export-receipt/v4",
+      pdf_artifact_hash: expect.any(String),
+      pdf_hash_algorithm: "sha256",
+      pdf_storage_bucket: "court-export-artifacts",
       thread_id: "thread-direct-jessica",
       total_entries: 3,
       total_messages: 2,
@@ -395,17 +492,44 @@ describe("messaging-thread-export", () => {
     });
     expect(body.receipt).toMatchObject({
       artifact_hash: expect.any(String),
+      artifact_storage_bucket: "court-export-artifacts",
       canonical_content_hash: body.export.content_hash,
       created_by_user_id: "user-1",
+      pdf_artifact_hash: expect.any(String),
+      pdf_artifact_type: "server_generated_pdf_artifact",
+      pdf_hash_algorithm: "sha256",
+      pdf_storage_bucket: "court-export-artifacts",
       manifest_hash: body.export.manifest_hash,
       receipt_signature: expect.any(String),
       receipt_signature_algorithm: "ed25519",
       signing_key_id: "messaging-export-key-v1",
     });
+    expect(body.pdf_artifact).toMatchObject({
+      base64: expect.any(String),
+      content_type: "application/pdf",
+      hash: expect.any(String),
+      hash_algorithm: "sha256",
+    });
+    expect(body.pdf_artifact.hash).toBe(body.export.pdf_artifact_hash);
+    expect(body.export.pdf_artifact_hash).not.toBe(body.export.content_hash);
     expect(body.canonical_payload.family_id).toBe("family-1");
     expect(body.canonical_payload.entries).toHaveLength(3);
     expect(body.evidence_package_json).toContain("\"receipt\"");
     expect(state.tables.court_exports).toHaveLength(1);
+    expect(state.storageUploads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          bucket: "court-export-artifacts",
+          contentType: "application/json; charset=utf-8",
+          upsert: false,
+        }),
+        expect.objectContaining({
+          bucket: "court-export-artifacts",
+          contentType: "application/pdf",
+          upsert: false,
+        }),
+      ]),
+    );
     expect(state.rpcCalls.some((call) => call.args._action === "COURT_EXPORT_CREATED")).toBe(true);
   });
 
@@ -668,5 +792,154 @@ describe("messaging-thread-export", () => {
       },
       verification_mode: "stored_signature",
     });
+  });
+
+  it("verifies the stored PDF artifact against the stored receipt", async () => {
+    const createResponse = await handler(
+      buildRequest(
+        {
+          action: "create",
+          family_id: "family-1",
+          thread_id: "thread-direct-jessica",
+        },
+        "parent-token",
+      ),
+    );
+    const createBody = await createResponse.json();
+
+    const verifyResponse = await handler(
+      buildRequest(
+        {
+          action: "verify",
+          export_id: createBody.export.id,
+          family_id: "family-1",
+          verification_mode: "stored_pdf_artifact",
+        },
+        "parent-token",
+      ),
+    );
+
+    expect(verifyResponse.status).toBe(200);
+    await expect(verifyResponse.json()).resolves.toMatchObject({
+      status: "match",
+      success: true,
+      verification_layers: {
+        pdf_artifact_hash: expect.objectContaining({ status: "match" }),
+        receipt_signature: expect.objectContaining({ status: "match", valid: true }),
+      },
+      verification_mode: "stored_pdf_artifact",
+    });
+    expect(state.storageDownloads.some((download) => download.path.endsWith(".pdf"))).toBe(true);
+  });
+
+  it("returns a mismatch when uploaded PDF bytes no longer match the stored receipt hash", async () => {
+    const createResponse = await handler(
+      buildRequest(
+        {
+          action: "create",
+          family_id: "family-1",
+          thread_id: "thread-direct-jessica",
+        },
+        "parent-token",
+      ),
+    );
+    const createBody = await createResponse.json();
+    const originalPdfBytes = Buffer.from(createBody.pdf_artifact.base64, "base64");
+    const tamperedPdfBytes = Buffer.from(originalPdfBytes);
+    tamperedPdfBytes[tamperedPdfBytes.length - 1] =
+      (tamperedPdfBytes[tamperedPdfBytes.length - 1] + 1) % 255;
+
+    const verifyResponse = await handler(
+      buildRequest(
+        {
+          action: "verify",
+          export_id: createBody.export.id,
+          family_id: "family-1",
+          provided_pdf_base64: tamperedPdfBytes.toString("base64"),
+          verification_mode: "provided_pdf_artifact",
+        },
+        "parent-token",
+      ),
+    );
+
+    expect(verifyResponse.status).toBe(200);
+    await expect(verifyResponse.json()).resolves.toMatchObject({
+      status: "mismatch",
+      success: true,
+      verification_layers: {
+        pdf_artifact_hash: expect.objectContaining({ status: "mismatch" }),
+        receipt_signature: expect.objectContaining({ status: "match", valid: true }),
+      },
+      verification_mode: "provided_pdf_artifact",
+    });
+  });
+
+  it("denies stored PDF verification when the requester is not authorized for the direct thread", async () => {
+    const createResponse = await handler(
+      buildRequest(
+        {
+          action: "create",
+          family_id: "family-1",
+          thread_id: "thread-direct-jessica",
+        },
+        "parent-token",
+      ),
+    );
+    const createBody = await createResponse.json();
+
+    const verifyResponse = await handler(
+      buildRequest(
+        {
+          action: "verify",
+          export_id: createBody.export.id,
+          family_id: "family-1",
+          verification_mode: "stored_pdf_artifact",
+        },
+        "guardian-token",
+      ),
+    );
+
+    expect(verifyResponse.status).toBe(403);
+    await expect(verifyResponse.json()).resolves.toMatchObject({
+      error: "You are not authorized to access that direct thread.",
+      success: false,
+    });
+  });
+
+  it("stores each evidence artifact under a unique append-only path", async () => {
+    const firstCreate = await handler(
+      buildRequest(
+        {
+          action: "create",
+          family_id: "family-1",
+          thread_id: "thread-direct-jessica",
+        },
+        "parent-token",
+      ),
+    );
+    expect(firstCreate.status).toBe(200);
+
+    const secondCreate = await handler(
+      buildRequest(
+        {
+          action: "create",
+          family_id: "family-1",
+          thread_id: "thread-direct-jessica",
+        },
+        "parent-token",
+      ),
+    );
+    expect(secondCreate.status).toBe(200);
+
+    const pdfUploadPaths = state.storageUploads
+      .filter((upload) => upload.contentType === "application/pdf")
+      .map((upload) => upload.path);
+    const jsonUploadPaths = state.storageUploads
+      .filter((upload) => upload.contentType === "application/json; charset=utf-8")
+      .map((upload) => upload.path);
+
+    expect(new Set(pdfUploadPaths).size).toBe(2);
+    expect(new Set(jsonUploadPaths).size).toBe(2);
+    expect(state.storageUploads.every((upload) => upload.upsert === false)).toBe(true);
   });
 });

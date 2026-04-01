@@ -12,10 +12,12 @@ import {
   MESSAGING_THREAD_EXPORT_HASH_ALGORITHM,
   MESSAGING_THREAD_EXPORT_INTEGRITY_MODEL_VERSION,
   MESSAGING_THREAD_EXPORT_LEGACY_SIGNATURE_ALGORITHM,
+  MESSAGING_THREAD_EXPORT_PDF_ARTIFACT_TYPE,
   MESSAGING_THREAD_EXPORT_SCHEMA_VERSION,
   MESSAGING_THREAD_EXPORT_SIGNATURE_ALGORITHM,
   parseMessagingThreadEvidencePackage,
   sha256Hex,
+  sha256HexFromBytes,
   signMessagingThreadExportReceiptPayload,
   stableStringifyForIntegrity,
   type MessagingThreadTimelineSourceItem,
@@ -23,6 +25,7 @@ import {
   verifyLegacyMessagingThreadExportReceiptSignature,
   verifyMessagingThreadExportReceiptSignature,
 } from "../_shared/messagingThreadExportIntegrity.ts";
+import { generateMessagingThreadExportPdf } from "../_shared/messagingThreadExportPdf.ts";
 import {
   getActiveMembershipForUser,
   HttpError,
@@ -96,6 +99,10 @@ type CourtExportRow = {
   manifest_hash: string | null;
   manifest_hash_algorithm: string | null;
   manifest_json: Record<string, unknown>;
+  pdf_artifact_hash: string | null;
+  pdf_hash_algorithm: string | null;
+  pdf_bytes_size: number | null;
+  pdf_generated_at: string | null;
   record_count: number;
   record_range_end: string | null;
   record_range_start: string | null;
@@ -109,17 +116,23 @@ type CourtExportRow = {
 };
 
 type VerificationMode =
+  | "provided_pdf_artifact"
   | "provided_package_json"
+  // Deprecated backward-compat alias. This now maps to full evidence-package JSON
+  // verification and does not represent a manifest-only verification mode.
   | "provided_manifest_json"
+  | "stored_pdf_artifact"
   | "stored_signature"
   | "stored_source";
 
 type VerificationStatus =
   | "artifact_hash_unavailable"
+  | "artifact_not_found"
   | "export_not_found"
   | "match"
   | "mismatch"
   | "not_authorized"
+  | "pdf_hash_unavailable"
   | "receipt_not_found"
   | "signature_invalid"
   | "verification_not_supported";
@@ -138,10 +151,18 @@ type ExportRequest =
       thread_id?: string;
     }
   | {
+      action: "download";
+      artifact_kind?: "json_evidence_package" | "pdf";
+      export_id?: string;
+      family_id?: string;
+    }
+  | {
       action: "verify";
       export_id?: string;
       family_id?: string;
+      provided_pdf_base64?: string;
       provided_package_json?: string;
+      // Deprecated backward-compat alias for `provided_package_json`.
       provided_manifest_json?: string;
       verification_mode?: VerificationMode;
     };
@@ -276,6 +297,8 @@ const getReceiptVerificationPublicKey = (signingKeyId: string | null | undefined
   return null;
 };
 
+const COURT_EXPORT_ARTIFACT_BUCKET = "court-export-artifacts";
+
 const COURT_EXPORT_SELECT_COLUMNS = [
   "id",
   "family_id",
@@ -294,6 +317,10 @@ const COURT_EXPORT_SELECT_COLUMNS = [
   "artifact_hash_algorithm",
   "artifact_hash",
   "artifact_type",
+  "pdf_hash_algorithm",
+  "pdf_artifact_hash",
+  "pdf_bytes_size",
+  "pdf_generated_at",
   "signing_key_id",
   "receipt_signature_algorithm",
   "receipt_signature",
@@ -307,6 +334,74 @@ const COURT_EXPORT_SELECT_COLUMNS = [
 
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+
+const encodeBase64 = (value: Uint8Array) => {
+  const chunkSize = 0x8000;
+  let binary = "";
+  for (let index = 0; index < value.length; index += chunkSize) {
+    const chunk = value.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  const encoded = globalThis.btoa?.(binary);
+  if (!encoded) {
+    throw new Error("Base64 encoding is unavailable in this environment.");
+  }
+
+  return encoded;
+};
+
+const decodeBase64ToBytes = (value: string) => {
+  const normalizedValue = value.trim().replace(/\s+/g, "");
+  if (!normalizedValue) {
+    throw new HttpError(400, "A non-empty base64 artifact payload is required.");
+  }
+
+  const base64Value = normalizedValue
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .padEnd(Math.ceil(normalizedValue.length / 4) * 4, "=");
+  const binary = globalThis.atob?.(base64Value);
+  if (!binary) {
+    throw new Error("Base64 decoding is unavailable in this environment.");
+  }
+
+  return Uint8Array.from(binary, (character) => character.charCodeAt(0));
+};
+
+const sanitizeArtifactFileSegment = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "record";
+
+const buildArtifactPaths = (options: {
+  exportId: string;
+  familyId: string;
+  threadDisplayName: string;
+  threadId: string;
+}) => {
+  const safeThreadName = sanitizeArtifactFileSegment(options.threadDisplayName);
+  const pdfFileName = `${safeThreadName}-${options.exportId}.pdf`;
+  const packageFileName = `${safeThreadName}-${options.exportId}-evidence-package.json`;
+  const basePath = `families/${options.familyId}/threads/${options.threadId}/exports/${options.exportId}`;
+
+  return {
+    evidencePackage: {
+      bucket: COURT_EXPORT_ARTIFACT_BUCKET,
+      contentType: "application/json; charset=utf-8",
+      fileName: packageFileName,
+      path: `${basePath}/${packageFileName}`,
+    },
+    pdf: {
+      bucket: COURT_EXPORT_ARTIFACT_BUCKET,
+      contentType: "application/pdf",
+      fileName: pdfFileName,
+      path: `${basePath}/${pdfFileName}`,
+    },
+  };
+};
 
 async function loadThread(
   supabaseAdmin: ReturnType<typeof createClient>,
@@ -625,11 +720,23 @@ async function createExportPackage(
     options.threadDisplayName ??
     (await resolveThreadDisplayName(supabaseAdmin, options.viewerProfileId, thread));
   const timelineItems = await loadTimelineItems(supabaseAdmin, thread);
+  const exportId = options.exportId ?? crypto.randomUUID();
+  const exportedAt = options.exportedAt ?? new Date().toISOString();
+  const artifactPaths = buildArtifactPaths({
+    exportId,
+    familyId: options.familyId,
+    threadDisplayName: displayName,
+    threadId: thread.id,
+  });
   const buildArgs = {
     applicationBuildId: options.applicationBuildId ?? getApplicationBuildId(),
     exportFormat: options.exportFormat ?? "pdf",
-    exportId: options.exportId ?? crypto.randomUUID(),
-    exportedAt: options.exportedAt ?? new Date().toISOString(),
+    artifactStorage: {
+      bucket: artifactPaths.evidencePackage.bucket,
+      path: artifactPaths.evidencePackage.path,
+    },
+    exportId,
+    exportedAt,
     exportedByUserId: options.exportedByUserId ?? null,
     exportedByProfileId: options.exportedByProfileId ?? options.viewerProfileId,
     familyId: options.familyId,
@@ -641,51 +748,277 @@ async function createExportPackage(
     timelineItems,
   } as const;
 
-  let packageData = await buildMessagingThreadExportPackage(buildArgs);
+  const signingConfig = options.signReceipt
+    ? getReceiptSigningConfig({ requirePrivateKey: true })
+    : getReceiptSigningConfig();
 
-  if (!options.signReceipt) {
-    return packageData;
-  }
-
-  const signingConfig = getReceiptSigningConfig({ requirePrivateKey: true });
-  if (!signingConfig?.privateKeyPkcs8Base64) {
+  if (options.signReceipt && !signingConfig?.privateKeyPkcs8Base64) {
     throw new HttpError(
       503,
       "Messaging export receipt signing is not configured in this environment.",
     );
   }
 
+  const preSignaturePackage = await buildMessagingThreadExportPackage({
+    ...buildArgs,
+    receiptSignature: signingConfig
+      ? {
+          algorithm: MESSAGING_THREAD_EXPORT_SIGNATURE_ALGORITHM,
+          signingKeyId: signingConfig.keyId,
+          value: "",
+        }
+      : null,
+  });
+
+  const pdfArtifact =
+    buildArgs.exportFormat === "pdf"
+      ? (() => {
+          const pdfBytes = generateMessagingThreadExportPdf({
+            packageData: preSignaturePackage,
+            receiptId: exportId,
+            signingKeyId: signingConfig?.keyId ?? null,
+            signatureAlgorithm: signingConfig
+              ? MESSAGING_THREAD_EXPORT_SIGNATURE_ALGORITHM
+              : null,
+          });
+
+          return {
+            base64: encodeBase64(pdfBytes),
+            bytes: pdfBytes,
+            bytesSize: pdfBytes.byteLength,
+            contentType: artifactPaths.pdf.contentType,
+            fileName: artifactPaths.pdf.fileName,
+            generatedAt: exportedAt,
+            hash: "",
+            hashAlgorithm: MESSAGING_THREAD_EXPORT_HASH_ALGORITHM,
+            storageBucket: artifactPaths.pdf.bucket,
+            storagePath: artifactPaths.pdf.path,
+          };
+        })()
+      : null;
+
+  if (pdfArtifact) {
+    pdfArtifact.hash = await sha256HexFromBytes(pdfArtifact.bytes);
+  }
+
+  if (!options.signReceipt) {
+    return {
+      artifactPaths,
+      packageData: await buildMessagingThreadExportPackage({
+        ...buildArgs,
+        pdfArtifact:
+          pdfArtifact && {
+            bytesSize: pdfArtifact.bytesSize,
+            generatedAt: pdfArtifact.generatedAt,
+            hash: pdfArtifact.hash,
+            hashAlgorithm: pdfArtifact.hashAlgorithm,
+            storageBucket: pdfArtifact.storageBucket,
+            storagePath: pdfArtifact.storagePath,
+          },
+      }),
+      pdfArtifact,
+    };
+  }
+
   const signingReadyPackage = await buildMessagingThreadExportPackage({
     ...buildArgs,
+    pdfArtifact:
+      pdfArtifact && {
+        bytesSize: pdfArtifact.bytesSize,
+        generatedAt: pdfArtifact.generatedAt,
+        hash: pdfArtifact.hash,
+        hashAlgorithm: pdfArtifact.hashAlgorithm,
+        storageBucket: pdfArtifact.storageBucket,
+        storagePath: pdfArtifact.storagePath,
+      },
     receiptSignature: {
       algorithm: MESSAGING_THREAD_EXPORT_SIGNATURE_ALGORITHM,
-      signingKeyId: signingConfig.keyId,
+      signingKeyId: signingConfig!.keyId,
       value: "",
     },
   });
   const receiptSignature = await signMessagingThreadExportReceiptPayload(
     signingReadyPackage.receiptPayloadJson,
-    signingConfig.privateKeyPkcs8Base64,
+    signingConfig!.privateKeyPkcs8Base64!,
   );
 
-  packageData = await buildMessagingThreadExportPackage({
+  const packageData = await buildMessagingThreadExportPackage({
     ...buildArgs,
+    pdfArtifact:
+      pdfArtifact && {
+        bytesSize: pdfArtifact.bytesSize,
+        generatedAt: pdfArtifact.generatedAt,
+        hash: pdfArtifact.hash,
+        hashAlgorithm: pdfArtifact.hashAlgorithm,
+        storageBucket: pdfArtifact.storageBucket,
+        storagePath: pdfArtifact.storagePath,
+      },
     receiptSignature: {
       algorithm: MESSAGING_THREAD_EXPORT_SIGNATURE_ALGORITHM,
-      signingKeyId: signingConfig.keyId,
+      signingKeyId: signingConfig!.keyId,
       value: receiptSignature,
     },
   });
 
-  return packageData;
+  return {
+    artifactPaths,
+    packageData,
+    pdfArtifact,
+  };
+}
+
+async function storeExportArtifacts(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  options: Awaited<ReturnType<typeof createExportPackage>>,
+) {
+  const uploads: Array<{
+    bucket: string;
+    contentType: string;
+    path: string;
+    payload: Blob | Uint8Array;
+  }> = [
+    {
+      bucket: options.artifactPaths.evidencePackage.bucket,
+      contentType: options.artifactPaths.evidencePackage.contentType,
+      path: options.artifactPaths.evidencePackage.path,
+      payload: new Blob([options.packageData.evidencePackageJson], {
+        type: options.artifactPaths.evidencePackage.contentType,
+      }),
+    },
+  ];
+
+  if (options.pdfArtifact) {
+    uploads.push({
+      bucket: options.pdfArtifact.storageBucket,
+      contentType: options.pdfArtifact.contentType,
+      path: options.pdfArtifact.storagePath,
+      payload: options.pdfArtifact.bytes,
+    });
+  }
+
+  for (const upload of uploads) {
+    const { error } = await supabaseAdmin.storage.from(upload.bucket).upload(
+      upload.path,
+      upload.payload,
+      {
+        contentType: upload.contentType,
+        upsert: false,
+      },
+    );
+
+    if (error) {
+      throw new HttpError(500, error.message);
+    }
+  }
+}
+
+const getStoredArtifactPath = (
+  receipt: MessagingThreadExportReceipt,
+  row: CourtExportRow,
+  artifactKind: "json_evidence_package" | "pdf",
+) => {
+  const bucketKey =
+    artifactKind === "pdf" ? "pdf_storage_bucket" : "artifact_storage_bucket";
+  const pathKey =
+    artifactKind === "pdf" ? "pdf_storage_path" : "artifact_storage_path";
+
+  const storageBucket =
+    typeof (receipt as Record<string, unknown>)[bucketKey] === "string"
+      ? ((receipt as Record<string, unknown>)[bucketKey] as string)
+      : COURT_EXPORT_ARTIFACT_BUCKET;
+  const storagePath =
+    typeof (receipt as Record<string, unknown>)[pathKey] === "string"
+      ? ((receipt as Record<string, unknown>)[pathKey] as string)
+      : null;
+
+  if (storagePath) {
+    return {
+      bucket: storageBucket,
+      path: storagePath,
+    };
+  }
+
+  const manifest = getManifestFromRow(row);
+  const exportId =
+    typeof manifest.export_id === "string" ? manifest.export_id : row.id;
+  const threadDisplayName =
+    typeof manifest.thread_display_name === "string"
+      ? manifest.thread_display_name
+      : "recorded-thread";
+
+  const artifactPaths = buildArtifactPaths({
+    exportId,
+    familyId: row.family_id,
+    threadDisplayName,
+    threadId: row.source_id,
+  });
+
+  return artifactKind === "pdf"
+    ? {
+        bucket: artifactPaths.pdf.bucket,
+        path: artifactPaths.pdf.path,
+      }
+    : {
+        bucket: artifactPaths.evidencePackage.bucket,
+        path: artifactPaths.evidencePackage.path,
+      };
+};
+
+async function downloadStoredArtifact(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  options: {
+    artifactKind: "json_evidence_package" | "pdf";
+    exportRecord: CourtExportRow;
+    receipt: MessagingThreadExportReceipt;
+  },
+) {
+  const artifactPath = getStoredArtifactPath(
+    options.receipt,
+    options.exportRecord,
+    options.artifactKind,
+  );
+
+  const { data, error } = await supabaseAdmin.storage
+    .from(artifactPath.bucket)
+    .download(artifactPath.path);
+
+  if (error) {
+    throw new HttpError(
+      error.message.toLowerCase().includes("not found") ? 404 : 500,
+      error.message,
+    );
+  }
+
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  const fileName = artifactPath.path.split("/").pop() ?? `${options.exportRecord.id}.bin`;
+  const hashAlgorithm =
+    options.artifactKind === "pdf"
+      ? options.receipt.pdf_hash_algorithm
+      : options.receipt.artifact_hash_algorithm;
+  const hash =
+    options.artifactKind === "pdf"
+      ? options.receipt.pdf_artifact_hash
+      : options.receipt.artifact_hash;
+
+  return {
+    base64: encodeBase64(bytes),
+    bucket: artifactPath.bucket,
+    bytes,
+    bytesSize: bytes.byteLength,
+    contentType:
+      options.artifactKind === "pdf"
+        ? "application/pdf"
+        : "application/json; charset=utf-8",
+    fileName,
+    hash,
+    hashAlgorithm,
+    path: artifactPath.path,
+  };
 }
 
 async function persistCourtExport(
   supabaseAdmin: ReturnType<typeof createClient>,
-  options: {
-    exportFormat: "json_manifest" | "pdf";
-    packageData: Awaited<ReturnType<typeof createExportPackage>>;
-  },
+  options: Awaited<ReturnType<typeof createExportPackage>>,
 ) {
   const { packageData } = options;
 
@@ -699,7 +1032,7 @@ async function persistCourtExport(
       source_type: "message_thread",
       source_id: packageData.manifest.thread_id,
       thread_type: packageData.manifest.thread_type,
-      export_format: options.exportFormat,
+      export_format: packageData.receipt.export_format,
       hash_algorithm: packageData.hashAlgorithm,
       content_hash: packageData.contentHash,
       integrity_model_version: packageData.receipt.integrity_model_version,
@@ -709,6 +1042,10 @@ async function persistCourtExport(
       artifact_hash_algorithm: packageData.receipt.artifact_hash_algorithm,
       artifact_hash: packageData.receipt.artifact_hash,
       artifact_type: packageData.receipt.artifact_type,
+      pdf_hash_algorithm: packageData.receipt.pdf_hash_algorithm,
+      pdf_artifact_hash: packageData.receipt.pdf_artifact_hash,
+      pdf_bytes_size: packageData.receipt.pdf_bytes_size,
+      pdf_generated_at: packageData.receipt.pdf_generated_at,
       signing_key_id: packageData.receipt.signing_key_id,
       receipt_signature_algorithm: packageData.receipt.receipt_signature_algorithm,
       receipt_signature: packageData.receipt.receipt_signature,
@@ -766,6 +1103,14 @@ const getReceiptFromRow = (row: CourtExportRow): MessagingThreadExportReceipt =>
     artifact_hash: row.artifact_hash,
     artifact_hash_algorithm: row.artifact_hash_algorithm,
     artifact_type: row.artifact_type,
+    artifact_storage_bucket:
+      typeof manifest.artifact_storage_bucket === "string"
+        ? manifest.artifact_storage_bucket
+        : null,
+    artifact_storage_path:
+      typeof manifest.artifact_storage_path === "string"
+        ? manifest.artifact_storage_path
+        : null,
     canonical_content_hash: row.content_hash,
     canonical_hash_algorithm: row.hash_algorithm,
     canonicalization_version:
@@ -779,6 +1124,25 @@ const getReceiptFromRow = (row: CourtExportRow): MessagingThreadExportReceipt =>
       row.integrity_model_version ?? MESSAGING_THREAD_EXPORT_INTEGRITY_MODEL_VERSION,
     manifest_hash: row.manifest_hash,
     manifest_hash_algorithm: row.manifest_hash_algorithm,
+    pdf_artifact_hash: row.pdf_artifact_hash,
+    pdf_artifact_type: row.pdf_artifact_hash
+      ? MESSAGING_THREAD_EXPORT_PDF_ARTIFACT_TYPE
+      : null,
+    pdf_bytes_size: row.pdf_bytes_size,
+    pdf_generated_at:
+      row.pdf_generated_at ??
+      (typeof manifest.pdf_generated_at === "string" ? manifest.pdf_generated_at : null),
+    pdf_hash_algorithm:
+      row.pdf_hash_algorithm ??
+      (typeof manifest.pdf_hash_algorithm === "string" ? manifest.pdf_hash_algorithm : null),
+    pdf_storage_bucket:
+      typeof manifest.pdf_storage_bucket === "string"
+        ? manifest.pdf_storage_bucket
+        : null,
+    pdf_storage_path:
+      typeof manifest.pdf_storage_path === "string"
+        ? manifest.pdf_storage_path
+        : null,
     signing_key_id: row.signing_key_id,
     receipt_signature: row.receipt_signature,
     receipt_signature_algorithm: row.receipt_signature_algorithm,
@@ -844,6 +1208,22 @@ const buildExportSummary = (row: CourtExportRow) => {
       typeof receipt.artifact_type === "string"
         ? receipt.artifact_type
         : row.artifact_type,
+    pdf_artifact_hash:
+      typeof receipt.pdf_artifact_hash === "string"
+        ? receipt.pdf_artifact_hash
+        : row.pdf_artifact_hash,
+    pdf_hash_algorithm:
+      typeof receipt.pdf_hash_algorithm === "string"
+        ? receipt.pdf_hash_algorithm
+        : row.pdf_hash_algorithm,
+    pdf_bytes_size:
+      typeof receipt.pdf_bytes_size === "number"
+        ? receipt.pdf_bytes_size
+        : row.pdf_bytes_size,
+    pdf_generated_at:
+      typeof receipt.pdf_generated_at === "string"
+        ? receipt.pdf_generated_at
+        : row.pdf_generated_at,
     record_count: row.record_count,
     signature_algorithm:
       typeof receipt.receipt_signature_algorithm === "string"
@@ -1016,6 +1396,7 @@ const buildVerificationResponse = (options: {
   artifactLayer: ReturnType<typeof buildVerificationLayer>;
   exportRecord: CourtExportRow;
   manifestLayer: ReturnType<typeof buildVerificationLayer>;
+  pdfLayer: ReturnType<typeof buildVerificationLayer>;
   signatureLayer: Awaited<ReturnType<typeof verifyReceiptSignatureLayer>>;
   verificationMode: VerificationMode;
   contentLayer: ReturnType<typeof buildVerificationLayer>;
@@ -1031,6 +1412,21 @@ const buildVerificationResponse = (options: {
       options.signatureLayer.status === "not_supported" &&
       options.manifestLayer.status === "not_supported"
     ) {
+      status = "verification_not_supported";
+    }
+  } else if (
+    options.verificationMode === "stored_pdf_artifact" ||
+    options.verificationMode === "provided_pdf_artifact"
+  ) {
+    if (options.signatureLayer.status === "mismatch") {
+      status = "signature_invalid";
+    } else if (options.signatureLayer.status === "not_supported") {
+      status = "verification_not_supported";
+    } else if (options.pdfLayer.status === "mismatch") {
+      status = "mismatch";
+    } else if (options.pdfLayer.status === "unavailable") {
+      status = "pdf_hash_unavailable";
+    } else if (options.pdfLayer.status === "not_supported") {
       status = "verification_not_supported";
     }
   } else if (options.signatureLayer.status === "mismatch") {
@@ -1056,14 +1452,23 @@ const buildVerificationResponse = (options: {
   return {
     success: true,
     status,
-    computed_hash: options.contentLayer.computed,
-    stored_hash: options.contentLayer.stored,
+    computed_hash:
+      options.verificationMode === "stored_pdf_artifact" ||
+      options.verificationMode === "provided_pdf_artifact"
+        ? options.pdfLayer.computed
+        : options.contentLayer.computed,
+    stored_hash:
+      options.verificationMode === "stored_pdf_artifact" ||
+      options.verificationMode === "provided_pdf_artifact"
+        ? options.pdfLayer.stored
+        : options.contentLayer.stored,
     export: buildExportSummary(options.exportRecord),
     verification_mode: options.verificationMode,
     verification_layers: {
       artifact_hash: options.artifactLayer,
       canonical_content_hash: options.contentLayer,
       manifest_hash: options.manifestLayer,
+      pdf_artifact_hash: options.pdfLayer,
       receipt_signature: options.signatureLayer,
     },
   };
@@ -1129,7 +1534,7 @@ serve(async (req) => {
     if (body.action === "create") {
       const threadId = requireThreadId(body.thread_id);
       const exportFormat = body.export_format ?? "pdf";
-      const packageData = await createExportPackage(supabaseAdmin, {
+      const exportArtifacts = await createExportPackage(supabaseAdmin, {
         exportFormat,
         exportedByUserId: user.id,
         familyId,
@@ -1137,10 +1542,8 @@ serve(async (req) => {
         threadId,
         viewerProfileId: profile.id,
       });
-      const exportRecord = await persistCourtExport(supabaseAdmin, {
-        exportFormat,
-        packageData,
-      });
+      await storeExportArtifacts(supabaseAdmin, exportArtifacts);
+      const exportRecord = await persistCourtExport(supabaseAdmin, exportArtifacts);
 
       await logAudit(supabaseAdmin, {
         action: "COURT_EXPORT_CREATED",
@@ -1148,16 +1551,17 @@ serve(async (req) => {
         actorUserId: user.id,
         entityId: exportRecord.id,
         metadata: {
-          artifact_hash: packageData.receipt.artifact_hash,
-          canonicalization_version: packageData.receipt.canonicalization_version,
-          content_hash: packageData.contentHash,
+          artifact_hash: exportArtifacts.packageData.receipt.artifact_hash,
+          canonicalization_version: exportArtifacts.packageData.receipt.canonicalization_version,
+          content_hash: exportArtifacts.packageData.contentHash,
           family_id: familyId,
           hash_algorithm: exportRecord.hash_algorithm,
-          integrity_model_version: packageData.receipt.integrity_model_version,
-          manifest_hash: packageData.receipt.manifest_hash,
+          integrity_model_version: exportArtifacts.packageData.receipt.integrity_model_version,
+          manifest_hash: exportArtifacts.packageData.receipt.manifest_hash,
+          pdf_artifact_hash: exportArtifacts.packageData.receipt.pdf_artifact_hash,
           record_count: exportRecord.record_count,
-          signing_key_id: packageData.receipt.signing_key_id,
-          signature_present: Boolean(packageData.receipt.receipt_signature),
+          signing_key_id: exportArtifacts.packageData.receipt.signing_key_id,
+          signature_present: Boolean(exportArtifacts.packageData.receipt.receipt_signature),
           source_id: exportRecord.source_id,
           source_type: exportRecord.source_type,
         },
@@ -1166,14 +1570,25 @@ serve(async (req) => {
       return jsonResponse(req, 200, {
         success: true,
         export: buildExportSummary(exportRecord),
-        canonical_payload: packageData.canonicalPayload,
-        canonical_payload_json: packageData.canonicalPayloadJson,
-        artifact_payload_json: packageData.artifactPayloadJson,
-        manifest: packageData.manifest,
-        manifest_json: packageData.manifestJson,
-        receipt: packageData.receipt,
-        evidence_package: packageData.evidencePackage,
-        evidence_package_json: packageData.evidencePackageJson,
+        canonical_payload: exportArtifacts.packageData.canonicalPayload,
+        canonical_payload_json: exportArtifacts.packageData.canonicalPayloadJson,
+        artifact_payload_json: exportArtifacts.packageData.artifactPayloadJson,
+        manifest: exportArtifacts.packageData.manifest,
+        manifest_json: exportArtifacts.packageData.manifestJson,
+        receipt: exportArtifacts.packageData.receipt,
+        evidence_package: exportArtifacts.packageData.evidencePackage,
+        evidence_package_json: exportArtifacts.packageData.evidencePackageJson,
+        pdf_artifact: exportArtifacts.pdfArtifact
+          ? {
+              base64: exportArtifacts.pdfArtifact.base64,
+              bytes_size: exportArtifacts.pdfArtifact.bytesSize,
+              content_type: exportArtifacts.pdfArtifact.contentType,
+              file_name: exportArtifacts.pdfArtifact.fileName,
+              generated_at: exportArtifacts.pdfArtifact.generatedAt,
+              hash: exportArtifacts.pdfArtifact.hash,
+              hash_algorithm: exportArtifacts.pdfArtifact.hashAlgorithm,
+            }
+          : null,
       });
     }
 
@@ -1202,10 +1617,62 @@ serve(async (req) => {
       });
     }
 
+    if (body.action === "download") {
+      const exportId = requireExportId(body.export_id);
+      const artifactKind = body.artifact_kind ?? "pdf";
+      const exportRecord = await loadCourtExport(supabaseAdmin, familyId, exportId);
+
+      if (!exportRecord) {
+        return jsonResponse(req, 404, {
+          success: false,
+          status: "receipt_not_found",
+          error: "The selected export receipt could not be found.",
+        });
+      }
+
+      const thread = await loadThread(supabaseAdmin, familyId, exportRecord.source_id);
+      await assertThreadAccess(supabaseAdmin, profile.id, thread);
+      const receipt = getReceiptFromRow(exportRecord);
+
+      try {
+        const artifact = await downloadStoredArtifact(supabaseAdmin, {
+          artifactKind,
+          exportRecord,
+          receipt,
+        });
+
+        return jsonResponse(req, 200, {
+          success: true,
+          artifact: {
+            base64: artifact.base64,
+            bytes_size: artifact.bytesSize,
+            content_type: artifact.contentType,
+            file_name: artifact.fileName,
+            hash: artifact.hash,
+            hash_algorithm: artifact.hashAlgorithm,
+            kind: artifactKind,
+          },
+          export: buildExportSummary(exportRecord),
+        });
+      } catch (artifactError) {
+        if (artifactError instanceof HttpError && artifactError.status === 404) {
+          return jsonResponse(req, 404, {
+            success: false,
+            status: "artifact_not_found",
+            error: "The stored export artifact could not be found.",
+          });
+        }
+
+        throw artifactError;
+      }
+    }
+
     if (body.action === "verify") {
       const exportId = requireExportId(body.export_id);
       const exportRecord = await loadCourtExport(supabaseAdmin, familyId, exportId);
       const verificationMode: VerificationMode =
+        // `provided_manifest_json` remains accepted as a backward-compat alias for
+        // uploaded evidence-package JSON verification.
         body.verification_mode === "provided_manifest_json"
           ? "provided_package_json"
           : body.verification_mode ?? "stored_source";
@@ -1233,6 +1700,19 @@ serve(async (req) => {
       const storedReceiptSignatureLayer = await verifyReceiptSignatureLayer({
         contextLabel: "stored export receipt",
         receipt,
+      });
+      const unsupportedPdfLayer = buildVerificationLayer({
+        algorithm:
+          typeof receipt.pdf_hash_algorithm === "string"
+            ? receipt.pdf_hash_algorithm
+            : exportRecord.pdf_hash_algorithm,
+        computed: null,
+        label: "PDF artifact hash",
+        note: "This verification mode does not recalculate the stored PDF artifact hash.",
+        stored:
+          typeof receipt.pdf_artifact_hash === "string"
+            ? receipt.pdf_artifact_hash
+            : exportRecord.pdf_artifact_hash,
       });
 
       if (verificationMode === "stored_signature") {
@@ -1278,6 +1758,7 @@ serve(async (req) => {
           }),
           exportRecord,
           manifestLayer,
+          pdfLayer: unsupportedPdfLayer,
           signatureLayer: storedReceiptSignatureLayer,
           verificationMode,
         });
@@ -1306,7 +1787,206 @@ serve(async (req) => {
         return jsonResponse(req, 200, responseBody);
       }
 
+      if (verificationMode === "stored_pdf_artifact") {
+        let storedPdfArtifact;
+        try {
+          storedPdfArtifact = await downloadStoredArtifact(supabaseAdmin, {
+            artifactKind: "pdf",
+            exportRecord,
+            receipt,
+          });
+        } catch (artifactError) {
+          if (artifactError instanceof HttpError && artifactError.status === 404) {
+            return jsonResponse(req, 404, {
+              success: false,
+              status: "artifact_not_found",
+              error: "The stored PDF artifact could not be found.",
+            });
+          }
+
+          throw artifactError;
+        }
+
+        const pdfLayer = buildVerificationLayer({
+          algorithm:
+            typeof receipt.pdf_hash_algorithm === "string"
+              ? receipt.pdf_hash_algorithm
+              : exportRecord.pdf_hash_algorithm,
+          computed: await sha256HexFromBytes(storedPdfArtifact.bytes),
+          label: "PDF artifact hash",
+          stored:
+            typeof receipt.pdf_artifact_hash === "string"
+              ? receipt.pdf_artifact_hash
+              : exportRecord.pdf_artifact_hash,
+        });
+
+        const responseBody = buildVerificationResponse({
+          artifactLayer: buildVerificationLayer({
+            algorithm:
+              typeof receipt.artifact_hash_algorithm === "string"
+                ? receipt.artifact_hash_algorithm
+                : exportRecord.artifact_hash_algorithm,
+            computed: null,
+            label: "JSON evidence package hash",
+            note: "PDF verification does not recalculate the JSON evidence package hash.",
+            stored:
+              typeof receipt.artifact_hash === "string"
+                ? receipt.artifact_hash
+                : exportRecord.artifact_hash,
+          }),
+          contentLayer: buildVerificationLayer({
+            algorithm:
+              typeof receipt.canonical_hash_algorithm === "string"
+                ? receipt.canonical_hash_algorithm
+                : exportRecord.hash_algorithm,
+            computed: null,
+            label: "Canonical content hash",
+            note: "PDF verification does not recalculate the canonical record payload.",
+            stored:
+              typeof receipt.canonical_content_hash === "string"
+                ? receipt.canonical_content_hash
+                : exportRecord.content_hash,
+          }),
+          exportRecord,
+          manifestLayer: buildVerificationLayer({
+            algorithm:
+              typeof receipt.manifest_hash_algorithm === "string"
+                ? receipt.manifest_hash_algorithm
+                : exportRecord.manifest_hash_algorithm,
+            computed: null,
+            label: "Manifest hash",
+            note: "PDF verification does not recalculate the manifest hash.",
+            stored:
+              typeof receipt.manifest_hash === "string"
+                ? receipt.manifest_hash
+                : exportRecord.manifest_hash,
+          }),
+          pdfLayer,
+          signatureLayer: storedReceiptSignatureLayer,
+          verificationMode,
+        });
+        const responseStatus = responseBody.status as VerificationStatus;
+
+        await logAudit(supabaseAdmin, {
+          action:
+            responseStatus === "match"
+              ? "COURT_EXPORT_VERIFIED"
+              : responseStatus === "signature_invalid"
+                ? "COURT_EXPORT_VERIFY_SIGNATURE_INVALID"
+                : responseStatus === "verification_not_supported"
+                  ? "COURT_EXPORT_VERIFY_UNSUPPORTED"
+                  : "COURT_EXPORT_VERIFY_MISMATCH",
+          actorProfileId: profile.id,
+          actorUserId: user.id,
+          entityId: exportRecord.id,
+          metadata: {
+            family_id: familyId,
+            pdf_hash_status: pdfLayer.status,
+            signature_status: storedReceiptSignatureLayer.status,
+            signing_key_id:
+              typeof receipt.signing_key_id === "string" ? receipt.signing_key_id : exportRecord.signing_key_id,
+            status: responseStatus,
+            verification_mode: verificationMode,
+          },
+        });
+
+        return jsonResponse(req, 200, responseBody);
+      }
+
+      if (verificationMode === "provided_pdf_artifact") {
+        if (!body.provided_pdf_base64) {
+          throw new HttpError(400, "provided_pdf_base64 is required for uploaded PDF verification.");
+        }
+
+        const providedPdfBytes = decodeBase64ToBytes(body.provided_pdf_base64);
+        const pdfLayer = buildVerificationLayer({
+          algorithm:
+            typeof receipt.pdf_hash_algorithm === "string"
+              ? receipt.pdf_hash_algorithm
+              : exportRecord.pdf_hash_algorithm,
+          computed: await sha256HexFromBytes(providedPdfBytes),
+          label: "PDF artifact hash",
+          stored:
+            typeof receipt.pdf_artifact_hash === "string"
+              ? receipt.pdf_artifact_hash
+              : exportRecord.pdf_artifact_hash,
+        });
+
+        const responseBody = buildVerificationResponse({
+          artifactLayer: buildVerificationLayer({
+            algorithm:
+              typeof receipt.artifact_hash_algorithm === "string"
+                ? receipt.artifact_hash_algorithm
+                : exportRecord.artifact_hash_algorithm,
+            computed: null,
+            label: "JSON evidence package hash",
+            note: "Uploaded PDF verification does not recalculate the JSON evidence package hash.",
+            stored:
+              typeof receipt.artifact_hash === "string"
+                ? receipt.artifact_hash
+                : exportRecord.artifact_hash,
+          }),
+          contentLayer: buildVerificationLayer({
+            algorithm:
+              typeof receipt.canonical_hash_algorithm === "string"
+                ? receipt.canonical_hash_algorithm
+                : exportRecord.hash_algorithm,
+            computed: null,
+            label: "Canonical content hash",
+            note: "Uploaded PDF verification does not recalculate the canonical record payload.",
+            stored:
+              typeof receipt.canonical_content_hash === "string"
+                ? receipt.canonical_content_hash
+                : exportRecord.content_hash,
+          }),
+          exportRecord,
+          manifestLayer: buildVerificationLayer({
+            algorithm:
+              typeof receipt.manifest_hash_algorithm === "string"
+                ? receipt.manifest_hash_algorithm
+                : exportRecord.manifest_hash_algorithm,
+            computed: null,
+            label: "Manifest hash",
+            note: "Uploaded PDF verification does not recalculate the manifest hash.",
+            stored:
+              typeof receipt.manifest_hash === "string"
+                ? receipt.manifest_hash
+                : exportRecord.manifest_hash,
+          }),
+          pdfLayer,
+          signatureLayer: storedReceiptSignatureLayer,
+          verificationMode,
+        });
+        const responseStatus = responseBody.status as VerificationStatus;
+
+        await logAudit(supabaseAdmin, {
+          action:
+            responseStatus === "match"
+              ? "COURT_EXPORT_VERIFIED"
+              : responseStatus === "signature_invalid"
+                ? "COURT_EXPORT_VERIFY_SIGNATURE_INVALID"
+                : responseStatus === "verification_not_supported"
+                  ? "COURT_EXPORT_VERIFY_UNSUPPORTED"
+                  : "COURT_EXPORT_VERIFY_MISMATCH",
+          actorProfileId: profile.id,
+          actorUserId: user.id,
+          entityId: exportRecord.id,
+          metadata: {
+            family_id: familyId,
+            pdf_hash_status: pdfLayer.status,
+            signature_status: storedReceiptSignatureLayer.status,
+            signing_key_id:
+              typeof receipt.signing_key_id === "string" ? receipt.signing_key_id : exportRecord.signing_key_id,
+            status: responseStatus,
+            verification_mode: verificationMode,
+          },
+        });
+
+        return jsonResponse(req, 200, responseBody);
+      }
+
       if (verificationMode === "provided_package_json") {
+        // Continue accepting the legacy alias payload key for backward compatibility.
         const providedPackageJson = body.provided_package_json ?? body.provided_manifest_json;
         if (!providedPackageJson) {
           throw new HttpError(400, "provided_package_json is required for uploaded package verification.");
@@ -1389,6 +2069,7 @@ serve(async (req) => {
           contentLayer,
           exportRecord,
           manifestLayer,
+          pdfLayer: unsupportedPdfLayer,
           signatureLayer: providedReceiptSignatureLayer,
           verificationMode,
         });
@@ -1456,7 +2137,7 @@ serve(async (req) => {
           typeof receipt.canonical_hash_algorithm === "string"
             ? receipt.canonical_hash_algorithm
             : exportRecord.hash_algorithm,
-        computed: regeneratedPackage.contentHash,
+        computed: regeneratedPackage.packageData.contentHash,
         label: "Canonical content hash",
         stored:
           typeof receipt.canonical_content_hash === "string"
@@ -1468,7 +2149,7 @@ serve(async (req) => {
           typeof receipt.manifest_hash_algorithm === "string"
             ? receipt.manifest_hash_algorithm
             : exportRecord.manifest_hash_algorithm,
-        computed: regeneratedPackage.manifestHash,
+        computed: regeneratedPackage.packageData.manifestHash,
         label: "Manifest hash",
         stored:
           typeof receipt.manifest_hash === "string"
@@ -1484,7 +2165,7 @@ serve(async (req) => {
           typeof receipt.artifact_type === "string" &&
           receipt.artifact_type !== MESSAGING_THREAD_EXPORT_ARTIFACT_TYPE
             ? null
-            : regeneratedPackage.artifactHash,
+            : regeneratedPackage.packageData.artifactHash,
         label: "JSON evidence package hash",
         note:
           typeof receipt.artifact_type === "string" &&
@@ -1502,6 +2183,7 @@ serve(async (req) => {
         contentLayer,
         exportRecord,
         manifestLayer,
+        pdfLayer: unsupportedPdfLayer,
         signatureLayer: storedReceiptSignatureLayer,
         verificationMode,
       });

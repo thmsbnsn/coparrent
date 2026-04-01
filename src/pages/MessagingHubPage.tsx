@@ -27,6 +27,9 @@
 import { useState, useCallback, useEffect, useMemo, useRef, type ChangeEvent } from "react";
 import { motion } from "framer-motion";
 import { 
+  AlertTriangle,
+  Copy,
+  Info,
   MessageSquare, 
   Plus,
   Hash,
@@ -38,6 +41,7 @@ import {
   Printer,
   MoreHorizontal,
   Loader2,
+  Check,
 } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -82,10 +86,7 @@ import type {
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { toast } from "sonner";
-import { Check } from "lucide-react";
 import { resolveSenderName } from "@/lib/displayResolver";
 import { useSearchParams } from "react-router-dom";
 
@@ -139,6 +140,48 @@ const getThreadPreviewText = (thread: MessageThread, fallback: string) => {
 const formatHashPreview = (value: string | null | undefined, visible = 18) =>
   value ? `${value.slice(0, visible)}…` : "Unavailable";
 
+const formatHashValue = (value: string | null | undefined, segmentLength = 8) => {
+  if (!value) {
+    return "Unavailable";
+  }
+
+  const segments = value.match(new RegExp(`.{1,${segmentLength}}`, "g"));
+  return segments?.join(" ") ?? value;
+};
+
+const decodeBase64ToBlob = (base64Value: string, contentType: string) => {
+  const binary = window.atob(base64Value);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new Blob([bytes], { type: contentType });
+};
+
+const downloadBlobArtifact = (options: {
+  base64: string;
+  contentType: string;
+  fileName: string;
+}) => {
+  const blob = decodeBase64ToBlob(options.base64, options.contentType);
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = options.fileName;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+};
+
+const encodeArrayBufferToBase64 = (buffer: ArrayBuffer) => {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return window.btoa(binary);
+};
+
 interface MessagingThreadExportSummary {
   artifact_hash: string | null;
   artifact_hash_algorithm: string | null;
@@ -153,6 +196,10 @@ interface MessagingThreadExportSummary {
   integrity_model_version: string | null;
   manifest_hash: string | null;
   manifest_hash_algorithm: string | null;
+  pdf_artifact_hash: string | null;
+  pdf_hash_algorithm: string | null;
+  pdf_bytes_size: number | null;
+  pdf_generated_at: string | null;
   record_count: number;
   signature_algorithm: string | null;
   signing_key_id: string | null;
@@ -173,7 +220,29 @@ interface MessagingThreadExportCreateResponse {
   export: MessagingThreadExportSummary;
   manifest: MessagingThreadExportManifest;
   manifest_json: string;
+  pdf_artifact: {
+    base64: string;
+    bytes_size: number;
+    content_type: string;
+    file_name: string;
+    generated_at: string;
+    hash: string;
+    hash_algorithm: string;
+  } | null;
   receipt: MessagingThreadExportReceipt;
+}
+
+interface MessagingThreadExportArtifactDownloadResponse {
+  artifact: {
+    base64: string;
+    bytes_size: number;
+    content_type: string;
+    file_name: string;
+    hash: string | null;
+    hash_algorithm: string | null;
+    kind: "json_evidence_package" | "pdf";
+  };
+  export: MessagingThreadExportSummary;
 }
 
 interface MessagingThreadExportVerificationLayer {
@@ -194,29 +263,287 @@ interface MessagingThreadExportSignatureLayer {
   valid: boolean | null;
 }
 
+type MessagingThreadExportVerificationStatus =
+  | "artifact_not_found"
+  | "artifact_hash_unavailable"
+  | "match"
+  | "mismatch"
+  | "not_authorized"
+  | "pdf_hash_unavailable"
+  | "receipt_not_found"
+  | "signature_invalid"
+  | "verification_not_supported";
+
+type MessagingThreadExportVerificationMode =
+  | "provided_pdf_artifact"
+  | "provided_package_json"
+  | "stored_pdf_artifact"
+  | "stored_signature"
+  | "stored_source";
+
 interface MessagingThreadExportVerifyResponse {
   computed_hash: string | null;
   export: MessagingThreadExportSummary;
-  status:
-    | "artifact_hash_unavailable"
-    | "match"
-    | "mismatch"
-    | "not_authorized"
-    | "receipt_not_found"
-    | "signature_invalid"
-    | "verification_not_supported";
+  status: MessagingThreadExportVerificationStatus;
   stored_hash: string | null;
   verification_layers: {
     artifact_hash: MessagingThreadExportVerificationLayer;
     canonical_content_hash: MessagingThreadExportVerificationLayer;
     manifest_hash: MessagingThreadExportVerificationLayer;
+    pdf_artifact_hash: MessagingThreadExportVerificationLayer;
     receipt_signature: MessagingThreadExportSignatureLayer;
   };
-  verification_mode:
-    | "provided_package_json"
-    | "stored_signature"
-    | "stored_source";
+  verification_mode: MessagingThreadExportVerificationMode;
 }
+
+type ReceiptCopyField = "pdf-hash" | "receipt-id";
+
+type MessagingExportErrorPayload = {
+  error?: string;
+  status?: MessagingThreadExportVerificationStatus;
+};
+
+type VerificationPresentation = {
+  badgeLabel: string;
+  badgeToneClass: string;
+  description: string;
+  headline: string;
+  isAlert: boolean;
+};
+
+type ReceiptPanelPresentation = {
+  badgeLabel: string;
+  badgeToneClass: string;
+  description: string;
+  headline: string;
+  isAlert: boolean;
+};
+
+const formatVerificationModeLabel = (mode: MessagingThreadExportVerificationMode) => {
+  switch (mode) {
+    case "stored_source":
+      return "Current server record";
+    case "stored_pdf_artifact":
+      return "Stored PDF artifact";
+    case "provided_pdf_artifact":
+      return "Uploaded PDF artifact";
+    case "provided_package_json":
+      return "Uploaded evidence package";
+    case "stored_signature":
+      return "Stored receipt signature";
+    default:
+      return "Verification";
+  }
+};
+
+const getVerificationPresentation = (
+  result: MessagingThreadExportVerifyResponse | null,
+): VerificationPresentation => {
+  if (!result) {
+    return {
+      badgeLabel: "Status unknown",
+      badgeToneClass: "border-white/12 bg-white/5 text-slate-200/80",
+      description:
+        "Run verification to compare a current server record, evidence package, or PDF artifact against the stored receipt.",
+      headline: "Verification status unknown",
+      isAlert: false,
+    };
+  }
+
+  switch (result.status) {
+    case "match":
+      return {
+        badgeLabel: "Verified",
+        badgeToneClass: "border-emerald-300/25 bg-emerald-400/10 text-emerald-50",
+        description:
+          result.verification_mode === "stored_signature"
+            ? "Verification match. The stored server signature on this export receipt is valid."
+            : result.verification_mode === "provided_pdf_artifact"
+              ? "Verification match. This PDF still matches the stored export receipt."
+              : result.verification_mode === "stored_pdf_artifact"
+                ? "Verification match. The stored PDF artifact still matches the stored export receipt."
+                : result.verification_mode === "provided_package_json"
+                  ? "Verification match. This evidence package still matches the stored export receipt."
+                  : "Verification match. The current server record still matches the stored export receipt.",
+        headline: "Verification match",
+        isAlert: false,
+      };
+    case "mismatch":
+      return {
+        badgeLabel: "Mismatch",
+        badgeToneClass: "border-rose-300/30 bg-rose-500/10 text-rose-50",
+        description:
+          result.verification_mode === "provided_pdf_artifact" ||
+          result.verification_mode === "stored_pdf_artifact"
+            ? "Verification mismatch. The file does not match the stored export receipt and may have been altered."
+            : result.verification_mode === "provided_package_json"
+              ? "Verification mismatch. The evidence package does not match the stored export receipt and may have been altered."
+              : "Verification mismatch. The checked material does not match the stored export receipt.",
+        headline: "Verification mismatch",
+        isAlert: true,
+      };
+    case "receipt_not_found":
+      return {
+        badgeLabel: "Receipt not found",
+        badgeToneClass: "border-slate-300/20 bg-slate-500/10 text-slate-100",
+        description: "The requested export receipt could not be found.",
+        headline: "Receipt unavailable",
+        isAlert: false,
+      };
+    case "artifact_not_found":
+      return {
+        badgeLabel: "Artifact not found",
+        badgeToneClass: "border-slate-300/20 bg-slate-500/10 text-slate-100",
+        description:
+          result.verification_mode === "stored_pdf_artifact"
+            ? "The stored PDF artifact linked to this receipt could not be found."
+            : "The requested receipt or artifact could not be found.",
+        headline: "Artifact unavailable",
+        isAlert: false,
+      };
+    case "not_authorized":
+      return {
+        badgeLabel: "Not authorized",
+        badgeToneClass: "border-amber-300/25 bg-amber-500/10 text-amber-50",
+        description: "You do not have permission to verify this export.",
+        headline: "Verification blocked",
+        isAlert: false,
+      };
+    case "signature_invalid":
+      return {
+        badgeLabel: "Signature invalid",
+        badgeToneClass: "border-rose-300/30 bg-rose-500/10 text-rose-50",
+        description: "The stored signature could not be validated.",
+        headline: "Receipt signature invalid",
+        isAlert: true,
+      };
+    case "verification_not_supported":
+      return {
+        badgeLabel: "Not supported",
+        badgeToneClass: "border-slate-300/20 bg-slate-500/10 text-slate-100",
+        description: "This verification mode is not available for this export.",
+        headline: "Verification limited",
+        isAlert: false,
+      };
+    case "pdf_hash_unavailable":
+      return {
+        badgeLabel: "PDF hash unavailable",
+        badgeToneClass: "border-slate-300/20 bg-slate-500/10 text-slate-100",
+        description: "This receipt does not include the exact PDF hash required for PDF verification.",
+        headline: "PDF verification unavailable",
+        isAlert: false,
+      };
+    case "artifact_hash_unavailable":
+      return {
+        badgeLabel: "Package hash unavailable",
+        badgeToneClass: "border-slate-300/20 bg-slate-500/10 text-slate-100",
+        description:
+          "This receipt or evidence package does not include the exact JSON evidence package hash required for package verification.",
+        headline: "Package verification unavailable",
+        isAlert: false,
+      };
+    default:
+      return {
+        badgeLabel: "Status unknown",
+        badgeToneClass: "border-white/12 bg-white/5 text-slate-200/80",
+        description: "Review the verification details below.",
+        headline: "Verification result",
+        isAlert: false,
+      };
+  }
+};
+
+const buildUnavailableVerificationLayer = (
+  label: string,
+  stored: string | null,
+  algorithm: string | null,
+  note: string,
+): MessagingThreadExportVerificationLayer => ({
+  algorithm,
+  computed: null,
+  label,
+  matches: null,
+  note,
+  status: "unavailable",
+  stored,
+});
+
+const buildFallbackVerificationResult = (options: {
+  errorMessage: string;
+  exportRecord: MessagingThreadExportSummary;
+  status: MessagingThreadExportVerificationStatus;
+  verificationMode: MessagingThreadExportVerificationMode;
+}): MessagingThreadExportVerifyResponse => {
+  const genericNote = `${options.errorMessage} Verification did not continue for the remaining receipt layers.`;
+
+  return {
+    computed_hash: null,
+    export: options.exportRecord,
+    status: options.status,
+    stored_hash:
+      options.verificationMode === "provided_pdf_artifact" ||
+      options.verificationMode === "stored_pdf_artifact"
+        ? options.exportRecord.pdf_artifact_hash
+        : options.exportRecord.content_hash,
+    verification_layers: {
+      artifact_hash: buildUnavailableVerificationLayer(
+        "JSON evidence package hash",
+        options.exportRecord.artifact_hash,
+        options.exportRecord.artifact_hash_algorithm,
+        genericNote,
+      ),
+      canonical_content_hash: buildUnavailableVerificationLayer(
+        "Canonical content hash",
+        options.exportRecord.content_hash,
+        options.exportRecord.hash_algorithm,
+        genericNote,
+      ),
+      manifest_hash: buildUnavailableVerificationLayer(
+        "Manifest hash",
+        options.exportRecord.manifest_hash,
+        options.exportRecord.manifest_hash_algorithm,
+        genericNote,
+      ),
+      pdf_artifact_hash: buildUnavailableVerificationLayer(
+        "PDF artifact hash",
+        options.exportRecord.pdf_artifact_hash,
+        options.exportRecord.pdf_hash_algorithm,
+        genericNote,
+      ),
+      receipt_signature: {
+        algorithm: options.exportRecord.signature_algorithm,
+        note: genericNote,
+        present: options.exportRecord.signature_present,
+        status: options.status === "signature_invalid" ? "mismatch" : "not_supported",
+        valid: options.status === "signature_invalid" ? false : null,
+      },
+    },
+    verification_mode: options.verificationMode,
+  };
+};
+
+const readMessagingExportError = async (
+  error: unknown,
+): Promise<{ message: string | null; status: MessagingThreadExportVerificationStatus | null }> => {
+  if (!error || typeof error !== "object" || !("context" in error)) {
+    return { message: null, status: null };
+  }
+
+  const context = (error as { context?: unknown }).context;
+  if (!(context instanceof Response)) {
+    return { message: null, status: null };
+  }
+
+  try {
+    const payload = (await context.clone().json()) as MessagingExportErrorPayload;
+    return {
+      message: typeof payload.error === "string" ? payload.error : null,
+      status: payload.status ?? null,
+    };
+  } catch {
+    return { message: null, status: null };
+  }
+};
 
 const MessagingHubPage = () => {
   const {
@@ -278,10 +605,15 @@ const MessagingHubPage = () => {
   const [exportingThread, setExportingThread] = useState(false);
   const [showVerifyDialog, setShowVerifyDialog] = useState(false);
   const [selectedExportId, setSelectedExportId] = useState<string | null>(null);
+  const [copiedReceiptField, setCopiedReceiptField] = useState<ReceiptCopyField | null>(null);
   const [uploadedManifestName, setUploadedManifestName] = useState<string | null>(null);
   const [uploadedManifestJson, setUploadedManifestJson] = useState<string | null>(null);
+  const [uploadedPdfName, setUploadedPdfName] = useState<string | null>(null);
+  const [uploadedPdfBase64, setUploadedPdfBase64] = useState<string | null>(null);
+  const [downloadingArtifact, setDownloadingArtifact] = useState<"json_evidence_package" | "pdf" | null>(null);
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [verificationResult, setVerificationResult] = useState<MessagingThreadExportVerifyResponse | null>(null);
+  const receiptCopyResetRef = useRef<number | null>(null);
   
   /**
    * Court View State
@@ -477,12 +809,21 @@ const MessagingHubPage = () => {
   useEffect(() => {
     setUploadedManifestJson(null);
     setUploadedManifestName(null);
+    setUploadedPdfBase64(null);
+    setUploadedPdfName(null);
     setVerificationResult(null);
+    setCopiedReceiptField(null);
   }, [activeThread?.id]);
+
+  useEffect(() => () => {
+    if (receiptCopyResetRef.current) {
+      window.clearTimeout(receiptCopyResetRef.current);
+    }
+  }, []);
 
   /**
    * Export to PDF - Court-ready document
-   * RULE: Preserves attribution and order, print-safe
+   * RULE: Uses the exact server-generated PDF artifact bytes
    */
   const handleExportPDF = useCallback(async () => {
     if (!activeThread || !profileId || !activeFamilyId) {
@@ -506,224 +847,30 @@ const MessagingHubPage = () => {
       }
 
       const exportPackage = data as MessagingThreadExportCreateResponse;
-      const exportedAt = exportPackage.manifest.export_generated_at;
-      const receipt = exportPackage.receipt;
-
-      const doc = new jsPDF();
-      const exportTimestamp = format(
-        new Date(exportPackage.manifest.export_generated_at),
-        "MMMM d, yyyy 'at' h:mm a",
-      );
-      const metadataNote =
-        "This export includes a server-signed tamper-evident export receipt. The canonical content hash covers the server-authoritative record payload. Separate manifest and JSON evidence-package hashes are recorded with the receipt. The receipt signature covers the export receipt metadata, not the rendered PDF bytes. This is first-party integrity support, not notarization or legal certification.";
-
-      doc.setFontSize(16);
-      doc.setFont("helvetica", "bold");
-      doc.text("Message Record", 14, 20);
-
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text(`Thread: ${exportPackage.manifest.thread_display_name}`, 14, 28);
-      doc.text(`Exported: ${exportTimestamp}`, 14, 34);
-      doc.text(`Export ID: ${exportPackage.export.id}`, 14, 40);
-      doc.text(`Total Timeline Entries: ${exportPackage.manifest.total_entries}`, 14, 46);
-
-      let cursorY = 54;
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "bold");
-      doc.text("Evidence metadata", 14, cursorY);
-      cursorY += 6;
-
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      [
-        "Source: Generated from server-authoritative records",
-        `Family scope: ${exportPackage.manifest.family_id}`,
-        `Thread type: ${exportPackage.manifest.thread_type}`,
-        `Record range: ${
-          exportPackage.manifest.record_start
-            ? format(new Date(exportPackage.manifest.record_start), "MMM d, yyyy h:mm a")
-            : "Not available"
-        } to ${
-          exportPackage.manifest.record_end
-            ? format(new Date(exportPackage.manifest.record_end), "MMM d, yyyy h:mm a")
-            : "Not available"
-        }`,
-        `Canonical hash algorithm: SHA-256`,
-        `Manifest hash: ${formatHashPreview(receipt.manifest_hash, 20)}`,
-        `JSON evidence package hash: ${formatHashPreview(receipt.artifact_hash, 20)}`,
-        `Server signature: ${
-          receipt.receipt_signature
-            ? receipt.receipt_signature_algorithm || "Present"
-            : "Unavailable"
-        }`,
-        `Signing key ID: ${receipt.signing_key_id ?? "Unavailable"}`,
-      ].forEach((line) => {
-        doc.text(line, 14, cursorY);
-        cursorY += 5;
-      });
-
-      doc.setFont("helvetica", "bold");
-      doc.text("Canonical content hash:", 14, cursorY);
-      cursorY += 5;
-      doc.setFont("courier", "normal");
-      const hashLines = doc.splitTextToSize(
-        receipt.canonical_content_hash,
-        178,
-      );
-      doc.text(hashLines, 14, cursorY);
-      cursorY += hashLines.length * 4 + 2;
-
-      doc.setFont("helvetica", "normal");
-      const noteLines = doc.splitTextToSize(metadataNote, 178);
-      doc.text(noteLines, 14, cursorY);
-      cursorY += noteLines.length * 4 + 4;
-
-      const tableData = exportPackage.canonical_payload.entries.map((entry) => {
-        if (entry.kind === "system") {
-          return [
-            format(new Date(entry.timestamp), "MMM d, yyyy h:mm a"),
-            entry.actor_name,
-            "System Event",
-            entry.note,
-          ];
-        }
-
-        return [
-          format(new Date(entry.timestamp), "MMM d, yyyy h:mm a"),
-          entry.sender_name,
-          entry.sender_role_label,
-          entry.content,
-        ];
-      });
-
-      autoTable(doc, {
-        head: [["Date & Time", "Sender", "Role", "Message Content"]],
-        body: tableData,
-        startY: cursorY,
-        styles: {
-          fontSize: 9,
-          cellPadding: 3,
-        },
-        headStyles: {
-          fillColor: [51, 51, 51],
-          fontStyle: "bold",
-        },
-        columnStyles: {
-          0: { cellWidth: 35 },
-          1: { cellWidth: 30 },
-          2: { cellWidth: 22 },
-          3: { cellWidth: "auto" },
-        },
-        alternateRowStyles: {
-          fillColor: [248, 248, 248],
-        },
-      });
-
-      doc.addPage();
-      let manifestY = 20;
-      doc.setFontSize(16);
-      doc.setFont("helvetica", "bold");
-      doc.text("Export Receipt", 14, manifestY);
-      manifestY += 8;
-
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      [
-        `Export ID: ${exportPackage.export.id}`,
-        `Thread ID: ${exportPackage.manifest.thread_id}`,
-        `Thread type: ${exportPackage.manifest.thread_type}`,
-        `Family ID: ${exportPackage.manifest.family_id}`,
-        `Export generated at: ${exportPackage.manifest.export_generated_at}`,
-        `Exported by profile: ${exportPackage.manifest.exported_by_profile_id}`,
-        `Integrity model: ${receipt.integrity_model_version}`,
-        `Canonicalization: ${receipt.canonicalization_version}`,
-        `Total entries: ${exportPackage.manifest.total_entries}`,
-        `Messages: ${exportPackage.manifest.total_messages}`,
-        `System events: ${exportPackage.manifest.total_system_events}`,
-        `Manifest hash: ${receipt.manifest_hash}`,
-        `JSON evidence package hash: ${receipt.artifact_hash}`,
-        `Server signature: ${
-          receipt.receipt_signature
-            ? receipt.receipt_signature_algorithm || "Present"
-            : "Unavailable"
-        }`,
-        `Signing key ID: ${receipt.signing_key_id ?? "Unavailable"}`,
-      ].forEach((line) => {
-        doc.text(line, 14, manifestY);
-        manifestY += 6;
-      });
-
-      doc.setFont("helvetica", "bold");
-      doc.text("Included message IDs:", 14, manifestY);
-      manifestY += 5;
-      doc.setFont("courier", "normal");
-      const messageIdLines = doc.splitTextToSize(
-        exportPackage.manifest.included_message_ids.join(", ") || "None",
-        178,
-      );
-      doc.text(messageIdLines, 14, manifestY);
-      manifestY += messageIdLines.length * 4 + 4;
-
-      doc.setFont("helvetica", "bold");
-      doc.text("Included system event IDs:", 14, manifestY);
-      manifestY += 5;
-      doc.setFont("courier", "normal");
-      const systemIdLines = doc.splitTextToSize(
-        exportPackage.manifest.included_system_event_ids.join(", ") || "None",
-        178,
-      );
-      doc.text(systemIdLines, 14, manifestY);
-      manifestY += systemIdLines.length * 4 + 4;
-
-      doc.setFont("helvetica", "bold");
-      doc.text("Verification notes:", 14, manifestY);
-      manifestY += 5;
-      doc.setFont("helvetica", "normal");
-      exportPackage.manifest.verification_notes.forEach((note) => {
-        const wrappedNote = doc.splitTextToSize(`• ${note}`, 178);
-        doc.text(wrappedNote, 14, manifestY);
-        manifestY += wrappedNote.length * 4 + 2;
-      });
-
-      const manifestCompanionNote = doc.splitTextToSize(
-        "A paired JSON evidence package is downloaded with this PDF. It contains the export receipt, manifest, canonical payload object, canonical payload string, and deterministic JSON artifact payload used for later verification.",
-        178,
-      );
-      doc.text(manifestCompanionNote, 14, manifestY + 2);
-
-      const pageCount = doc.getNumberOfPages();
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(8);
-        doc.setTextColor(128);
-        doc.text(
-          `Page ${i} of ${pageCount} | CoParrent Message Record | Canonical hash ${receipt.canonical_content_hash.slice(0, 16)}…`,
-          doc.internal.pageSize.width / 2,
-          doc.internal.pageSize.height - 10,
-          { align: "center" },
-        );
+      if (!exportPackage.pdf_artifact) {
+        throw new Error("The server did not return a PDF artifact for this export.");
       }
 
-      const exportFileBase = `messages-${format(new Date(exportedAt), "yyyy-MM-dd-HHmm")}`;
+      downloadBlobArtifact({
+        base64: exportPackage.pdf_artifact.base64,
+        contentType: exportPackage.pdf_artifact.content_type,
+        fileName: exportPackage.pdf_artifact.file_name,
+      });
 
-      doc.save(`${exportFileBase}.pdf`);
-
-      const manifestBlob = new Blob(
-        [exportPackage.evidence_package_json],
-        { type: "application/json;charset=utf-8" },
-      );
-      const manifestUrl = URL.createObjectURL(manifestBlob);
+      const evidencePackageBlob = new Blob([exportPackage.evidence_package_json], {
+        type: "application/json;charset=utf-8",
+      });
+      const manifestUrl = URL.createObjectURL(evidencePackageBlob);
       const manifestLink = document.createElement("a");
       manifestLink.href = manifestUrl;
-      manifestLink.download = `${exportFileBase}-evidence-package.json`;
+      manifestLink.download = exportPackage.pdf_artifact.file_name.replace(/\.pdf$/i, "-evidence-package.json");
       manifestLink.click();
       setTimeout(() => URL.revokeObjectURL(manifestUrl), 0);
 
       await loadThreadExports();
       setVerificationResult(null);
       toast.success(
-        `Thread record exported with a tamper-evident receipt. Export ID: ${exportPackage.export.id.slice(0, 8)}…`,
+        `Server-generated evidence package exported. Receipt ${exportPackage.export.id.slice(0, 8)}… recorded with PDF hash ${formatHashPreview(exportPackage.pdf_artifact.hash, 16)}.`,
       );
     } catch (error) {
       console.error("Error exporting Messaging Hub PDF:", error);
@@ -748,7 +895,11 @@ const MessagingHubPage = () => {
     window.print();
   }, []);
 
-  const handleCopyReceiptValue = useCallback(async (label: string, value: string | null) => {
+  const handleCopyReceiptValue = useCallback(async (
+    label: string,
+    value: string | null,
+    field: ReceiptCopyField,
+  ) => {
     if (!value) {
       toast.error(`${label} is not available for this export receipt.`);
       return;
@@ -761,6 +912,13 @@ const MessagingHubPage = () => {
 
     try {
       await navigator.clipboard.writeText(value);
+      setCopiedReceiptField(field);
+      if (receiptCopyResetRef.current) {
+        window.clearTimeout(receiptCopyResetRef.current);
+      }
+      receiptCopyResetRef.current = window.setTimeout(() => {
+        setCopiedReceiptField(null);
+      }, 1800);
       toast.success(`${label} copied.`);
     } catch (error) {
       console.error(`Unable to copy ${label}:`, error);
@@ -794,8 +952,89 @@ const MessagingHubPage = () => {
     [],
   );
 
+  const handlePdfFileChange = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0] ?? null;
+      if (!file) {
+        setUploadedPdfBase64(null);
+        setUploadedPdfName(null);
+        return;
+      }
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        setUploadedPdfBase64(encodeArrayBufferToBase64(arrayBuffer));
+        setUploadedPdfName(file.name);
+        setVerificationResult(null);
+      } catch (error) {
+        console.error("Unable to read PDF artifact file:", error);
+        setUploadedPdfBase64(null);
+        setUploadedPdfName(null);
+        toast.error("Unable to read the selected PDF artifact.");
+      } finally {
+        event.target.value = "";
+      }
+    },
+    [],
+  );
+
+  const handleDownloadStoredArtifact = useCallback(
+    async (
+      artifactKind: "json_evidence_package" | "pdf",
+      exportIdOverride?: string | null,
+    ) => {
+      const targetExportId = exportIdOverride ?? selectedExportId;
+
+      if (!activeFamilyId) {
+        toast.error("Open a family-scoped thread before downloading an export artifact.");
+        return;
+      }
+
+      if (!targetExportId) {
+        toast.error("Select an export receipt before downloading an artifact.");
+        return;
+      }
+
+      try {
+        setDownloadingArtifact(artifactKind);
+        const { data, error } = await supabase.functions.invoke("messaging-thread-export", {
+          body: {
+            action: "download",
+            artifact_kind: artifactKind,
+            export_id: targetExportId,
+            family_id: activeFamilyId,
+          },
+        });
+
+        if (error) {
+          throw error;
+        }
+
+        const downloadResponse = data as MessagingThreadExportArtifactDownloadResponse;
+        downloadBlobArtifact({
+          base64: downloadResponse.artifact.base64,
+          contentType: downloadResponse.artifact.content_type,
+          fileName: downloadResponse.artifact.file_name,
+        });
+        toast.success(
+          artifactKind === "pdf"
+            ? "Server-generated PDF artifact downloaded."
+            : "JSON evidence package downloaded.",
+        );
+      } catch (error) {
+        console.error("Error downloading stored Messaging export artifact:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Unable to download the selected export artifact.";
+        toast.error(errorMessage);
+      } finally {
+        setDownloadingArtifact(null);
+      }
+    },
+    [activeFamilyId, selectedExportId],
+  );
+
   const runVerification = useCallback(
-    async (verificationMode: "provided_package_json" | "stored_signature" | "stored_source") => {
+    async (verificationMode: MessagingThreadExportVerificationMode) => {
       if (!activeFamilyId) {
         toast.error("Open a family-scoped thread before verifying an export.");
         return;
@@ -811,6 +1050,11 @@ const MessagingHubPage = () => {
         return;
       }
 
+      if (verificationMode === "provided_pdf_artifact" && !uploadedPdfBase64) {
+        toast.error("Choose a PDF artifact before verifying the file.");
+        return;
+      }
+
       setVerificationLoading(true);
       setVerificationResult(null);
 
@@ -820,6 +1064,10 @@ const MessagingHubPage = () => {
             action: "verify",
             export_id: selectedExportId,
             family_id: activeFamilyId,
+            provided_pdf_base64:
+              verificationMode === "provided_pdf_artifact"
+                ? uploadedPdfBase64
+                : undefined,
             provided_package_json:
               verificationMode === "provided_package_json"
                 ? uploadedManifestJson
@@ -835,14 +1083,37 @@ const MessagingHubPage = () => {
         setVerificationResult(data as MessagingThreadExportVerifyResponse);
       } catch (error) {
         console.error("Error verifying Messaging Hub export:", error);
-        const errorMessage =
-          error instanceof Error ? error.message : "Unable to verify the selected export.";
-        toast.error(errorMessage);
+        const selectedExportRecord =
+          threadExports.find((record) => record.id === selectedExportId) ?? null;
+        const structuredError = await readMessagingExportError(error);
+        const fallbackErrorMessage =
+          structuredError.message ??
+          (error instanceof Error ? error.message : "Unable to verify the selected export.");
+
+        if (structuredError.status && selectedExportRecord) {
+          setVerificationResult(
+            buildFallbackVerificationResult({
+              errorMessage: fallbackErrorMessage,
+              exportRecord: selectedExportRecord,
+              status: structuredError.status,
+              verificationMode,
+            }),
+          );
+          toast.error(fallbackErrorMessage);
+        } else {
+          toast.error(fallbackErrorMessage);
+        }
       } finally {
         setVerificationLoading(false);
       }
     },
-    [activeFamilyId, selectedExportId, uploadedManifestJson],
+    [
+      activeFamilyId,
+      selectedExportId,
+      threadExports,
+      uploadedManifestJson,
+      uploadedPdfBase64,
+    ],
   );
 
   const getThreadDisplayName = (thread: MessageThread | null) => {
@@ -1039,37 +1310,42 @@ const MessagingHubPage = () => {
   const latestThreadExport = threadExports[0] ?? null;
   const selectedThreadExport =
     threadExports.find((record) => record.id === selectedExportId) ?? latestThreadExport;
-  const verificationToneClass =
-    verificationResult?.status === "match"
-      ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-100"
-      : verificationResult?.status === "mismatch" ||
-          verificationResult?.status === "signature_invalid"
-        ? "border-warning/35 bg-warning/10 text-warning"
-        : "border-white/10 bg-white/5 text-slate-200/70";
-  const verificationHeadline =
-    verificationResult?.status === "match"
-      ? "Verification match"
-      : verificationResult?.status === "signature_invalid"
-        ? "Receipt signature invalid"
-        : verificationResult?.status === "artifact_hash_unavailable"
-          ? "Artifact hash unavailable"
-          : verificationResult?.status === "verification_not_supported"
-            ? "Verification limited"
-            : verificationResult?.status === "mismatch"
-              ? "Verification mismatch"
-              : "Verification result";
-  const verificationDescription =
-    verificationResult?.status === "match"
-      ? "The stored receipt still matches the checked record package."
-      : verificationResult?.status === "signature_invalid"
-        ? "The checked server-signed receipt did not validate."
-        : verificationResult?.status === "artifact_hash_unavailable"
-          ? "The selected package could not supply the deterministic JSON artifact payload needed for artifact-hash verification."
-          : verificationResult?.status === "verification_not_supported"
-            ? "This receipt does not support every requested verification layer."
-            : verificationResult?.status === "mismatch"
-              ? "One or more verification layers no longer match the stored receipt."
-              : "Review the verification layers below.";
+  const latestReceiptVerificationResult =
+    latestThreadExport && verificationResult?.export.id === latestThreadExport.id
+      ? verificationResult
+      : null;
+  const verificationPresentation = getVerificationPresentation(verificationResult);
+  const exportScopeError =
+    activeThread && !activeFamilyId
+      ? "Select a family before using export receipts. Messaging export actions require explicit family scope."
+      : null;
+  const receiptPanelPresentation: ReceiptPanelPresentation = exportScopeError
+    ? {
+        badgeLabel: "Scope required",
+        badgeToneClass: "border-amber-300/25 bg-amber-500/10 text-amber-50",
+        description: exportScopeError,
+        headline: "Family scope required",
+        isAlert: true,
+      }
+    : !latestThreadExport
+      ? {
+          badgeLabel: "No receipt yet",
+          badgeToneClass: "border-white/12 bg-white/5 text-slate-200/80",
+          description:
+            "Create an evidence package to store a tamper-evident receipt, the exact server-generated PDF hash, and the paired JSON evidence package.",
+          headline: "No export receipt recorded for this thread",
+          isAlert: false,
+        }
+      : latestReceiptVerificationResult
+        ? getVerificationPresentation(latestReceiptVerificationResult)
+        : {
+            badgeLabel: "Status unknown",
+            badgeToneClass: "border-white/12 bg-white/5 text-slate-200/80",
+            description:
+              "A server-generated receipt is recorded for this export. You can verify whether the PDF still matches the stored receipt.",
+            headline: "Verification status unknown",
+            isAlert: false,
+          };
   const sidebarThreadButtonClass = (selected: boolean) =>
     cn(
       "group relative mb-1.5 w-full overflow-hidden rounded-[22px] border p-3.5 text-left transition-all duration-200",
@@ -1561,8 +1837,8 @@ const MessagingHubPage = () => {
                             <DropdownMenuItem
                               disabled={!activeThread || !activeFamilyId || threadExportsLoading}
                               onClick={() => {
+                                setSelectedExportId(latestThreadExport?.id ?? null);
                                 setShowVerifyDialog(true);
-                                setVerificationResult(null);
                               }}
                             >
                               <Check className="mr-2 h-4 w-4" />
@@ -1584,112 +1860,217 @@ const MessagingHubPage = () => {
 
                 {activeThread && (
                   <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(8,47,73,0.48),rgba(15,23,42,0.68))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge className="border-cyan-300/20 bg-cyan-400/10 text-cyan-100">
-                            Tamper-evident export receipts
-                          </Badge>
-                          {threadExportsLoading && (
-                            <Badge variant="outline" className="border-white/10 bg-white/5 text-slate-200/70">
-                              Loading records
+                    <div className="flex flex-col gap-5">
+                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 flex-1 space-y-4">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
+                              Export Receipt
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                                receiptPanelPresentation.badgeToneClass,
+                              )}
+                            >
+                              {receiptPanelPresentation.isAlert ? (
+                                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                              ) : receiptPanelPresentation.badgeLabel === "Verified" ? (
+                                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                              ) : (
+                                <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                              )}
+                              {receiptPanelPresentation.badgeLabel}
                             </Badge>
+                            {threadExportsLoading && (
+                              <Badge variant="outline" className="border-white/10 bg-white/5 text-slate-200/70">
+                                Loading records
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-lg font-semibold text-white">
+                              {latestThreadExport
+                                ? `Latest export receipt recorded ${format(new Date(latestThreadExport.exported_at), "MMM d, yyyy 'at' h:mm a")}`
+                                : receiptPanelPresentation.headline}
+                            </p>
+                            <p className="max-w-3xl text-sm leading-6 text-slate-300/80">
+                              {receiptPanelPresentation.description}
+                            </p>
+                            {latestThreadExport && (
+                              <p className="text-xs text-slate-300/60">
+                                This export includes a tamper-evident receipt generated from server-authoritative records. You can verify whether the PDF still matches the stored receipt.
+                              </p>
+                            )}
+                          </div>
+
+                          {latestThreadExport && (
+                            <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                              <div className="grid gap-3 sm:grid-cols-2">
+                                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-200/80">
+                                  <p className="font-semibold uppercase tracking-[0.14em] text-slate-300/70">
+                                    Receipt ID
+                                  </p>
+                                  <code className="mt-3 block break-all text-[11px] leading-5 text-slate-50">
+                                    {latestThreadExport.id}
+                                  </code>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="mt-3 h-8 rounded-lg px-2 text-[11px]"
+                                    aria-label="Copy receipt ID"
+                                    onClick={() =>
+                                      void handleCopyReceiptValue(
+                                        "Receipt ID",
+                                        latestThreadExport.id,
+                                        "receipt-id",
+                                      )
+                                    }
+                                  >
+                                    {copiedReceiptField === "receipt-id" ? (
+                                      <>
+                                        <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                                        Copied
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                                        Copy receipt ID
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
+
+                                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-200/80">
+                                  <p className="font-semibold uppercase tracking-[0.14em] text-slate-300/70">
+                                    Receipt details
+                                  </p>
+                                  <p className="mt-3 text-sm font-medium text-white">
+                                    {latestThreadExport.record_count} record entr{latestThreadExport.record_count === 1 ? "y" : "ies"}
+                                  </p>
+                                  <div className="mt-3 space-y-1 text-[11px] leading-5 text-slate-300/75">
+                                    <p>Raw result: {latestReceiptVerificationResult?.status ?? "unknown"}</p>
+                                    {latestThreadExport.signing_key_id ? (
+                                      <p>Signing key ID: {latestThreadExport.signing_key_id}</p>
+                                    ) : null}
+                                    {latestThreadExport.signature_algorithm ? (
+                                      <p>Algorithm: {latestThreadExport.signature_algorithm}</p>
+                                    ) : null}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <div>
+                                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300/70">
+                                      PDF Hash
+                                    </p>
+                                    <p className="mt-1 text-xs text-slate-300/65">
+                                      Full value is copyable. The stored receipt is what links this hash to the server-generated PDF artifact.
+                                    </p>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
+                                    aria-label="Copy PDF hash"
+                                    disabled={!latestThreadExport.pdf_artifact_hash}
+                                    onClick={() =>
+                                      latestThreadExport.pdf_artifact_hash &&
+                                      void handleCopyReceiptValue(
+                                        "PDF hash",
+                                        latestThreadExport.pdf_artifact_hash,
+                                        "pdf-hash",
+                                      )
+                                    }
+                                  >
+                                    {copiedReceiptField === "pdf-hash" ? (
+                                      <>
+                                        <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                                        Copied
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                                        Copy hash
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
+                                <code className="mt-4 block break-all rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] leading-6 text-slate-50">
+                                  {formatHashValue(latestThreadExport.pdf_artifact_hash)}
+                                </code>
+                              </div>
+                            </div>
+                          )}
+
+                          {latestThreadExport && (
+                            <p className="text-xs text-slate-300/60">
+                              The exact PDF bytes are generated on the server, hashed after rendering, and linked by the server-signed receipt. The PDF does not contain an embedded Acrobat-style digital signature.
+                            </p>
+                          )}
+                          {threadExportsError && (
+                            <p className="text-sm text-warning">{threadExportsError}</p>
                           )}
                         </div>
-                        <p className="text-sm font-semibold text-white">
-                          {latestThreadExport
-                            ? `Latest receipt ${latestThreadExport.id.slice(0, 8)}… recorded for this thread`
-                            : "No recorded export receipts saved for this thread yet"}
-                        </p>
-                        <p className="text-sm text-slate-300/70">
-                          {latestThreadExport
-                            ? `Generated ${format(new Date(latestThreadExport.exported_at), "MMM d, yyyy 'at' h:mm a")} with ${latestThreadExport.record_count} record entr${latestThreadExport.record_count === 1 ? "y" : "ies"}, canonical hash ${formatHashPreview(latestThreadExport.content_hash)}, manifest hash ${formatHashPreview(latestThreadExport.manifest_hash)}, and signing key ${latestThreadExport.signing_key_id ?? "Unavailable"}.`
-                            : "Create an evidence package to store a server-signed export receipt, layered hashes, and a paired JSON evidence package for later verification."}
-                        </p>
-                        {latestThreadExport && (
-                          <div className="grid gap-2 sm:grid-cols-3">
-                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200/80">
-                              <p className="font-semibold uppercase tracking-[0.14em] text-slate-300/70">
-                                Receipt ID
-                              </p>
-                              <div className="mt-1 flex items-center justify-between gap-2">
-                                <code className="truncate text-[11px]">{latestThreadExport.id}</code>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 rounded-lg px-2 text-[11px]"
-                                  onClick={() => void handleCopyReceiptValue("Receipt ID", latestThreadExport.id)}
-                                >
-                                  Copy
-                                </Button>
-                              </div>
-                            </div>
-                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200/80">
-                              <p className="font-semibold uppercase tracking-[0.14em] text-slate-300/70">
-                                Canonical hash
-                              </p>
-                              <div className="mt-1 flex items-center justify-between gap-2">
-                                <code className="truncate text-[11px]">{latestThreadExport.content_hash}</code>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 rounded-lg px-2 text-[11px]"
-                                  onClick={() => void handleCopyReceiptValue("Canonical hash", latestThreadExport.content_hash)}
-                                >
-                                  Copy
-                                </Button>
-                              </div>
-                            </div>
-                            <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-200/80">
-                              <p className="font-semibold uppercase tracking-[0.14em] text-slate-300/70">
-                                Signing key
-                              </p>
-                              <div className="mt-1 flex items-center justify-between gap-2">
-                                <code className="truncate text-[11px]">{latestThreadExport.signing_key_id ?? "Unavailable"}</code>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 rounded-lg px-2 text-[11px]"
-                                  disabled={!latestThreadExport.signing_key_id}
-                                  onClick={() => latestThreadExport.signing_key_id && void handleCopyReceiptValue("Signing key ID", latestThreadExport.signing_key_id)}
-                                >
-                                  Copy
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                        {threadExportsError && (
-                          <p className="text-sm text-warning">{threadExportsError}</p>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
-                          disabled={!activeFamilyId || !activeThread || threadExportsLoading}
-                          onClick={() => {
-                            setShowVerifyDialog(true);
-                            setVerificationResult(null);
-                          }}
-                        >
-                          Verify receipt
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
-                          disabled={!activeFamilyId || !activeThread || threadExportsLoading}
-                          onClick={() => void loadThreadExports()}
-                        >
-                          Refresh records
-                        </Button>
-                      </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
+                            disabled={!activeFamilyId || !latestThreadExport || downloadingArtifact === "pdf"}
+                            onClick={() =>
+                              void handleDownloadStoredArtifact("pdf", latestThreadExport?.id ?? null)
+                            }
+                          >
+                            {downloadingArtifact === "pdf" ? "Downloading PDF..." : "Download PDF"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
+                            disabled={!activeFamilyId || !latestThreadExport || downloadingArtifact === "json_evidence_package"}
+                            onClick={() =>
+                              void handleDownloadStoredArtifact(
+                                "json_evidence_package",
+                                latestThreadExport?.id ?? null,
+                              )
+                            }
+                          >
+                            {downloadingArtifact === "json_evidence_package"
+                              ? "Downloading JSON..."
+                              : "Download JSON package"}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
+                            disabled={!activeFamilyId || !activeThread || threadExportsLoading}
+                            onClick={() => {
+                              setSelectedExportId(latestThreadExport?.id ?? null);
+                              setShowVerifyDialog(true);
+                            }}
+                          >
+                            Verify receipt
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
+                            disabled={!activeFamilyId || !activeThread || threadExportsLoading}
+                            onClick={() => void loadThreadExports()}
+                          >
+                            Refresh records
+                          </Button>
+                        </div>
                     </div>
+                  </div>
                   </div>
                 )}
               </div>
@@ -1718,7 +2099,10 @@ const MessagingHubPage = () => {
             onOpenChange={(open) => {
               setShowVerifyDialog(open);
               if (!open) {
-                setVerificationResult(null);
+                setUploadedManifestJson(null);
+                setUploadedManifestName(null);
+                setUploadedPdfBase64(null);
+                setUploadedPdfName(null);
               }
             }}
           >
@@ -1731,13 +2115,20 @@ const MessagingHubPage = () => {
                   <p className="text-sm font-medium text-foreground">Verification options</p>
                   <p className="mt-1 text-sm text-muted-foreground">
                     Select a recorded export receipt for this thread, then verify it against the
-                    current server-authoritative record, a downloaded JSON evidence package, or
-                    the stored server-signed receipt.
+                    current server-authoritative record, a downloaded JSON evidence package, an
+                    uploaded PDF artifact, the stored PDF artifact, or the stored server-signed
+                    receipt.
                   </p>
                 </div>
 
+                {exportScopeError && (
+                  <div className="rounded-2xl border border-amber-300/25 bg-amber-500/10 p-4 text-sm text-amber-50">
+                    {exportScopeError}
+                  </div>
+                )}
+
                 <div className="space-y-3">
-                  <p className="text-sm font-medium text-foreground">Recorded exports</p>
+                  <p className="text-sm font-medium text-foreground">Recorded export receipts</p>
                   {threadExportsLoading ? (
                     <div className="flex items-center gap-2 rounded-2xl border border-border/70 bg-background/40 p-4 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -1780,7 +2171,7 @@ const MessagingHubPage = () => {
                               </Badge>
                             </div>
                             <p className="mt-2 text-xs text-muted-foreground">
-                              Canonical hash {formatHashPreview(record.content_hash, 20)} • Manifest hash {formatHashPreview(record.manifest_hash, 20)} • Key {record.signing_key_id ?? "Unavailable"}
+                              PDF hash {formatHashPreview(record.pdf_artifact_hash, 20)} • Receipt ID {record.id.slice(0, 12)}… • Key {record.signing_key_id ?? "Unavailable"}
                             </p>
                           </button>
                         );
@@ -1803,10 +2194,24 @@ const MessagingHubPage = () => {
                   </p>
                 </div>
 
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-foreground">Optional PDF artifact</p>
+                  <Input
+                    accept=".pdf,application/pdf"
+                    onChange={(event) => void handlePdfFileChange(event)}
+                    type="file"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {uploadedPdfName
+                      ? `Selected file: ${uploadedPdfName}`
+                      : "Choose a downloaded PDF artifact if you want to compare exact PDF bytes against the stored receipt hash."}
+                  </p>
+                </div>
+
                 <div className="flex flex-wrap gap-2">
                   <Button
                     className="rounded-xl"
-                    disabled={!selectedThreadExport || verificationLoading}
+                    disabled={!activeFamilyId || !selectedThreadExport || verificationLoading}
                     onClick={() => void runVerification("stored_source")}
                   >
                     {verificationLoading ? (
@@ -1817,7 +2222,7 @@ const MessagingHubPage = () => {
                   <Button
                     variant="outline"
                     className="rounded-xl"
-                    disabled={!selectedThreadExport || !uploadedManifestJson || verificationLoading}
+                    disabled={!activeFamilyId || !selectedThreadExport || !uploadedManifestJson || verificationLoading}
                     onClick={() => void runVerification("provided_package_json")}
                   >
                     Verify uploaded package
@@ -1825,7 +2230,23 @@ const MessagingHubPage = () => {
                   <Button
                     variant="outline"
                     className="rounded-xl"
-                    disabled={!selectedThreadExport || verificationLoading}
+                    disabled={!activeFamilyId || !selectedThreadExport || !uploadedPdfBase64 || verificationLoading}
+                    onClick={() => void runVerification("provided_pdf_artifact")}
+                  >
+                    Verify uploaded PDF
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="rounded-xl"
+                    disabled={!activeFamilyId || !selectedThreadExport || verificationLoading}
+                    onClick={() => void runVerification("stored_pdf_artifact")}
+                  >
+                    Verify stored PDF artifact
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="rounded-xl"
+                    disabled={!activeFamilyId || !selectedThreadExport || verificationLoading}
                     onClick={() => void runVerification("stored_signature")}
                   >
                     Verify stored server signature
@@ -1833,21 +2254,35 @@ const MessagingHubPage = () => {
                 </div>
 
                 {verificationResult && (
-                  <div className={cn("rounded-2xl border p-4", verificationToneClass)}>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold">{verificationHeadline}</p>
-                        <p className="mt-1 text-sm opacity-90">
-                          {verificationDescription}
+                  <div
+                    role={verificationPresentation.isAlert ? "alert" : "status"}
+                    aria-live="polite"
+                    className={cn("rounded-2xl border p-4", verificationPresentation.badgeToneClass)}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          {verificationPresentation.isAlert ? (
+                            <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                          ) : verificationResult.status === "match" ? (
+                            <Check className="h-4 w-4" aria-hidden="true" />
+                          ) : (
+                            <Info className="h-4 w-4" aria-hidden="true" />
+                          )}
+                          <p className="text-sm font-semibold">{verificationPresentation.headline}</p>
+                        </div>
+                        <p className="text-sm opacity-90">
+                          {verificationPresentation.description}
                         </p>
                       </div>
-                      <Badge variant="outline" className="border-current/30 bg-transparent text-current">
-                        {verificationResult.verification_mode === "stored_source"
-                          ? "Current server record"
-                          : verificationResult.verification_mode === "provided_package_json"
-                            ? "Uploaded package"
-                            : "Stored receipt signature"}
-                      </Badge>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="outline" className="border-current/30 bg-transparent text-current">
+                          {formatVerificationModeLabel(verificationResult.verification_mode)}
+                        </Badge>
+                        <Badge variant="outline" className="border-current/30 bg-transparent font-mono text-current">
+                          Raw result: {verificationResult.status}
+                        </Badge>
+                      </div>
                     </div>
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
                       <div className="rounded-xl border border-current/20 bg-black/10 p-3 text-xs opacity-90">
@@ -1875,6 +2310,14 @@ const MessagingHubPage = () => {
                         ) : null}
                       </div>
                       <div className="rounded-xl border border-current/20 bg-black/10 p-3 text-xs opacity-90">
+                        <p className="font-semibold uppercase tracking-[0.14em]">PDF artifact hash</p>
+                        <p className="mt-2 break-all">Stored: {verificationResult.verification_layers.pdf_artifact_hash.stored ?? "Unavailable"}</p>
+                        <p className="mt-1 break-all">Computed: {verificationResult.verification_layers.pdf_artifact_hash.computed ?? "Unavailable"}</p>
+                        {verificationResult.verification_layers.pdf_artifact_hash.note ? (
+                          <p className="mt-2 opacity-80">{verificationResult.verification_layers.pdf_artifact_hash.note}</p>
+                        ) : null}
+                      </div>
+                      <div className="rounded-xl border border-current/20 bg-black/10 p-3 text-xs opacity-90">
                         <p className="font-semibold uppercase tracking-[0.14em]">Receipt signature</p>
                         <p className="mt-2">
                           Status: {verificationResult.verification_layers.receipt_signature.status}
@@ -1892,6 +2335,11 @@ const MessagingHubPage = () => {
                         ) : null}
                       </div>
                     </div>
+                    <p className="mt-3 text-xs opacity-80">
+                      Verification checks the stored server-signed receipt and the selected artifact
+                      hashes. The PDF file is verifiable against the receipt, but it does not carry
+                      an embedded Acrobat-style digital signature.
+                    </p>
                   </div>
                 )}
               </div>
