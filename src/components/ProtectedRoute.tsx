@@ -33,7 +33,7 @@ interface ProtectedRouteProps {
 export const ProtectedRoute = ({ children, requireParent }: ProtectedRouteProps) => {
   const { user, loading: authLoading } = useAuth();
   // Role is scoped to active family via useFamilyRole
-  const { activeFamilyId, isThirdParty, isChild, loading: roleLoading } = useFamilyRole();
+  const { activeFamilyId, isThirdParty, isChild, isLawOffice, loading: roleLoading } = useFamilyRole();
   const { isChildAccount, loading: childLoading } = useChildAccount();
   const location = useLocation();
 
@@ -42,7 +42,7 @@ export const ProtectedRoute = ({ children, requireParent }: ProtectedRouteProps)
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={location.pathname.startsWith("/law-office") ? "/law-office/login" : "/login"} replace />;
   }
 
   const accessDecision = getProtectedRouteAccessDecision(location.pathname, {
@@ -51,6 +51,7 @@ export const ProtectedRoute = ({ children, requireParent }: ProtectedRouteProps)
     isThirdParty,
     isChild,
     isChildAccount,
+    isLawOffice,
   });
 
   if (accessDecision.reason === "missing_active_family") {

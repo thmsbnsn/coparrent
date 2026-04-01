@@ -65,6 +65,11 @@ class MockQueryBuilder {
     return this;
   }
 
+  is(field: string, value: unknown): this {
+    this.filters.push((row) => row[field] === value);
+    return this;
+  }
+
   gte(field: string, value: unknown): this {
     this.filters.push((row) => String(row[field] ?? "") >= String(value ?? ""));
     return this;
@@ -232,6 +237,7 @@ const envValues: Record<string, string | undefined> = {
 
 const buildState = (): TestState => ({
   authUsers: {
+    "law-office-token": { id: "user-7" },
     "parent-token": { id: "user-1" },
     "outsider-token": { id: "user-9" },
   },
@@ -398,6 +404,16 @@ const buildState = (): TestState => ({
         user_id: "user-2",
       },
     ],
+    law_office_family_access: [
+      {
+        created_at: "2026-04-01T08:00:00.000Z",
+        family_id: "family-1",
+        granted_by: "user-1",
+        id: "law-access-1",
+        law_office_user_id: "user-7",
+        revoked_at: null,
+      },
+    ],
     message_threads: [
       {
         family_id: "family-1",
@@ -436,6 +452,18 @@ const buildState = (): TestState => ({
         subscription_tier: "power",
         trial_ends_at: null,
         user_id: "user-2",
+      },
+      {
+        access_grace_until: null,
+        account_role: "law_office",
+        email: "lawyer@example.com",
+        free_premium_access: false,
+        full_name: "Alex Counsel",
+        id: "profile-law-office",
+        subscription_status: "none",
+        subscription_tier: "free",
+        trial_ends_at: null,
+        user_id: "user-7",
       },
       {
         access_grace_until: null,
@@ -675,6 +703,49 @@ describe("court-record-export", () => {
     });
   });
 
+  it("fails when a law office user has no explicit family assignment", async () => {
+    state.tables.law_office_family_access = [];
+
+    const response = await handler(
+      buildRequest(
+        {
+          action: "list",
+          family_id: "family-1",
+        },
+        "law-office-token",
+      ),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "You do not have access to that family.",
+      success: false,
+    });
+  });
+
+  it("blocks law office users from creating new family-wide exports", async () => {
+    const response = await handler(
+      buildRequest(
+        {
+          action: "create",
+          date_range: {
+            end: "2026-03-31T23:59:59.000Z",
+            start: "2026-03-01T00:00:00.000Z",
+          },
+          family_id: "family-1",
+          include_sections: ["messages"],
+        },
+        "law-office-token",
+      ),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Law office users cannot create exports.",
+      success: false,
+    });
+  });
+
   it("requires a Power subscription for family court-record exports", async () => {
     const exporter = state.tables.profiles.find((row) => row.id === "profile-taylor");
     if (!exporter) {
@@ -800,6 +871,79 @@ describe("court-record-export", () => {
     );
     expect(state.tables.court_exports).toHaveLength(1);
     expect(state.s3Uploads).toHaveLength(2);
+  });
+
+  it("allows an explicitly assigned law office user to list, download, and verify immutable exports", async () => {
+    const createResponse = await handler(
+      buildRequest(
+        {
+          action: "create",
+          date_range: {
+            end: "2026-03-31T23:59:59.000Z",
+            start: "2026-03-01T00:00:00.000Z",
+          },
+          family_id: "family-1",
+          include_sections: ["messages", "call_activity", "document_references"],
+        },
+        "parent-token",
+      ),
+    );
+    const createBody = await createResponse.json();
+
+    const listResponse = await handler(
+      buildRequest(
+        {
+          action: "list",
+          family_id: "family-1",
+        },
+        "law-office-token",
+      ),
+    );
+
+    expect(listResponse.status).toBe(200);
+    await expect(listResponse.json()).resolves.toMatchObject({
+      exports: [expect.objectContaining({ id: createBody.export.id })],
+      success: true,
+    });
+
+    const downloadResponse = await handler(
+      buildRequest(
+        {
+          action: "download",
+          artifact_kind: "pdf",
+          export_id: createBody.export.id,
+          family_id: "family-1",
+        },
+        "law-office-token",
+      ),
+    );
+
+    expect(downloadResponse.status).toBe(200);
+    await expect(downloadResponse.json()).resolves.toMatchObject({
+      artifact: expect.objectContaining({
+        kind: "pdf",
+      }),
+      success: true,
+    });
+
+    const verifyResponse = await handler(
+      buildRequest(
+        {
+          action: "verify",
+          export_id: createBody.export.id,
+          family_id: "family-1",
+          verification_mode: "stored_source",
+        },
+        "law-office-token",
+      ),
+    );
+
+    expect(verifyResponse.status).toBe(200);
+    await expect(verifyResponse.json()).resolves.toMatchObject({
+      status: "match",
+      success: true,
+      verification_mode: "stored_source",
+    });
   });
 
   it("returns a verification match for unchanged stored source data", async () => {

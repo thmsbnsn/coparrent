@@ -80,6 +80,11 @@ class MockQueryBuilder {
     return this;
   }
 
+  is(field: string, value: unknown): this {
+    this.filters.push((row) => row[field] === value);
+    return this;
+  }
+
   in(field: string, values: unknown[]): this {
     this.filters.push((row) => values.includes(row[field]));
     return this;
@@ -286,6 +291,7 @@ const envValues: Record<string, string | undefined> = {
 const buildState = (): TestState => ({
   authUsers: {
     "guardian-token": { id: "user-3" },
+    "law-office-token": { id: "user-7" },
     "parent-token": { id: "user-1" },
   },
   rpcCalls: [],
@@ -333,6 +339,16 @@ const buildState = (): TestState => ({
       },
     ],
     group_chat_participants: [],
+    law_office_family_access: [
+      {
+        created_at: "2026-04-01T08:00:00.000Z",
+        family_id: "family-1",
+        granted_by: "user-1",
+        id: "law-access-1",
+        law_office_user_id: "user-7",
+        revoked_at: null,
+      },
+    ],
     message_threads: [
       {
         created_at: "2026-03-30T10:00:00.000Z",
@@ -382,6 +398,18 @@ const buildState = (): TestState => ({
         subscription_tier: "power",
         trial_ends_at: null,
         user_id: "user-3",
+      },
+      {
+        access_grace_until: null,
+        account_role: "law_office",
+        email: "lawyer@example.com",
+        free_premium_access: false,
+        full_name: "Alex Counsel",
+        id: "profile-law-office",
+        subscription_status: "none",
+        subscription_tier: "free",
+        trial_ends_at: null,
+        user_id: "user-7",
       },
     ],
     thread_messages: [
@@ -577,6 +605,46 @@ describe("messaging-thread-export", () => {
     });
   });
 
+  it("fails when a law office user has no explicit family assignment", async () => {
+    state.tables.law_office_family_access = [];
+
+    const response = await handler(
+      buildRequest(
+        {
+          action: "list",
+          family_id: "family-1",
+          thread_id: "thread-direct-jessica",
+        },
+        "law-office-token",
+      ),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "You do not have access to that family.",
+      success: false,
+    });
+  });
+
+  it("blocks law office users from creating new messaging exports", async () => {
+    const response = await handler(
+      buildRequest(
+        {
+          action: "create",
+          family_id: "family-1",
+          thread_id: "thread-direct-jessica",
+        },
+        "law-office-token",
+      ),
+    );
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      error: "Law office users cannot create exports.",
+      success: false,
+    });
+  });
+
   it("creates a persisted export record with hash and manifest from authorized thread data", async () => {
     const response = await handler(
       buildRequest(
@@ -660,6 +728,76 @@ describe("messaging-thread-export", () => {
       ]),
     );
     expect(state.rpcCalls.some((call) => call.args._action === "COURT_EXPORT_CREATED")).toBe(true);
+  });
+
+  it("allows an assigned law office user to list, download, and verify existing messaging exports", async () => {
+    const createResponse = await handler(
+      buildRequest(
+        {
+          action: "create",
+          family_id: "family-1",
+          thread_id: "thread-direct-jessica",
+        },
+        "parent-token",
+      ),
+    );
+    const createBody = await createResponse.json();
+
+    const listResponse = await handler(
+      buildRequest(
+        {
+          action: "list",
+          family_id: "family-1",
+          thread_id: "thread-direct-jessica",
+        },
+        "law-office-token",
+      ),
+    );
+
+    expect(listResponse.status).toBe(200);
+    await expect(listResponse.json()).resolves.toMatchObject({
+      exports: [expect.objectContaining({ id: createBody.export.id })],
+      success: true,
+    });
+
+    const downloadResponse = await handler(
+      buildRequest(
+        {
+          action: "download",
+          artifact_kind: "pdf",
+          export_id: createBody.export.id,
+          family_id: "family-1",
+        },
+        "law-office-token",
+      ),
+    );
+
+    expect(downloadResponse.status).toBe(200);
+    await expect(downloadResponse.json()).resolves.toMatchObject({
+      artifact: expect.objectContaining({
+        kind: "pdf",
+      }),
+      success: true,
+    });
+
+    const verifyResponse = await handler(
+      buildRequest(
+        {
+          action: "verify",
+          export_id: createBody.export.id,
+          family_id: "family-1",
+          verification_mode: "stored_source",
+        },
+        "law-office-token",
+      ),
+    );
+
+    expect(verifyResponse.status).toBe(200);
+    await expect(verifyResponse.json()).resolves.toMatchObject({
+      status: "match",
+      success: true,
+      verification_mode: "stored_source",
+    });
   });
 
   it("fails closed when server receipt signing is not configured", async () => {

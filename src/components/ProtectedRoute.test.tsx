@@ -32,6 +32,7 @@ const defaultFamilyRoleState = {
   activeFamilyId: "family-1",
   isThirdParty: false,
   isChild: false,
+  isLawOffice: false,
   loading: false,
 };
 
@@ -70,13 +71,23 @@ describe("ProtectedRoute", () => {
         <MemoryRouter initialEntries={[initialPath]}>
           <Routes>
             <Route path="/login" element={<div>login-page</div>} />
+            <Route path="/law-office/login" element={<div>law-office-login</div>} />
             <Route path="/kids" element={<div>kids-home</div>} />
             <Route path="/dashboard" element={<div>dashboard-home</div>} />
+            <Route path="/law-office/dashboard" element={<div>law-office-dashboard</div>} />
             <Route
               path="/dashboard/*"
               element={
                 <ProtectedRoute requireParent={requireParent}>
                   <div>protected-content</div>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/law-office/dashboard/*"
+              element={
+                <ProtectedRoute requireParent={requireParent}>
+                  <div>law-office-protected-content</div>
                 </ProtectedRoute>
               }
             />
@@ -106,6 +117,16 @@ describe("ProtectedRoute", () => {
 
     const rendered = renderProtectedRoute("/dashboard/expenses");
     expect(rendered.textContent).toContain("login-page");
+  });
+
+  it("redirects unauthenticated law office users to the law office login", () => {
+    mockedUseAuth.mockReturnValue({
+      user: null,
+      loading: false,
+    } as never);
+
+    const rendered = renderProtectedRoute("/law-office/dashboard/review");
+    expect(rendered.textContent).toContain("law-office-login");
   });
 
   it("renders protected content for an authenticated parent", () => {
@@ -169,5 +190,32 @@ describe("ProtectedRoute", () => {
 
     const rendered = renderProtectedRoute("/dashboard/law-library");
     expect(rendered.textContent).toContain("protected-content");
+  });
+
+  it("keeps law office users out of parent dashboard routes", () => {
+    mockedUseFamilyRole.mockReturnValue({
+      ...defaultFamilyRoleState,
+      activeFamilyId: null,
+      isLawOffice: true,
+    } as never);
+
+    const rendered = renderProtectedRoute("/dashboard/messages");
+    expect(rendered.textContent).toContain("law-office-dashboard");
+  });
+
+  it("blocks parent users from the law office dashboard", () => {
+    const rendered = renderProtectedRoute("/law-office/dashboard/review");
+    expect(rendered.textContent).toContain("dashboard-home");
+  });
+
+  it("renders the law office route for a law office user", () => {
+    mockedUseFamilyRole.mockReturnValue({
+      ...defaultFamilyRoleState,
+      activeFamilyId: null,
+      isLawOffice: true,
+    } as never);
+
+    const rendered = renderProtectedRoute("/law-office/dashboard/review");
+    expect(rendered.textContent).toContain("law-office-protected-content");
   });
 });

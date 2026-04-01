@@ -41,6 +41,9 @@ const TermsPage = lazy(() => import("./pages/TermsPage"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const Login = lazy(() => import("./pages/Login"));
 const Signup = lazy(() => import("./pages/Signup"));
+const LawOfficeLogin = lazy(() => import("./pages/LawOfficeLogin"));
+const LawOfficeSignup = lazy(() => import("./pages/LawOfficeSignup"));
+const LawOfficeDashboard = lazy(() => import("./pages/LawOfficeDashboard"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
@@ -131,9 +134,11 @@ const App = () => (
                 <Route path="/payment-success" element={<RouteErrorBoundary routeName="Payment Success"><PaymentSuccess /></RouteErrorBoundary>} />
                 <Route path="/accept-invite" element={<RouteErrorBoundary routeName="Accept Invite"><AcceptInvite /></RouteErrorBoundary>} />
                 
-                {/* Law Office Portal Routes paused until the core product is stable */}
-                <Route path="/law-office/login" element={<Navigate to="/login" replace />} />
-                <Route path="/law-office/signup" element={<Navigate to="/signup" replace />} />
+                {/* Law Office Portal Routes */}
+                <Route path="/law-office/login" element={<RouteErrorBoundary routeName="Law Office Login"><LawOfficeLogin /></RouteErrorBoundary>} />
+                <Route path="/law-office/signup" element={<RouteErrorBoundary routeName="Law Office Signup"><LawOfficeSignup /></RouteErrorBoundary>} />
+                <Route path="/law-office" element={<Navigate to="/law-office/dashboard" replace />} />
+                <Route path="/law-office/dashboard" element={<ProtectedRoute><RouteErrorBoundary routeName="Law Office Dashboard"><LawOfficeDashboard /></RouteErrorBoundary></ProtectedRoute>} />
                 
                 {/* Child Account Dashboard (Kids only) */}
                 <Route path="/kids" element={<ProtectedRoute><RouteErrorBoundary routeName="Kids Dashboard"><KidsDashboard /></RouteErrorBoundary></ProtectedRoute>} />

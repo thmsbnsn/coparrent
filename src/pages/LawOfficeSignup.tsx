@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { PasswordStrengthIndicator } from "@/components/auth/PasswordStrengthIndicator";
 import { getEmailConfirmationRedirectUrl } from "@/lib/authRedirects";
+import { resolvePostAuthPath } from "@/lib/postAuthPath";
 
 const LawOfficeSignup = () => {
   const navigate = useNavigate();
@@ -28,7 +29,18 @@ const LawOfficeSignup = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (!loading && user) {
-      navigate("/dashboard");
+      let active = true;
+
+      void (async () => {
+        const path = await resolvePostAuthPath(user);
+        if (active) {
+          navigate(path);
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
     }
   }, [user, loading, navigate]);
 
@@ -55,7 +67,7 @@ const LawOfficeSignup = () => {
         emailRedirectTo: redirectUrl,
         data: {
           full_name: formData.fullName,
-          account_type: "lawoffice",
+          account_type: "law_office",
           firm_name: formData.firmName,
         },
       },
@@ -78,7 +90,7 @@ const LawOfficeSignup = () => {
 
     toast({
       title: "Account created!",
-      description: "Welcome to the Law Office Portal.",
+      description: "Welcome to the Law Office Portal. Family assignments must be granted before records appear.",
     });
   };
 
@@ -114,7 +126,7 @@ const LawOfficeSignup = () => {
 
             <h1 className="text-2xl font-display font-bold mb-2">Create Law Office Account</h1>
             <p className="text-muted-foreground mb-8">
-              Access client family data and court-ready documentation
+              Set up a read-only professional account for assigned family export records
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -243,8 +255,7 @@ const LawOfficeSignup = () => {
             transition={{ delay: 0.4 }}
             className="text-white/80"
           >
-            Access court-ready documentation, client family data, and custody 
-            arrangement tracking designed for legal professionals.
+            Access assigned families through immutable export receipts and verification-backed records, without relying on raw table access.
           </motion.p>
         </div>
       </div>

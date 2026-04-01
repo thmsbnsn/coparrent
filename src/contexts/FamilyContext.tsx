@@ -13,8 +13,10 @@ import type { Database } from "@/integrations/supabase/types";
 import { ensureCurrentUserFamilyMembership, hasPendingInviteToken } from "@/lib/familyMembership";
 
 type MemberRole = Database["public"]["Enums"]["member_role"];
+type WorkspaceAccessKind = "family_member" | "law_office";
 
 export interface FamilyMembership {
+  accessKind: WorkspaceAccessKind;
   familyId: string;
   familyName: string | null;
   role: MemberRole | null;
@@ -29,6 +31,7 @@ interface ActiveFamily {
 }
 
 interface FamilyContextType {
+  accountRole: string | null;
   loading: boolean;
   roleLoading: boolean;
   profileId: string | null;
@@ -40,8 +43,15 @@ interface FamilyContextType {
   isParentInActiveFamily: boolean;
   isThirdPartyInActiveFamily: boolean;
   isChildInActiveFamily: boolean;
+  isLawOfficeUser: boolean;
   setActiveFamilyId: (familyId: string) => void;
   refresh: () => Promise<void>;
+}
+
+interface LawOfficeFamilyAccessRow {
+  created_at: string;
+  family_id: string | null;
+  revoked_at: string | null;
 }
 
 const FamilyContext = createContext<FamilyContextType | undefined>(undefined);
@@ -53,6 +63,7 @@ export const FamilyProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [roleLoading, setRoleLoading] = useState(true);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [accountRole, setAccountRole] = useState<string | null>(null);
   const [memberships, setMemberships] = useState<FamilyMembership[]>([]);
   const [activeFamilyId, setActiveFamilyIdState] = useState<string | null>(null);
 
@@ -63,6 +74,7 @@ export const FamilyProvider = ({ children }: { children: ReactNode }) => {
 
     if (!user) {
       setProfileId(null);
+      setAccountRole(null);
       setMemberships([]);
       setActiveFamilyIdState(null);
       setLoading(false);
@@ -86,10 +98,46 @@ export const FamilyProvider = ({ children }: { children: ReactNode }) => {
 
       const nextProfileId = profile?.id ?? null;
       setProfileId(nextProfileId);
+      setAccountRole(profile?.account_role ?? null);
 
       if (!nextProfileId) {
         setMemberships([]);
         setActiveFamilyIdState(null);
+        return;
+      }
+
+      if (profile?.account_role === "law_office") {
+        const { data: accessRows, error: accessError } = await supabase
+          .from("law_office_family_access")
+          .select("family_id, created_at, revoked_at")
+          .is("revoked_at", null)
+          .order("created_at", { ascending: true });
+
+        if (accessError) {
+          throw accessError;
+        }
+
+        const nextMemberships: FamilyMembership[] = ((accessRows as LawOfficeFamilyAccessRow[] | null) ?? [])
+          .filter((row) => row.family_id)
+          .map((row) => ({
+            accessKind: "law_office",
+            familyId: row.family_id!,
+            familyName: null,
+            role: null,
+            relationshipLabel: "Law Office",
+            status: row.revoked_at ? "revoked" : "active",
+            primaryParentId: null,
+          }));
+
+        setMemberships(nextMemberships);
+
+        const storageKey = storageKeyForUser(user.id);
+        const persistedFamilyId = localStorage.getItem(storageKey);
+        const resolvedFamilyId = nextMemberships.some((membership) => membership.familyId === persistedFamilyId)
+          ? persistedFamilyId
+          : nextMemberships[0]?.familyId ?? null;
+
+        setActiveFamilyIdState(resolvedFamilyId);
         return;
       }
 
@@ -144,6 +192,7 @@ export const FamilyProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const nextMemberships: FamilyMembership[] = usableRows.map((row) => ({
+        accessKind: "family_member",
         familyId: row.family_id!,
         familyName: familyMap.get(row.family_id!) ?? null,
         role: row.role ?? null,
@@ -163,6 +212,7 @@ export const FamilyProvider = ({ children }: { children: ReactNode }) => {
       setActiveFamilyIdState(resolvedFamilyId);
     } catch (error) {
       console.error("Error loading family context:", error);
+      setAccountRole(null);
       setMemberships([]);
       setActiveFamilyIdState(null);
     } finally {
@@ -207,8 +257,10 @@ export const FamilyProvider = ({ children }: { children: ReactNode }) => {
     const isParentInActiveFamily = effectiveRole === "parent" || effectiveRole === "guardian";
     const isThirdPartyInActiveFamily = effectiveRole === "third_party";
     const isChildInActiveFamily = effectiveRole === "child";
+    const isLawOfficeUser = accountRole === "law_office";
 
     return {
+      accountRole,
       loading,
       roleLoading,
       profileId,
@@ -225,10 +277,11 @@ export const FamilyProvider = ({ children }: { children: ReactNode }) => {
       isParentInActiveFamily,
       isThirdPartyInActiveFamily,
       isChildInActiveFamily,
+      isLawOfficeUser,
       setActiveFamilyId,
       refresh,
     };
-  }, [activeFamilyId, activeMembership, loading, memberships, profileId, refresh, roleLoading, setActiveFamilyId]);
+  }, [accountRole, activeFamilyId, activeMembership, loading, memberships, profileId, refresh, roleLoading, setActiveFamilyId]);
 
   return <FamilyContext.Provider value={value}>{children}</FamilyContext.Provider>;
 };

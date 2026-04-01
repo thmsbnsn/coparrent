@@ -1,9 +1,14 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import {
+  getActiveMembershipForUser,
   HttpError,
   type AuthenticatedProfile,
   type FamilyMemberRecord,
 } from "./callHelpers.ts";
+import {
+  assertLawOfficeFamilyAccess,
+  isLawOfficeProfile,
+} from "./lawOfficeAccess.ts";
 import {
   isDateInPast,
   isGracePeriodActive,
@@ -111,4 +116,88 @@ export function requireFamilyCourtRecordExportRole(
     403,
     "Only parents and guardians can export family court records.",
   );
+}
+
+export type CourtExportFamilyAccess =
+  | {
+      kind: "family_member";
+      membership: FamilyMemberRecord;
+    }
+  | {
+      kind: "law_office";
+    };
+
+export async function resolveCourtExportFamilyAccess(
+  supabaseAdmin: SupabaseClient,
+  options: {
+    familyId: string;
+    profile: AuthenticatedProfile;
+    userId: string;
+  },
+): Promise<CourtExportFamilyAccess> {
+  try {
+    const membership = await getActiveMembershipForUser(
+      supabaseAdmin,
+      options.familyId,
+      options.userId,
+    );
+
+    return {
+      kind: "family_member",
+      membership,
+    };
+  } catch (error) {
+    if (!(error instanceof HttpError) || error.status !== 403) {
+      throw error;
+    }
+
+    if (!isLawOfficeProfile(options.profile)) {
+      throw error;
+    }
+
+    await assertLawOfficeFamilyAccess({
+      familyId: options.familyId,
+      supabaseAdmin,
+      userId: options.userId,
+    });
+
+    return {
+      kind: "law_office",
+    };
+  }
+}
+
+export async function requireCourtExportReadAccess(
+  supabaseAdmin: SupabaseClient,
+  options: {
+    familyId: string;
+    profile: AuthenticatedProfile;
+    userId: string;
+  },
+): Promise<CourtExportFamilyAccess> {
+  const access = await resolveCourtExportFamilyAccess(supabaseAdmin, options);
+
+  if (access.kind === "family_member") {
+    await requireCourtExportPowerAccess(supabaseAdmin, options.profile);
+  }
+
+  return access;
+}
+
+export async function requireCourtExportCreateAccess(
+  supabaseAdmin: SupabaseClient,
+  options: {
+    familyId: string;
+    profile: AuthenticatedProfile;
+    userId: string;
+  },
+): Promise<FamilyMemberRecord> {
+  const access = await resolveCourtExportFamilyAccess(supabaseAdmin, options);
+
+  if (access.kind !== "family_member") {
+    throw new HttpError(403, "Law office users cannot create exports.");
+  }
+
+  await requireCourtExportPowerAccess(supabaseAdmin, options.profile);
+  return access.membership;
 }

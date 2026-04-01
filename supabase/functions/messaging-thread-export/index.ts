@@ -32,10 +32,11 @@ import {
   uploadImmutableCourtExportObject,
 } from "../_shared/courtExportS3.ts";
 import {
-  requireCourtExportPowerAccess,
+  requireCourtExportCreateAccess,
+  requireCourtExportReadAccess,
+  type CourtExportFamilyAccess,
 } from "../_shared/courtExportAccess.ts";
 import {
-  getActiveMembershipForUser,
   HttpError,
   requireAuthenticatedProfile,
 } from "../_shared/callHelpers.ts";
@@ -751,13 +752,16 @@ async function createExportPackage(
     exportedByProfileId?: string;
     familyId: string;
     signReceipt?: boolean;
+    skipParticipantAccessCheck?: boolean;
     threadDisplayName?: string;
     threadId: string;
     viewerProfileId: string;
   },
 ) {
   const thread = await loadThread(supabaseAdmin, options.familyId, options.threadId);
-  await assertThreadAccess(supabaseAdmin, options.viewerProfileId, thread);
+  if (!options.skipParticipantAccessCheck) {
+    await assertThreadAccess(supabaseAdmin, options.viewerProfileId, thread);
+  }
 
   const displayName =
     options.threadDisplayName ??
@@ -909,6 +913,21 @@ async function createExportPackage(
     packageData,
     pdfArtifact,
   };
+}
+
+async function assertThreadExportReadAccess(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  options: {
+    access: CourtExportFamilyAccess;
+    profileId: string;
+    thread: MessageThreadRow;
+  },
+) {
+  if (options.access.kind === "law_office") {
+    return;
+  }
+
+  await assertThreadAccess(supabaseAdmin, options.profileId, options.thread);
 }
 
 async function storeExportArtifacts(
@@ -1622,10 +1641,24 @@ serve(async (req) => {
     requestAction = body.action;
 
     const familyId = requireFamilyId(body.family_id);
-    await getActiveMembershipForUser(supabaseAdmin, familyId, user.id);
-    await requireCourtExportPowerAccess(supabaseAdmin, profile);
+    const access =
+      body.action === "create"
+        ? {
+            kind: "family_member" as const,
+            membership: await requireCourtExportCreateAccess(supabaseAdmin, {
+              familyId,
+              profile,
+              userId: user.id,
+            }),
+          }
+        : await requireCourtExportReadAccess(supabaseAdmin, {
+            familyId,
+            profile,
+            userId: user.id,
+          });
 
     logStep("request", {
+      accessKind: access.kind,
       action: body.action,
       exportId: "export_id" in body ? body.export_id ?? null : null,
       familyId,
@@ -1704,7 +1737,11 @@ serve(async (req) => {
     if (body.action === "list") {
       const threadId = requireThreadId(body.thread_id);
       const thread = await loadThread(supabaseAdmin, familyId, threadId);
-      await assertThreadAccess(supabaseAdmin, profile.id, thread);
+      await assertThreadExportReadAccess(supabaseAdmin, {
+        access,
+        profileId: profile.id,
+        thread,
+      });
 
       const limit = Math.min(Math.max(body.limit ?? 10, 1), 20);
       const { data, error } = await supabaseAdmin
@@ -1745,7 +1782,11 @@ serve(async (req) => {
         throw new HttpError(500, "The stored export record is missing thread metadata.");
       }
       const thread = await loadThread(supabaseAdmin, familyId, exportThreadId);
-      await assertThreadAccess(supabaseAdmin, profile.id, thread);
+      await assertThreadExportReadAccess(supabaseAdmin, {
+        access,
+        profileId: profile.id,
+        thread,
+      });
       const receipt = getReceiptFromRow(exportRecord);
 
       try {
@@ -1804,7 +1845,11 @@ serve(async (req) => {
         throw new HttpError(500, "The stored export record is missing thread metadata.");
       }
       const thread = await loadThread(supabaseAdmin, familyId, exportThreadId);
-      await assertThreadAccess(supabaseAdmin, profile.id, thread);
+      await assertThreadExportReadAccess(supabaseAdmin, {
+        access,
+        profileId: profile.id,
+        thread,
+      });
 
       const receipt = getReceiptFromRow(exportRecord);
       const storedManifest = getManifestFromRow(exportRecord);
@@ -2242,6 +2287,7 @@ serve(async (req) => {
         exportedByProfileId: exportRecord.created_by_profile_id,
         familyId,
         signReceipt: false,
+        skipParticipantAccessCheck: access.kind === "law_office",
         threadDisplayName:
           typeof storedManifest.thread_display_name === "string"
             ? storedManifest.thread_display_name

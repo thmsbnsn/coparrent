@@ -19,6 +19,8 @@ type MemberRole = Database["public"]["Enums"]["member_role"];
 export type FamilyRole = MemberRole | null;
 
 interface FamilyMemberInfo {
+  /** Global account role marker for non-family actors such as law offices */
+  accountRole: string | null;
   /** User's role in the ACTIVE family (NOT global) */
   role: FamilyRole;
   /** User's profile ID */
@@ -31,6 +33,8 @@ interface FamilyMemberInfo {
   isThirdParty: boolean;
   /** Whether user is a child in the ACTIVE family */
   isChild: boolean;
+  /** Whether user is a law office account with explicit family assignments */
+  isLawOffice: boolean;
   /** UI-only label (step_parent, grandparent, etc.) - NOT for permissions */
   relationshipLabel: string | null;
   /** Loading state */
@@ -51,12 +55,14 @@ interface FamilyMemberInfo {
  */
 export const useFamilyRole = (): FamilyMemberInfo => {
   const {
+    accountRole,
     effectiveRole,
     profileId,
     memberships,
     isParentInActiveFamily,
     isThirdPartyInActiveFamily,
     isChildInActiveFamily,
+    isLawOfficeUser,
     relationshipLabel,
     roleLoading,
     loading,
@@ -66,6 +72,7 @@ export const useFamilyRole = (): FamilyMemberInfo => {
   const activeMembership = memberships.find((membership) => membership.familyId === activeFamilyId) ?? null;
 
   return {
+    accountRole,
     role: effectiveRole,
     profileId,
     // Legacy compatibility: callers expect the active family's primary parent profile id.
@@ -73,6 +80,7 @@ export const useFamilyRole = (): FamilyMemberInfo => {
     isParent: isParentInActiveFamily,
     isThirdParty: isThirdPartyInActiveFamily,
     isChild: isChildInActiveFamily,
+    isLawOffice: isLawOfficeUser,
     relationshipLabel,
     loading: loading || roleLoading,
     activeFamilyId,

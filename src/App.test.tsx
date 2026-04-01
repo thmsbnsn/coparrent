@@ -68,6 +68,18 @@ vi.mock("./pages/MessagingHubPage", () => ({
   default: () => <div>messaging-hub-page</div>,
 }));
 
+vi.mock("./pages/LawOfficeLogin", () => ({
+  default: () => <div>law-office-login-page</div>,
+}));
+
+vi.mock("./pages/LawOfficeSignup", () => ({
+  default: () => <div>law-office-signup-page</div>,
+}));
+
+vi.mock("./pages/LawOfficeDashboard", () => ({
+  default: () => <div>law-office-dashboard-page</div>,
+}));
+
 vi.mock("./pages/KidsHubPage", () => ({
   default: () => <div>kids-hub-page</div>,
 }));
@@ -130,5 +142,23 @@ describe("App messaging routes", () => {
 
     expect(window.location.pathname).toBe("/dashboard/kids-hub");
     expect(container.textContent).toContain("kids-hub-page");
+  });
+
+  it("activates the dedicated law office login route", async () => {
+    const rendered = await renderAppAtPath("/law-office/login");
+    container = rendered.container;
+    root = rendered.root;
+
+    expect(window.location.pathname).toBe("/law-office/login");
+    expect(container.textContent).toContain("law-office-login-page");
+  });
+
+  it("activates the law office dashboard route", async () => {
+    const rendered = await renderAppAtPath("/law-office/dashboard");
+    container = rendered.container;
+    root = rendered.root;
+
+    expect(window.location.pathname).toBe("/law-office/dashboard");
+    expect(container.textContent).toContain("law-office-dashboard-page");
   });
 });

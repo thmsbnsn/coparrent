@@ -68,9 +68,7 @@ const parentNavItems = [
  * @see src/lib/routes.ts for route registry
  */
 const lawOfficeNavItems = [
-  { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", id: "nav-dashboard" },
-  { icon: FileText, label: "Documents", href: "/dashboard/documents", id: "nav-documents" },
-  { icon: Settings, label: "Settings", href: "/dashboard/settings", id: "nav-settings" },
+  { icon: LayoutDashboard, label: "Dashboard", href: "/law-office/dashboard", id: "nav-law-office-dashboard" },
 ];
 
 export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayoutProps) => {
@@ -80,9 +78,10 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut, user } = useAuth();
-  const { activeFamilyId, isChild, isThirdParty, loading: roleLoading } = useFamilyRole();
+  const { activeFamilyId, isChild, isLawOffice, isThirdParty, loading: roleLoading } = useFamilyRole();
   const { isChildAccount, loading: childLoading } = useChildAccount();
   const { toast } = useToast();
+  const isLawOfficeLayout = userRole === "lawoffice";
 
   // Filter nav items based on user role
   const allNavItems = userRole === "lawoffice" ? lawOfficeNavItems : parentNavItems;
@@ -93,6 +92,7 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
           activeFamilyId,
           isChild,
           isChildAccount,
+          isLawOffice,
           isThirdParty,
         }),
       );
@@ -129,7 +129,7 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
       title: "Signed out",
       description: "You've been successfully signed out.",
     });
-    navigate("/login");
+    navigate(isLawOfficeLayout ? "/law-office/login" : "/login");
   };
 
   const SidebarContent = () => (
@@ -137,10 +137,10 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
       {/* Logo - Fixed at top, no safe area here (handled by container) */}
       <div className="p-4 border-b border-sidebar-border shrink-0">
         <div className="flex items-center justify-between gap-2">
-          <Link to="/dashboard">
+          <Link to={isLawOfficeLayout ? "/law-office/dashboard" : "/dashboard"}>
             <Logo size="md" showText={!sidebarCollapsed} className="[&_span]:text-sidebar-foreground" />
           </Link>
-          <TrialBadge collapsed={sidebarCollapsed} />
+          {!isLawOfficeLayout && <TrialBadge collapsed={sidebarCollapsed} />}
         </div>
       </div>
 
@@ -263,10 +263,12 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
       </div>
 
       {/* Onboarding Tooltips */}
-      <OnboardingOverlay />
-      <Suspense fallback={null}>
-        <GlobalCallManager />
-      </Suspense>
+      {!isLawOfficeLayout && <OnboardingOverlay />}
+      {!isLawOfficeLayout && (
+        <Suspense fallback={null}>
+          <GlobalCallManager />
+        </Suspense>
+      )}
     </div>
   );
 };

@@ -19,6 +19,9 @@ const formatRole = (role: string | null) => {
   return role.charAt(0).toUpperCase() + role.slice(1);
 };
 
+const getMembershipBadgeLabel = (membership: { accessKind?: string; role: string | null }) =>
+  membership.accessKind === "law_office" ? "Law Office Access" : formatRole(membership.role);
+
 const getFamilyLabel = (index: number) => `Family ${index + 1}`;
 const canManageFamilies = (role: string | null) => role === "parent" || role === "guardian";
 
@@ -74,7 +77,7 @@ export const FamilySwitcher = ({ collapsed = false }: FamilySwitcherProps) => {
           </div>
         )}
         <Badge variant="secondary" className="bg-sidebar-accent text-sidebar-foreground">
-          {formatRole(membership.role)}
+          {getMembershipBadgeLabel(membership)}
         </Badge>
         {canEditActiveFamily && (
           <Button
@@ -133,7 +136,7 @@ export const FamilySwitcher = ({ collapsed = false }: FamilySwitcherProps) => {
               <div className="min-w-0">
                 <div className="truncate font-medium">{getFamilyLabel(index)}</div>
                 <div className="truncate text-xs text-muted-foreground">
-                  {membership.familyName ?? formatRole(membership.role)}
+                  {membership.familyName ?? getMembershipBadgeLabel(membership)}
                 </div>
               </div>
             </SelectItem>
@@ -141,7 +144,9 @@ export const FamilySwitcher = ({ collapsed = false }: FamilySwitcherProps) => {
         </SelectContent>
       </Select>
       <div className="text-xs text-sidebar-foreground/70">
-        Switch between family workspaces. Permissions follow the selected family.
+        {activeMembership?.accessKind === "law_office"
+          ? "Switch between assigned families. Law office access follows the selected family."
+          : "Switch between family workspaces. Permissions follow the selected family."}
       </div>
       {canEditActiveFamily && activeMembership && (
         <>

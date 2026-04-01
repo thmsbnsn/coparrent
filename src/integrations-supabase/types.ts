@@ -2322,6 +2322,41 @@ export type Database = {
           },
         ]
       }
+      law_office_family_access: {
+        Row: {
+          created_at: string
+          family_id: string
+          granted_by: string
+          id: string
+          law_office_user_id: string
+          revoked_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          family_id: string
+          granted_by: string
+          id?: string
+          law_office_user_id: string
+          revoked_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          family_id?: string
+          granted_by?: string
+          id?: string
+          law_office_user_id?: string
+          revoked_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "law_office_family_access_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "families"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       law_articles: {
         Row: {
           access_level: string

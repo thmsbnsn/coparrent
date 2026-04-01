@@ -37,11 +37,11 @@ import {
   uploadImmutableCourtExportObject,
 } from "../_shared/courtExportS3.ts";
 import {
-  requireCourtExportPowerAccess,
+  requireCourtExportCreateAccess,
+  requireCourtExportReadAccess,
   requireFamilyCourtRecordExportRole,
 } from "../_shared/courtExportAccess.ts";
 import {
-  getActiveMembershipForUser,
   HttpError,
   requireAuthenticatedProfile,
   resolveDisplayName,
@@ -1938,11 +1938,24 @@ serve(async (req) => {
     requestAction = body.action;
 
     const familyId = requireFamilyId(body.family_id);
-    const membership = await getActiveMembershipForUser(supabaseAdmin, familyId, user.id);
-    requireFamilyCourtRecordExportRole(membership);
-    await requireCourtExportPowerAccess(supabaseAdmin, profile);
+    const access =
+      body.action === "create"
+        ? {
+            kind: "family_member" as const,
+            membership: await requireCourtExportCreateAccess(supabaseAdmin, {
+              familyId,
+              profile,
+              userId: user.id,
+            }),
+          }
+        : await requireCourtExportReadAccess(supabaseAdmin, {
+            familyId,
+            profile,
+            userId: user.id,
+          });
 
     logStep("request", {
+      accessKind: access.kind,
       action: body.action,
       exportId: "export_id" in body ? body.export_id ?? null : null,
       familyId,
@@ -1951,6 +1964,8 @@ serve(async (req) => {
     });
 
     if (body.action === "create") {
+      requireFamilyCourtRecordExportRole(access.membership);
+
       if ((body.export_scope ?? "family_unified") !== "family_unified") {
         throw new HttpError(400, "court-record-export only supports export_scope=family_unified.");
       }

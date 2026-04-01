@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { resolvePostAuthPath } from "@/lib/postAuthPath";
 
 const LawOfficeLogin = () => {
   const navigate = useNavigate();
@@ -24,7 +25,18 @@ const LawOfficeLogin = () => {
   // Redirect if already logged in
   useEffect(() => {
     if (!loading && user) {
-      navigate("/dashboard");
+      let active = true;
+
+      void (async () => {
+        const path = await resolvePostAuthPath(user);
+        if (active) {
+          navigate(path);
+        }
+      })();
+
+      return () => {
+        active = false;
+      };
     }
   }, [user, loading, navigate]);
 
@@ -52,7 +64,6 @@ const LawOfficeLogin = () => {
       title: "Welcome back!",
       description: "Signed in to Law Office Portal.",
     });
-    navigate("/dashboard");
   };
 
   if (loading) {
@@ -87,7 +98,7 @@ const LawOfficeLogin = () => {
 
             <h1 className="text-2xl font-display font-bold mb-2">Law Office Sign In</h1>
             <p className="text-muted-foreground mb-8">
-              Access your professional dashboard
+              Access assigned family export receipts and verification tools
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-5">
@@ -169,8 +180,7 @@ const LawOfficeLogin = () => {
             transition={{ delay: 0.3 }}
             className="text-white/80"
           >
-            Continue managing your client cases with court-ready 
-            documentation and family law tools.
+            Review immutable export receipts for assigned families without opening raw family tables.
           </motion.p>
         </div>
       </div>

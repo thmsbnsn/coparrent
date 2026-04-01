@@ -45,7 +45,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 .then(({ data: profile }) => {
                   setSentryUserContext({
                     userId,
-                    role: (profile?.account_role as "parent" | "guardian" | "third_party" | "child") || "parent",
+                    role: (profile?.account_role as "parent" | "guardian" | "third_party" | "child" | "law_office") || null,
                     tier: (profile?.subscription_tier as "free" | "power") || "free",
                   });
                 });

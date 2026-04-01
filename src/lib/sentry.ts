@@ -97,7 +97,7 @@ const scrubSensitiveData = (text: string): string => {
  */
 export const setSentryUserContext = (context: {
   userId?: string;
-  role?: "parent" | "guardian" | "third_party" | "child" | null;
+  role?: "parent" | "guardian" | "third_party" | "child" | "law_office" | null;
   tier?: "free" | "power" | null;
 }) => {
   Sentry.setUser({

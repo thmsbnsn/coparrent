@@ -28,13 +28,21 @@ export const resolvePostAuthPath = async (user: User) => {
     return pendingInvitePath;
   }
 
-  await ensureCurrentUserFamilyMembership(user.user_metadata?.full_name || user.email || null);
+  const rawAccountType = user.user_metadata?.account_type;
+  const isLawOfficeMetadata =
+    rawAccountType === "law_office" || rawAccountType === "lawoffice";
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id")
+    .select("id, account_role")
     .eq("user_id", user.id)
     .maybeSingle();
+
+  if (profile?.account_role === "law_office" || isLawOfficeMetadata) {
+    return "/law-office/dashboard";
+  }
+
+  await ensureCurrentUserFamilyMembership(user.user_metadata?.full_name || user.email || null);
 
   if (!profile) {
     return "/onboarding";

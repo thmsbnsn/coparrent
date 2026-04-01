@@ -12,6 +12,7 @@ const from = vi.hoisted(() => vi.fn());
 const profileMaybeSingle = vi.hoisted(() => vi.fn());
 const familyMembersEq = vi.hoisted(() => vi.fn());
 const familiesIn = vi.hoisted(() => vi.fn());
+const lawOfficeAccessIs = vi.hoisted(() => vi.fn());
 const mockedEnsureFamilyMembership = vi.hoisted(() => vi.fn());
 const mockedHasPendingInviteToken = vi.hoisted(() => vi.fn());
 
@@ -65,6 +66,14 @@ const membershipRows = [
 const familyRows = [
   { id: "family-1", display_name: "Alpha Family" },
   { id: "family-2", display_name: "Beta Family" },
+];
+
+const lawOfficeAccessRows = [
+  {
+    created_at: "2026-04-01T08:00:00.000Z",
+    family_id: "family-1",
+    revoked_at: null,
+  },
 ];
 
 const flushPromises = async () => {
@@ -156,6 +165,12 @@ describe("FamilyProvider", () => {
       error: null,
     });
 
+    lawOfficeAccessIs.mockReset();
+    lawOfficeAccessIs.mockResolvedValue({
+      data: lawOfficeAccessRows,
+      error: null,
+    });
+
     from.mockReset();
     from.mockImplementation((tableName: string) => {
       if (tableName === "profiles") {
@@ -180,6 +195,16 @@ describe("FamilyProvider", () => {
         return {
           select: () => ({
             in: familiesIn,
+          }),
+        };
+      }
+
+      if (tableName === "law_office_family_access") {
+        return {
+          select: () => ({
+            is: () => ({
+              order: lawOfficeAccessIs,
+            }),
           }),
         };
       }
@@ -259,6 +284,24 @@ describe("FamilyProvider", () => {
     expect(mockedEnsureFamily).not.toHaveBeenCalled();
     expect(rendered.textContent).toContain("active:none");
     expect(rendered.textContent).toContain("memberships:0");
+  });
+
+  it("loads explicit law office family assignments without bootstrapping a parent family", async () => {
+    profileMaybeSingle.mockResolvedValue({
+      data: {
+        ...defaultProfile,
+        account_role: "law_office",
+      },
+      error: null,
+    });
+
+    const rendered = await renderFamilyProvider();
+
+    expect(mockedEnsureFamily).not.toHaveBeenCalled();
+    expect(rendered.textContent).toContain("active:family-1");
+    expect(rendered.textContent).toContain("name:none");
+    expect(rendered.textContent).toContain("role:none");
+    expect(rendered.textContent).toContain("memberships:1");
   });
 
   it("switches only to memberships that belong to the user", async () => {

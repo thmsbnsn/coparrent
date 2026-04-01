@@ -1,32 +1,34 @@
 interface ProtectedRouteRule {
   allowChild: boolean;
+  allowLawOffice: boolean;
   allowThirdParty: boolean;
   familyScoped: boolean;
   path: string;
 }
 
 const PROTECTED_ROUTE_RULES: readonly ProtectedRouteRule[] = [
-  { path: "/dashboard/calendar", allowThirdParty: true, allowChild: true, familyScoped: true },
-  { path: "/dashboard/children", allowThirdParty: false, allowChild: false, familyScoped: true },
-  { path: "/dashboard/messages", allowThirdParty: true, allowChild: true, familyScoped: true },
-  { path: "/dashboard/documents", allowThirdParty: false, allowChild: false, familyScoped: true },
-  { path: "/dashboard/settings", allowThirdParty: false, allowChild: false, familyScoped: true },
-  { path: "/dashboard/families", allowThirdParty: false, allowChild: false, familyScoped: false },
-  { path: "/dashboard/notifications", allowThirdParty: true, allowChild: true, familyScoped: false },
-  { path: "/dashboard/law-library", allowThirdParty: true, allowChild: false, familyScoped: false },
-  { path: "/dashboard/journal", allowThirdParty: true, allowChild: false, familyScoped: false },
-  { path: "/dashboard/expenses", allowThirdParty: false, allowChild: false, familyScoped: true },
-  { path: "/dashboard/sports", allowThirdParty: false, allowChild: false, familyScoped: true },
-  { path: "/dashboard/gifts", allowThirdParty: false, allowChild: false, familyScoped: true },
-  { path: "/dashboard/kid-center", allowThirdParty: false, allowChild: false, familyScoped: true },
-  { path: "/dashboard/kids-hub", allowThirdParty: false, allowChild: false, familyScoped: true },
-  { path: "/dashboard/audit", allowThirdParty: false, allowChild: false, familyScoped: true },
-  { path: "/dashboard/blog", allowThirdParty: true, allowChild: false, familyScoped: false },
-  { path: "/dashboard", allowThirdParty: true, allowChild: false, familyScoped: true },
-  { path: "/onboarding", allowThirdParty: true, allowChild: false, familyScoped: false },
-  { path: "/kids", allowThirdParty: false, allowChild: true, familyScoped: true },
-  { path: "/admin", allowThirdParty: false, allowChild: false, familyScoped: false },
-  { path: "/pwa-diagnostics", allowThirdParty: true, allowChild: true, familyScoped: false },
+  { path: "/dashboard/calendar", allowThirdParty: true, allowLawOffice: false, allowChild: true, familyScoped: true },
+  { path: "/dashboard/children", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
+  { path: "/dashboard/messages", allowThirdParty: true, allowLawOffice: false, allowChild: true, familyScoped: true },
+  { path: "/dashboard/documents", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
+  { path: "/dashboard/settings", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
+  { path: "/dashboard/families", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: false },
+  { path: "/dashboard/notifications", allowThirdParty: true, allowLawOffice: false, allowChild: true, familyScoped: false },
+  { path: "/dashboard/law-library", allowThirdParty: true, allowLawOffice: false, allowChild: false, familyScoped: false },
+  { path: "/dashboard/journal", allowThirdParty: true, allowLawOffice: false, allowChild: false, familyScoped: false },
+  { path: "/dashboard/expenses", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
+  { path: "/dashboard/sports", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
+  { path: "/dashboard/gifts", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
+  { path: "/dashboard/kid-center", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
+  { path: "/dashboard/kids-hub", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
+  { path: "/dashboard/audit", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
+  { path: "/dashboard/blog", allowThirdParty: true, allowLawOffice: false, allowChild: false, familyScoped: false },
+  { path: "/dashboard", allowThirdParty: true, allowLawOffice: false, allowChild: false, familyScoped: true },
+  { path: "/law-office/dashboard", allowThirdParty: false, allowLawOffice: true, allowChild: false, familyScoped: false },
+  { path: "/onboarding", allowThirdParty: true, allowLawOffice: false, allowChild: false, familyScoped: false },
+  { path: "/kids", allowThirdParty: false, allowLawOffice: false, allowChild: true, familyScoped: true },
+  { path: "/admin", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: false },
+  { path: "/pwa-diagnostics", allowThirdParty: true, allowLawOffice: false, allowChild: true, familyScoped: false },
 ] as const;
 
 export const PARENT_ONLY_ROUTES = PROTECTED_ROUTE_RULES.filter(
@@ -45,6 +47,7 @@ export interface ProtectedRouteAccessOptions {
   activeFamilyId?: string | null;
   isChild?: boolean;
   isChildAccount?: boolean;
+  isLawOffice?: boolean;
   isThirdParty?: boolean;
   requireParent?: boolean;
 }
@@ -55,6 +58,8 @@ export interface ProtectedRouteAccessDecision {
   reason:
     | "allowed"
     | "child_route_restricted"
+    | "law_office_role_required"
+    | "law_office_route_restricted"
     | "missing_active_family"
     | "parent_role_required"
     | "route_not_registered"
@@ -106,12 +111,29 @@ export function getProtectedRouteAccessDecision(
 ): ProtectedRouteAccessDecision {
   const routeRule = getProtectedRouteRule(pathname);
   const isChildScopedUser = Boolean(options.isChild || options.isChildAccount);
+  const isLawOfficeUser = Boolean(options.isLawOffice);
 
   if (!routeRule) {
     return {
       allowed: false,
-      redirectTo: isChildScopedUser ? "/kids" : "/dashboard",
+      redirectTo: isLawOfficeUser ? "/law-office/dashboard" : isChildScopedUser ? "/kids" : "/dashboard",
       reason: "route_not_registered",
+    };
+  }
+
+  if (isLawOfficeUser && !routeRule.allowLawOffice) {
+    return {
+      allowed: false,
+      redirectTo: "/law-office/dashboard",
+      reason: "law_office_route_restricted",
+    };
+  }
+
+  if (!isLawOfficeUser && routeRule.allowLawOffice) {
+    return {
+      allowed: false,
+      redirectTo: isChildScopedUser ? "/kids" : "/dashboard",
+      reason: "law_office_role_required",
     };
   }
 
@@ -135,6 +157,14 @@ export function getProtectedRouteAccessDecision(
     return {
       allowed: false,
       redirectTo: isChildScopedUser ? "/kids" : "/dashboard",
+      reason: "parent_role_required",
+    };
+  }
+
+  if (options.requireParent && isLawOfficeUser) {
+    return {
+      allowed: false,
+      redirectTo: "/law-office/dashboard",
       reason: "parent_role_required",
     };
   }

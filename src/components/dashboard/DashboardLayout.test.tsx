@@ -105,6 +105,7 @@ describe("DashboardLayout", () => {
     mockedUseFamilyRole.mockReturnValue({
       activeFamilyId: "family-1",
       isChild: false,
+      isLawOffice: false,
       isThirdParty: false,
       loading: false,
     } as never);
@@ -124,7 +125,10 @@ describe("DashboardLayout", () => {
     vi.clearAllMocks();
   });
 
-  const renderLayout = async (initialPath = "/dashboard") => {
+  const renderLayout = async (
+    initialPath = "/dashboard",
+    userRole: "parent" | "lawoffice" = "parent",
+  ) => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -132,7 +136,7 @@ describe("DashboardLayout", () => {
     await act(async () => {
       root?.render(
         <MemoryRouter initialEntries={[initialPath]}>
-          <DashboardLayout>
+          <DashboardLayout userRole={userRole}>
             <div>layout-content</div>
           </DashboardLayout>
         </MemoryRouter>,
@@ -147,6 +151,7 @@ describe("DashboardLayout", () => {
     mockedUseFamilyRole.mockReturnValue({
       activeFamilyId: "family-1",
       isChild: false,
+      isLawOffice: false,
       isThirdParty: true,
       loading: false,
     } as never);
@@ -172,6 +177,7 @@ describe("DashboardLayout", () => {
     mockedUseFamilyRole.mockReturnValue({
       activeFamilyId: "family-1",
       isChild: true,
+      isLawOffice: false,
       isThirdParty: false,
       loading: false,
     } as never);
@@ -190,5 +196,23 @@ describe("DashboardLayout", () => {
     expect(rendered.querySelector("#nav-journal")).toBeNull();
     expect(rendered.querySelector("#nav-law-library")).toBeNull();
     expect(rendered.querySelector("#nav-settings")).toBeNull();
+  });
+
+  it("shows only the law office dashboard navigation for law office layouts", async () => {
+    mockedUseFamilyRole.mockReturnValue({
+      activeFamilyId: null,
+      isChild: false,
+      isLawOffice: true,
+      isThirdParty: false,
+      loading: false,
+    } as never);
+
+    const rendered = await renderLayout("/law-office/dashboard", "lawoffice");
+
+    expect(rendered.querySelector("#nav-law-office-dashboard")).not.toBeNull();
+    expect(rendered.querySelector("#nav-dashboard")).toBeNull();
+    expect(rendered.textContent).not.toContain("trial-badge");
+    expect(rendered.textContent).not.toContain("onboarding-overlay");
+    expect(rendered.textContent).not.toContain("global-call-manager");
   });
 });

@@ -93,6 +93,7 @@ describe("routeAccess", () => {
 
   it("requires active family scope only for registered family routes", () => {
     expect(requiresActiveFamilyScope("/dashboard/messages")).toBe(true);
+    expect(requiresActiveFamilyScope("/law-office/dashboard")).toBe(false);
     expect(requiresActiveFamilyScope("/dashboard/law-library")).toBe(false);
     expect(requiresActiveFamilyScope("/pwa-diagnostics")).toBe(false);
 
@@ -129,6 +130,39 @@ describe("routeAccess", () => {
     expect(
       getProtectedRouteAccessDecision("/pwa-diagnostics", {
         isThirdParty: true,
+      }),
+    ).toEqual({
+      allowed: true,
+      redirectTo: null,
+      reason: "allowed",
+    });
+  });
+
+  it("keeps law office users inside law office routes", () => {
+    expect(
+      getProtectedRouteAccessDecision("/dashboard/messages", {
+        activeFamilyId: "family-1",
+        isLawOffice: true,
+      }),
+    ).toEqual({
+      allowed: false,
+      redirectTo: "/law-office/dashboard",
+      reason: "law_office_route_restricted",
+    });
+
+    expect(
+      getProtectedRouteAccessDecision("/law-office/dashboard", {
+        isLawOffice: false,
+      }),
+    ).toEqual({
+      allowed: false,
+      redirectTo: "/dashboard",
+      reason: "law_office_role_required",
+    });
+
+    expect(
+      getProtectedRouteAccessDecision("/law-office/dashboard", {
+        isLawOffice: true,
       }),
     ).toEqual({
       allowed: true,
