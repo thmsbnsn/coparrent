@@ -1,4 +1,4 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __resetCreateClientImplementation,
   __setCreateClientImplementation,
@@ -180,10 +180,16 @@ describe("family-scoped reminder recipients", () => {
     resendSendMock.mockClear();
     selectLogs.length = 0;
     __resetCreateClientImplementation();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("scopes sports reminder recipients to the event family only", async () => {
-    const now = new Date();
+    const now = new Date("2026-03-30T16:00:00.000Z");
+    vi.setSystemTime(now);
     const eventStart = new Date(now.getTime() + 60 * 60 * 1000);
     const state: TestState = {
       tables: {
@@ -262,7 +268,8 @@ describe("family-scoped reminder recipients", () => {
   });
 
   it("scopes exchange reminder recipients to the schedule family only", async () => {
-    const now = new Date();
+    const now = new Date("2026-03-30T16:00:00.000Z");
+    vi.setSystemTime(now);
     const exchangeTime = new Date(now.getTime() + 30 * 60 * 1000);
     const state: TestState = {
       tables: {

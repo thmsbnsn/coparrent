@@ -878,12 +878,12 @@ export const HelpDocumentExports = () => (
       <h2 className="text-xl font-display font-semibold mb-6">Exporting messages</h2>
       <div className="space-y-4">
         <HelpStep number={1} title="Open the thread">Go to Messages and open the conversation you want to export.</HelpStep>
-        <HelpStep number={2} title="Select export or Court View">Choose the export option or Court View mode.</HelpStep>
-        <HelpStep number={3} title="Choose date range">Select the specific date range you want to include.</HelpStep>
-        <HelpStep number={4} title="Download as PDF">Choose PDF format for a print-ready document.</HelpStep>
+        <HelpStep number={2} title="Export the evidence package">Choose the export action to download the server-generated PDF and the paired JSON evidence package.</HelpStep>
+        <HelpStep number={3} title="Review the Export Receipt">Use the Export Receipt panel in Messaging Hub to see the receipt ID, PDF hash, and current verification status for the latest export.</HelpStep>
+        <HelpStep number={4} title="Verify when needed">Use Verify Export Receipt to compare a current server record, a downloaded evidence package, or a PDF artifact against the stored receipt.</HelpStep>
       </div>
       <HelpBanner variant="success" className="mt-4">
-        Exported messages include full sender attribution, precise timestamps, and formatting for clarity in legal contexts.
+        Exported messages include full sender attribution, precise timestamps, a server-generated export receipt, and a PDF hash that can be verified against the stored receipt later.
       </HelpBanner>
     </section>
 
