@@ -1,7 +1,7 @@
 # Gated Features Audit
 
-> **Audit Date**: 2026-03-13  
-> **Status**: Updated after family-membership bootstrap and access-code verification  
+> **Audit Date**: 2026-03-30
+> **Status**: Updated after family-scope runtime Tickets 1-5 and Chore Chart removal
 > **Auditor**: System
 
 ---
@@ -31,6 +31,7 @@ Current addendum:
 - Production SQL now bootstraps family membership for direct parent/guardian accounts before gates run.
 - New co-parent invitations are now stamped with `family_id`.
 - Core family flows now require explicit family scope and no longer rely on legacy relationship-based recipient or visibility inference.
+- The former Chore Chart prototype is now hidden from the live app until a real server-backed implementation exists.
 
 ---
 
@@ -56,7 +57,7 @@ Current addendum:
 | **Nurse Nancy AI** | ✅ `NurseNancyPage.tsx` - PremiumFeatureGate + RoleGate | ✅ `aiGuard` in edge function | ✅ `{ code: "PREMIUM_REQUIRED" }` | ✅ PASS |
 | **Coloring Page Creator** | ✅ `ColoringPagesPage.tsx` - PremiumFeatureGate + RoleGate | ✅ `aiGuard` in edge function | ✅ `{ code: "PREMIUM_REQUIRED" }` | ✅ PASS |
 | **Activity Generator** | ✅ `ActivitiesPage.tsx` - PremiumFeatureGate + RoleGate | ✅ Premium check in edge function | ✅ `{ code: "PREMIUM_REQUIRED" }` | ✅ PASS |
-| **Chore Chart** | ✅ `ChoreChartPage.tsx` - PremiumFeatureGate + RoleGate | ✅ RLS on `chore_charts` | ✅ RLS rejects | ✅ PASS |
+| **Chore Chart** | ⛔ Hidden from live app | ⛔ No server-backed implementation in repo | ⛔ Not applicable while hidden | ⛔ HIDDEN |
 | **Kids Hub** | ✅ `KidsHubPage.tsx` - PremiumFeatureGate + RoleGate | ✅ Nested feature gates | ✅ UI blocks | ✅ PASS |
 | **AI Message Rephrase** | ✅ `MessageToneAssistant.tsx` - mode dropdown | ✅ `aiGuard` - `PREMIUM_REQUIRED` | ✅ `{ code: "PREMIUM_REQUIRED" }` | ✅ PASS |
 | **AI Message Draft** | ✅ `MessageToneAssistant.tsx` | ✅ `aiGuard` - `PREMIUM_REQUIRED` | ✅ `{ code: "PREMIUM_REQUIRED" }` | ✅ PASS |
@@ -213,25 +214,13 @@ All AI edge functions return structured `{ error: string, code: string }` respon
 
 ## Identified Gaps
 
-### ⚠️ Gap 1: SportsPage Missing RoleGate
+No current launch-blocking gating gaps are called out in the verified repo state.
 
-**Location**: `src/pages/SportsPage.tsx`  
-**Issue**: Sports page has `PremiumFeatureGate` but no `RoleGate` wrapper  
-**Risk**: Third-party users with premium could theoretically access (though RLS blocks mutations)  
-**Recommendation**: Add `RoleGate` wrapper for consistency
+Remaining launch work is now primarily:
 
-### ⚠️ Gap 2: kid-activity-generator Doesn't Use aiGuard
-
-**Location**: `supabase/functions/kid-activity-generator/index.ts`  
-**Issue**: Uses inline premium check instead of centralized `aiGuard`  
-**Risk**: Inconsistent error codes, doesn't check parent role  
-**Recommendation**: Refactor to use `aiGuard` for consistency
-
-### ⚠️ Gap 3: Missing Code in kid-activity-generator Errors
-
-**Location**: `supabase/functions/kid-activity-generator/index.ts:84-87`  
-**Issue**: 401 error for missing auth returns `{ error }` without `code`  
-**Recommendation**: Add `code: "UNAUTHORIZED"` to match pattern
+- real-device push/PWA validation
+- deployed auth posture confirmation
+- apex-host confirmation
 
 ---
 
@@ -274,11 +263,9 @@ The audit log system has been verified and hardened for court-defensible record-
 
 ## Recommendations
 
-1. ~~Add RoleGate to SportsPage~~: ✅ Done - Wrapped content in `RoleGate`
-2. ~~Refactor kid-activity-generator~~: ✅ Done - Uses `aiGuard` for consistent enforcement
-3. ~~Standardize error responses~~: ✅ Done - All edge functions return `{ error, code }`
-4. **Add integration tests**: Automated tests for each edge case scenario (pending)
-5. ~~Harden audit logs~~: ✅ Done - Immutable with role snapshots
+1. Keep route/gating regression coverage current as new family-scoped features land.
+2. Re-audit the Chore Chart feature only if a real server-backed implementation is reintroduced.
+3. Finish the remaining live device/deployment validation outside the repo.
 
 ---
 
@@ -294,4 +281,4 @@ The gating system is comprehensive and properly layered:
 - Audit logs are court-defensible with immutability guarantees
 - Third-party users cannot infer hidden data via metadata
 
-The system now meets the court-defensible standard with explicit tamper resistance and role snapshots for legal accountability.
+The system now meets the current repo-side standard with explicit server enforcement, fail-closed routing, and no live product claim that conflicts with the code.

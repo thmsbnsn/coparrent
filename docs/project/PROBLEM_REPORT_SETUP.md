@@ -2,6 +2,17 @@
 
 This project’s mobile shake-to-report and manual "Report a problem" flow now submits through the Supabase edge function `submit-problem-report` and stores structured records in `public.problem_reports`.
 
+## Production Status
+
+As of 2026-03-28:
+
+- the production Supabase project has the live `problem_reports` table
+- the user-view RLS policy is present
+- the private `problem-report-screenshots` bucket exists
+- the `submit-problem-report` edge function is deployed
+- a real report was submitted successfully from `https://www.coparrent.com/help/contact` and verified in production
+- the optional screenshot-upload path was also verified live, and the newest row stored a populated private-bucket `screenshot_path`
+
 ## What Gets Created
 
 Migrations:
@@ -75,7 +86,7 @@ This matches the current app architecture:
 - authenticated users are attached when a real session exists
 - no client-side direct writes or public storage reads are exposed
 
-## Required Setup
+## Required Setup For A New Environment
 
 Run the database migration:
 
@@ -109,6 +120,10 @@ Screenshot uploads are optional.
 ## Manual Dashboard Steps
 
 There are no required Supabase dashboard clicks if you apply the migration and deploy the function from CLI.
+
+Production note:
+
+- The current production rollout was completed manually in the Supabase SQL editor on 2026-03-28 because the remote project was behind on a broader migration block and a blind `supabase db push` was intentionally avoided.
 
 Optional checks in the dashboard:
 - verify the `problem-report-screenshots` bucket exists and is private

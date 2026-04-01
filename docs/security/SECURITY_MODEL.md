@@ -189,6 +189,26 @@ Push notifications follow the same zero-trust model as other features:
 
 ---
 
+## Deployment/Auth Posture
+
+The repo baseline is intentionally stricter than the old QA posture, but deployed confirmation still requires evidence.
+
+Repo-confirmable defaults:
+- Production auth captcha defaults to required and should remain configured in deployed environments.
+- Shared edge-function CORS defaults allow only the narrow production host list unless explicit env configuration adds more.
+- Localhost origins are opt-in via `ALLOW_LOCALHOST_ORIGINS=true` or local-development runtime, not part of the permanent default posture.
+- Hosted passkeys are not a confirmed live capability for this project while Supabase still lacks WebAuthn/passkey enrollment.
+
+User-assisted confirmation still required:
+- apex-host behavior and canonical-host decision
+- deployed hCaptcha presence on the public auth surface
+- final localhost-origin / preview-origin disposition
+- final launch passkey posture
+
+Use `docs/project/DEPLOYMENT_AUTH_CONFIRMATION_CHECKLIST.md` as the evidence standard before marking those items complete.
+
+---
+
 ## Rate Limiting & Abuse Prevention
 
 - Edge functions use centralized rate-limit helpers.
@@ -250,7 +270,7 @@ Security errors are handled as product behavior, not exceptions.
 
 ---
 
-_Last Updated: 2026-03-29_
+_Last Updated: 2026-03-30_
 
 ---
 

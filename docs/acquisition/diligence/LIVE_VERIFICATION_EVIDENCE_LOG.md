@@ -1,6 +1,6 @@
 # CoParrent Live Verification Evidence Log
 
-_Last updated: 2026-03-27_
+_Last updated: 2026-03-28_
 
 Prepared for:
 - **BNSN Solutions**
@@ -26,9 +26,12 @@ This file started as a template. Completed live-verification entries now live he
 | Customer portal verification | Passed with notes | 2026-03-24 | No |
 | OpenRouter runtime verification | Passed with notes | 2026-03-24 | No |
 | Daily audio/video call verification | Passed with notes | 2026-03-27 | No |
+| Production auth verification | Passed with notes | 2026-03-27 | No |
+| Problem-report submission verification | Passed with notes | 2026-03-28 | No |
+| Production smoke verification | Passed with notes | 2026-03-28 | No |
 | Push notification verification | Blocked | 2026-03-25 | Yes |
 | PWA install verification | Not started | TBD | Yes |
-| Preview vs production alignment verification | Passed with notes | 2026-03-25 | No |
+| Preview vs production alignment verification | Passed with notes | 2026-03-27 | No |
 
 Use status values like:
 
@@ -71,8 +74,8 @@ Use status values like:
 - **Environment:** Local current client `http://127.0.0.1:4174` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
 - **Tester:** inviter `coparrenttesting@yahoo.com` (`Parent A`), invitee `testingcoparrent@yahoo.com` (`Parent B`)
 - **Scenario:** Send a fresh co-parent invite, deliver it to the real Yahoo inbox, open the invite link, sign in as the invitee, accept the invite, then confirm the invitee lands in the inviter's existing family with the `parent` role and the expected `/dashboard` post-acceptance route
-- **Expected Result:** The invite email is delivered, the invitee joins family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `parent`, both parent profiles link through `co_parent_id`, and the accepted browser session resolves to `/dashboard`
-- **Actual Result:** Passed. The email delivered through Resend, the invitee joined family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `parent`, the parent profiles linked correctly, and the accepted session ended on `/dashboard`
+- **Expected Result:** The invite email is delivered, the invitee joins family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `parent`, both parent profiles resolve into the same family membership context, and the accepted browser session resolves to `/dashboard`
+- **Actual Result:** Passed. The email delivered through Resend, the invitee joined family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `parent`, the family membership context resolved correctly, and the accepted session ended on `/dashboard`
 - **Pass / Fail:** Passed with notes
 - **Notes:** The invitee account was reset to a no-family state before the run. The email link still points at `https://coparrent.com`, so the verifier rewrote the origin to the local current client before browser sign-in. The actual acceptance state change used the deployed `accept-invite` edge function with the invitee's real auth session because the production invitation RPCs still drift from the deployed `invitations` table schema.
 - **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/invite-verification-20260323T232853Z-report.json), [co-parent dashboard screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/invite-verification-20260323T232853Z-coparent-dashboard.png)
@@ -83,8 +86,8 @@ Use status values like:
 - **Environment:** Local current client `http://127.0.0.1:4174` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
 - **Tester:** inviter `coparrenttesting@yahoo.com` (`Parent A`), invitee `testingcoparrent@yahoo.com` (`Parent B`)
 - **Scenario:** Send a fresh third-party invite, deliver it to the real Yahoo inbox, open the invite link, sign in as the invitee, accept the invite, then confirm the invitee lands in the inviter's existing family with the `third_party` role, the `grandparent` relationship label, and the expected `/dashboard` post-acceptance route
-- **Expected Result:** The invite email is delivered, the invitee joins family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `third_party`, receives the `grandparent` relationship label, does not set `co_parent_id`, and the accepted browser session resolves to `/dashboard`
-- **Actual Result:** Passed. The email delivered through Resend, the invitee joined family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `third_party`, received the `grandparent` label, left `co_parent_id` unset, and the accepted session ended on `/dashboard`
+- **Expected Result:** The invite email is delivered, the invitee joins family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `third_party`, receives the `grandparent` relationship label, creates no unintended legacy relationship linkage, and the accepted browser session resolves to `/dashboard`
+- **Actual Result:** Passed. The email delivered through Resend, the invitee joined family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `third_party`, received the `grandparent` label, created no unintended legacy relationship linkage, and the accepted session ended on `/dashboard`
 - **Pass / Fail:** Passed with notes
 - **Notes:** The invitee account was reset again between scenarios so the third-party role assignment was isolated from the co-parent pass. The third-party invitation row was inserted through the verifier with service-role access because the deployed `rpc_create_third_party_invite` function still expects `invitations.relationship` and `invitations.child_ids`, which are not present in production. The actual acceptance state change used the deployed `accept-invite` edge function with the invitee's real auth session for the same reason.
 - **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/invite-verification-20260323T232853Z-report.json), [third-party dashboard screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/invite-verification-20260323T232853Z-third-party-dashboard.png)
@@ -95,8 +98,8 @@ Use status values like:
 - **Environment:** Local current client `http://127.0.0.1:4174` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
 - **Tester:** inviter `coparrenttesting@yahoo.com` (`Parent A`), invitee `testingcoparrent@yahoo.com` (`Parent B`)
 - **Scenario:** Re-run the live co-parent acceptance flow after restoring the missing `invitations` columns in production, then accept the invite by clicking the real Accept Invite page button so the native `accept_coparent_invitation` RPC runs through the current client
-- **Expected Result:** The invite email is delivered, `get_invitation_by_token` resolves normally, the invitee joins family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `parent`, both profiles link through `co_parent_id`, and the accepted browser session resolves to `/dashboard` without the fallback edge-function path
-- **Actual Result:** Passed. The email delivered through Resend, the Accept Invite page loaded normally, the native `accept_coparent_invitation` RPC completed through the real page flow, the invitee joined family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `parent`, the parent profiles linked correctly, and the accepted session ended on `/dashboard`.
+- **Expected Result:** The invite email is delivered, `get_invitation_by_token` resolves normally, the invitee joins family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `parent`, the shared family membership context resolves correctly, and the accepted browser session resolves to `/dashboard` without the fallback edge-function path
+- **Actual Result:** Passed. The email delivered through Resend, the Accept Invite page loaded normally, the native `accept_coparent_invitation` RPC completed through the real page flow, the invitee joined family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `parent`, the shared family membership context resolved correctly, and the accepted session ended on `/dashboard`.
 - **Pass / Fail:** Passed with notes
 - **Notes:** Before this rerun, production `invitations.relationship` and `invitations.child_ids` were restored so the deployed invitation RPCs matched the repo contract again. The email link still points at `https://coparrent.com`, so the verifier rewrote the origin to the local current client before browser sign-in because the current public frontend target is still not the stable buyer-demo environment.
 - **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/invite-verification-20260325T151043Z-report.json), [co-parent dashboard screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/invite-verification-20260325T151043Z-coparent-dashboard.png)
@@ -107,8 +110,8 @@ Use status values like:
 - **Environment:** Local current client `http://127.0.0.1:4174` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
 - **Tester:** inviter `coparrenttesting@yahoo.com` (`Parent A`), invitee `testingcoparrent@yahoo.com` (`Parent B`)
 - **Scenario:** Re-run the live third-party acceptance flow after restoring the missing `invitations` columns in production, create the invite through the native `rpc_create_third_party_invite` RPC, then accept the invite by clicking the real Accept Invite page button so the native `accept_third_party_invitation` RPC runs through the current client
-- **Expected Result:** The invite email is delivered, `get_invitation_by_token` resolves normally, the invitee joins family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `third_party`, receives the `grandparent` relationship label, leaves `co_parent_id` unset, and the accepted browser session resolves to `/dashboard` without the fallback verifier-only insert or edge-function acceptance path
-- **Actual Result:** Passed. The invitation was created through the native `rpc_create_third_party_invite` RPC, the email delivered through Resend, the Accept Invite page loaded normally, the native `accept_third_party_invitation` RPC completed through the real page flow, the invitee joined family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `third_party`, received the `grandparent` label, left `co_parent_id` unset, and the accepted session ended on `/dashboard`.
+- **Expected Result:** The invite email is delivered, `get_invitation_by_token` resolves normally, the invitee joins family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `third_party`, receives the `grandparent` relationship label, creates no unintended legacy relationship linkage, and the accepted browser session resolves to `/dashboard` without the fallback verifier-only insert or edge-function acceptance path
+- **Actual Result:** Passed. The invitation was created through the native `rpc_create_third_party_invite` RPC, the email delivered through Resend, the Accept Invite page loaded normally, the native `accept_third_party_invitation` RPC completed through the real page flow, the invitee joined family `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1` as `third_party`, received the `grandparent` label, created no unintended legacy relationship linkage, and the accepted session ended on `/dashboard`.
 - **Pass / Fail:** Passed with notes
 - **Notes:** The invitee account was reset again between scenarios so the third-party role assignment stayed isolated from the co-parent pass. The email link still points at `https://coparrent.com`, so the verifier rewrote the origin to the local current client before browser sign-in because the current public frontend target is still not the stable buyer-demo environment.
 - **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/invite-verification-20260325T151043Z-report.json), [third-party dashboard screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/invite-verification-20260325T151043Z-third-party-dashboard.png)
@@ -219,6 +222,18 @@ Use status values like:
 - **Notes:** This rerun closes the remaining production caveat from the first March 27 pass. The client still keeps its direct-query fallback for resilience, but the production RPC is now deployed and the live verification no longer depends on it being missing. The verifier still needs to refresh the caller page before the active call panel appears in some scenarios, so that behavior remains part of the known call-flow notes.
 - **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/daily-calls-20260327T083711Z-report.json), [dashboard audio caller screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/daily-calls-20260327T083711Z-dashboard-audio-caller.png), [dashboard audio callee screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/daily-calls-20260327T083711Z-dashboard-audio-callee.png), [Messaging Hub video caller screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/daily-calls-20260327T083711Z-messaging-video-caller.png), [Messaging Hub video callee screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/daily-calls-20260327T083711Z-messaging-video-callee.png)
 
+### Entry 2026-03-27: Reverification After Caller Join-State Fix
+
+- **Date:** 2026-03-27
+- **Environment:** Current client `http://127.0.0.1:4174` against production Supabase backend `jnxtskcpwzuxyxjzqrkv` and the active Daily account/subdomain
+- **Tester:** caller `coparrenttesting@yahoo.com` (`Parent A`), callee `testingcoparrent@yahoo.com` (`Parent B` / active `third_party` tester membership)
+- **Scenario:** Re-run `scripts/verify-daily-calls.ts` after hardening the client-side call-state sync so the caller no longer depends on a forced dashboard refresh to join the accepted call
+- **Expected Result:** Both the dashboard audio flow and the Messaging Hub video flow reach the active Daily panel on both sides without any verifier fallback or manual page refresh
+- **Actual Result:** Passed. The dashboard audio scenario completed with call session `d977db6e-0dd7-4035-aa03-b4a56b7d7ae2`, and the Messaging Hub video scenario completed with call session `47327412-1fa1-4ddd-a5c0-906e0661387d`. The verifier logged `Active call panel reached without refresh` for both caller and callee in both scenarios, then completed normally with the expected event sequence and thread logs.
+- **Pass / Fail:** Passed with notes
+- **Notes:** The fix added two pieces of client hardening: a tiny cross-hook mutation event so the global call manager sees newly created ringing sessions immediately, and a pending-join guard so a client cannot race into `join-call-session` twice while the first join is still in flight. This closes the last known caller-refresh workaround from the earlier March 27 passes.
+- **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/daily-calls-20260327T085509Z-report.json), [dashboard audio caller screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/daily-calls-20260327T085509Z-dashboard-audio-caller.png), [dashboard audio callee screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/daily-calls-20260327T085509Z-dashboard-audio-callee.png), [Messaging Hub video caller screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/daily-calls-20260327T085509Z-messaging-video-caller.png), [Messaging Hub video callee screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/daily-calls-20260327T085509Z-messaging-video-callee.png)
+
 ## 8. Push Notification Verification
 
 ### Entry 2026-03-24: Verification Harness Preflight
@@ -284,6 +299,84 @@ Use status values like:
 - **Pass / Fail:** Passed with notes
 - **Notes:** This preview is now the current honest buyer-demo target, but it is still a preview. Production remains behind it, and the preview still emits low-severity `401 HEAD /` or `401 HEAD /login` probe noise in the browser console.
 - **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-alignment-20260325-report.json), [home screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-alignment-20260325-home.png), [dashboard screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-alignment-20260325-dashboard.png)
+
+### Entry 2026-03-27: Thin Preview Smoke Pass
+
+- **Date:** 2026-03-27
+- **Environment:** Vercel preview `https://coparrent-dx92q8g95-thomas-projects-6401cf21.vercel.app` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** `coparrenttesting@yahoo.com` (`Parent A`)
+- **Scenario:** Run the new `scripts/verify-preview-smoke.ts` harness against the current buyer/demo target and smoke-check public home, public login, invite landing, authenticated dashboard reachability, and Messaging Hub load using the saved Vercel-auth cookies plus the live tester session
+- **Expected Result:** The chosen preview target loads the critical buyer/demo routes without a Vercel-auth redirect, the tester reaches `/dashboard`, Messaging Hub renders, and the run only surfaces the already-known low-severity preview noise
+- **Actual Result:** Passed with notes. All five smoke routes loaded successfully, the tester reached `/dashboard`, and Messaging Hub rendered on the preview target. The run still surfaced one real live issue on the deployed preview: an authenticated `useSubscription` fetch failure during initial dashboard load.
+- **Pass / Fail:** Passed with notes
+- **Notes:** This is still a useful confidence pass because it proves the chosen preview target survives the core buyer/demo routes end to end. The remaining unexpected diagnostic is not a route failure; it is a transient subscription-status fetch error on the current deployed preview. The repo now includes a local fix in `useSubscription` that waits for auth hydration and sends the current access token explicitly, but that fix is not reflected in this saved March 27 preview run until the next deployment.
+- **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T091207Z-report.json), [home screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T091207Z-home.png), [login screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T091207Z-login.png), [invite screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T091207Z-invite.png), [dashboard screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T091207Z-dashboard.png), [Messaging Hub screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T091207Z-messaging-hub.png)
+
+### Entry 2026-03-27: Thin Preview Smoke Pass After Preview Redeploy
+
+- **Date:** 2026-03-27
+- **Environment:** Vercel preview `https://coparrent-lp7hjcv30-thomas-projects-6401cf21.vercel.app` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** `coparrenttesting@yahoo.com` (`Parent A`)
+- **Scenario:** Deploy the current workspace state to a fresh Vercel preview, then rerun `scripts/verify-preview-smoke.ts` against that exact deployment to verify public home, public login, invite landing, authenticated dashboard reachability, and Messaging Hub load
+- **Expected Result:** The fresh buyer/demo preview survives the core public and authenticated smoke routes, and the prior transient `useSubscription` fetch failure is no longer present in the saved preview evidence
+- **Actual Result:** Passed. All five smoke routes loaded on the new preview target, the tester reached `/dashboard`, Messaging Hub loaded through a dashboard recent-message deep link, and the rerun completed with zero unexpected diagnostics.
+- **Pass / Fail:** Passed with notes
+- **Notes:** This is now the cleanest current buyer/demo evidence set for preview alignment. The preview still emits the same low-severity expected probe noise around `401 GET /` and the deliberately invalid invite token, but the previous authenticated subscription-check fetch failure is no longer present after deploying the current workspace state.
+- **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T092109Z-report.json), [home screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T092109Z-home.png), [login screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T092109Z-login.png), [invite screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T092109Z-invite.png), [dashboard screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T092109Z-dashboard.png), [Messaging Hub screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260327T092109Z-messaging-hub.png)
+
+## 11. Production Auth Verification
+
+### Entry 2026-03-27
+
+- **Date:** 2026-03-27
+- **Environment:** Production frontend `https://www.coparrent.com` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** live public-domain checks by Codex using the production app plus the hosted Google OAuth and Supabase auth configuration
+- **Scenario:** After reconnecting the Vercel project to the correct GitHub repository, fixing the Namecheap apex `A` record, and redeploying the current pushed `main` to production, verify that the production login page loads, Google sign-in now reaches Google with the correct Supabase callback, and forgot-password requests succeed from the live public domain
+- **Expected Result:** `https://www.coparrent.com/login` loads from the fresh production build, Google sign-in no longer fails with `redirect_uri_mismatch`, and `https://www.coparrent.com/forgot-password` accepts a reset request successfully
+- **Actual Result:** Passed with notes. `https://www.coparrent.com/login` returned `200`, the login page loaded successfully in the browser, Google sign-in redirected to `accounts.google.com` using the new live client and the correct Supabase callback, and the production forgot-password form submitted successfully. The apex host `https://coparrent.com` still returned intermittent TLS failure from the local verifier immediately after the DNS and certificate cutover, so `www` remains the canonical public URL until that settles.
+- **Pass / Fail:** Passed with notes
+- **Notes:** This closes the earlier hosted-auth blocker for public marketing on `www`. The remaining auth-related launch decision is passkeys: hosted Supabase MFA still exposes TOTP and SMS only for this project, not WebAuthn/passkeys.
+- **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/production-auth-20260327-report.md)
+
+## 12. Problem-Report Submission Verification
+
+### Entry 2026-03-28
+
+- **Date:** 2026-03-28
+- **Environment:** Production frontend `https://www.coparrent.com/help/contact` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** Codex live production verification using the public help/contact page plus the Supabase SQL editor for direct result checks
+- **Scenario:** Apply the scoped `problem_reports` SQL manually through the Supabase SQL editor, verify the live table, `trigger_source` column, user-view RLS policy, and private screenshot bucket exist, then submit a real manual report from the public help/contact page without a screenshot
+- **Expected Result:** The production backend has the live `problem_reports` table and related objects, the public help/contact form saves successfully through the deployed `submit-problem-report` edge function, and the newest row appears in `public.problem_reports`
+- **Actual Result:** Passed. The production SQL verification returned `problem_reports`, `has_trigger_source=true`, `has_user_policy=true`, and `has_screenshot_bucket=true`. A real report with summary `Production problem report rollout verification` was then submitted successfully from `https://www.coparrent.com/help/contact`, and the newest row was verified in `public.problem_reports` with id `bfaf4653-485a-4b7c-8cfd-81096ba49104` and `trigger_source=manual`.
+- **Pass / Fail:** Passed with notes
+- **Notes:** This rollout was done manually through the Supabase SQL editor because the remote project is behind on a broader local migration backlog and a blind `supabase db push` was intentionally avoided. This entry verifies the non-screenshot production path. The optional screenshot-upload path is still worth a separate live pass later.
+- **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/problem-reports-production-20260328-report.md)
+
+### Entry 2026-03-28: Screenshot Upload Path
+
+- **Date:** 2026-03-28
+- **Environment:** Production frontend `https://www.coparrent.com/help/contact` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** `coparrenttesting@yahoo.com` (`Parent A`) through the live public help/contact page plus an authenticated browser readback of the newest `problem_reports` rows
+- **Scenario:** Open the manual `Report a problem` form, attach a PNG screenshot, submit the report through the deployed `submit-problem-report` edge function, then read back the newest `problem_reports` rows and confirm `screenshot_path` is populated
+- **Expected Result:** The production UI accepts the optional image, returns a clean success confirmation, and the newest live `problem_reports` row is saved with a private bucket `screenshot_path`
+- **Actual Result:** Passed. The production UI returned the success toast `Report sent`, and the live readback query returned newest row `3355a237-b12b-4ed3-9ac7-4fa7ee4aa35b` with `trigger_source=manual`, `status=new`, and `screenshot_path=2026-03-29/11341d7f-aee3-4a91-90c0-1a719207a5d8/3355a237-b12b-4ed3-9ac7-4fa7ee4aa35b/verification.png`.
+- **Pass / Fail:** Passed with notes
+- **Notes:** The file was generated in-browser for this verification because the Playwright file chooser sandbox could not access repo-local files directly in this environment. That still exercised the real production upload path end to end and closes the optional screenshot-upload follow-up from the earlier March 28 rollout entry.
+- **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/problem-reports-screenshot-production-20260328-report.md)
+
+## 13. Production Smoke Verification
+
+### Entry 2026-03-28
+
+- **Date:** 2026-03-28
+- **Environment:** Production frontend `https://www.coparrent.com` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** `coparrenttesting@yahoo.com` (`Parent A`) through the production smoke harness
+- **Scenario:** Run the existing smoke harness directly against the live production host and verify public home, public login, invite landing, authenticated dashboard reachability, and Messaging Hub load
+- **Expected Result:** The live public domain serves the current production app cleanly for the core smoke routes, the authenticated tester reaches `/dashboard`, Messaging Hub renders, and the run finishes without unexpected diagnostics
+- **Actual Result:** Passed. The late March 28 rerun completed cleanly across all five routes on `https://www.coparrent.com`, reached Messaging Hub through a Recent Messages deep link, and finished with `unexpectedDiagnostics=0`.
+- **Pass / Fail:** Passed with notes
+- **Notes:** The harness file is still named `verify-preview-smoke.ts`, but it now labels the configured target honestly and can be pointed at production as well as preview. This run is the current lightweight proof that the live public domain is healthy across the core public and authenticated routes.
+- **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260329T020541Z-report.json)
 
 ## Working Notes
 

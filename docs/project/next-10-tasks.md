@@ -1,6 +1,6 @@
 # CoParrent Next 10 Tasks
 
-Ranked by immediate value after the March 28, 2026 production `problem_reports` rollout verification. The remaining risk profile is now mostly apex-host confirmation, real-device validation, passkey posture, and launch policy cleanup.
+Ranked by immediate value after the March 28, 2026 production `problem_reports` rollout and screenshot-upload verification. The remaining risk profile is now mostly apex-host confirmation, real-device validation, passkey posture, and launch policy cleanup.
 
 ## 1. Confirm the canonical public host after the DNS and production cutover
 
@@ -11,15 +11,7 @@ Owner: Mixed
 - Reconfirm from multiple networks that the apex host stops showing intermittent TLS/certificate issues
 - Keep `https://www.coparrent.com` as the canonical public URL until the apex behaves cleanly everywhere
 
-## 2. Verify the optional problem-report screenshot-upload path on production
-
-Owner: Mixed
-
-- The core production problem-report flow is now live and verified
-- The remaining nice-to-have is one live pass that attaches a real image file
-- Confirm `screenshot_path` is populated and the private bucket behavior stays correct on production
-
-## 3. Validate push notifications and PWA behavior on real devices
+## 2. Validate push notifications and PWA behavior on real devices
 
 Owner: User-assisted
 
@@ -29,7 +21,7 @@ Owner: User-assisted
 - Verify admin push tester works against current config
 - Confirm payload privacy rules hold on-device
 
-## 4. Decide the passkey posture
+## 3. Decide the passkey posture
 
 Owner: Mixed
 
@@ -37,16 +29,16 @@ Owner: Mixed
 - Decide whether passkeys stay hidden/disabled in launch messaging
 - If passkeys matter before launch, treat hosted WebAuthn availability as a separate blocker instead of implying it already exists
 
-## 5. Re-enable or tighten temporary QA exceptions
+## 4. Confirm temporary QA exception posture
 
 Owner: User-assisted
 
-- Re-enable Supabase auth captcha after auth QA is complete
+- Keep deployed auth captcha configured unless there is an explicit written decision to change the launch posture
 - Confirm the new tightened localhost-origin defaults should remain permanent
 - Confirm no preview or test flows still depend on an explicit localhost override
 - Document the final rollback or retention decision
 
-## 6. Keep the preview smoke pass as a regression check for the buyer/demo target
+## 5. Keep the preview smoke pass as a regression check for the buyer/demo target
 
 Owner: Mixed
 
@@ -54,16 +46,16 @@ Owner: Mixed
 - Keep using it after meaningful preview deployments so staging confidence stays tied to the actual deployed target
 - Keep the scope to smoke coverage, not full end-to-end billing/device verification
 
-## 7. Clean deployment and environment hygiene
+## 6. Document the clean deploy and verification split
 
 Owner: Mixed
 
-- Confirm which local env files are still authoritative
-- Archive or delete stale env references like `_(2).env`
+- Keep `.env.example` as the repo template for local and deployed env variables
+- Keep local `.env` files and `scripts/verify-*.ts` helpers documented as QA-only inputs, not runtime dependencies
 - Document the clean `supabase functions deploy` path
 - Keep local-only and production env expectations separate
 
-## 8. Add lightweight production observability
+## 7. Add lightweight production observability
 
 Owner: Mixed
 
@@ -72,7 +64,7 @@ Owner: Mixed
 - Track Messaging Hub setup failures explicitly if the issue persists after deployment
 - Keep the scope narrow and operational, not a long observability project
 
-## 9. Prepare a stable buyer demo target
+## 8. Prepare a stable buyer demo target
 
 Owner: Mixed
 
@@ -81,13 +73,21 @@ Owner: Mixed
 - Keep the demo environment free of QA-only banners, broken icons, and placeholder content
 - Use the existing buyer-package docs as the script and leave the product in a state a buyer can open without hand-holding on either production `www` or the dedicated preview target
 
-## 10. Produce buyer demo assets from the verified flows
+## 9. Produce buyer demo assets from the verified flows
 
 Owner: Mixed
 
 - Capture a clean screenshot set from the strongest public pages plus the verified dashboard flows
 - Record a short walkthrough that uses the March 23 invite-verification evidence plus the March 24 billing and AI-runtime evidence instead of hand-waving over live behavior
 - Keep the buyer package aligned with the evidence log so the demo story does not outrun what is actually verified
+
+## 10. Run one final pre-marketing production smoke pass
+
+Owner: Mixed
+
+- A late March 28 production smoke pass already completed cleanly across home, login, invite landing, dashboard, and Messaging Hub on `https://www.coparrent.com`
+- Re-run the same pass immediately before outreach if additional live changes land
+- Use the current public domain and production backend, not the preview target
 
 ## Pinned For Later
 

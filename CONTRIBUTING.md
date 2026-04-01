@@ -50,13 +50,14 @@ That command is the repo standard and currently runs:
 The following paths often contain local-only or generated material and should not be treated as normal source edits unless the task explicitly requires it:
 
 - `.env`
-- `_(2).env`
 - `.materials/`
 - `dev-dist/`
 - `dist/`
 - `output/`
 - `tmp/`
 - `supabase/.temp/`
+
+The `scripts/verify-*.ts` helpers are local verification tools. They may read local `.env` values for QA runs, but they are not runtime dependencies and they are not the source of truth for deployed configuration.
 
 ## Pull Request Checklist
 

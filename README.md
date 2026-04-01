@@ -155,16 +155,16 @@ For security architecture, see **`docs/security/SECURITY_MODEL.md`**.
 **Environment:** Vercel + Supabase  
 **Stripe Mode:** Live  
 **Production Supabase Project:** `jnxtskcpwzuxyxjzqrkv`  
-**Last Verified Build:** 2026-03-28
+**Last Verified Build:** 2026-03-31
 **Verified By:** Codex local verification (`npm run verify`) plus live production smoke and evidence-backed feature checks
-**Last README Update:** 2026-03-29
+**Last README Update:** 2026-03-31
 
 > **Note:** The `Last Verified Build` and `Verified By` fields must be updated whenever a behavioral or architectural change is made.
 
 ### Done and Verified
 
 - Local `npm run build`, `npm run lint`, `npm run test`, and `npm run verify` all pass.
-- Local tests currently pass with **30** test files and **119** targeted regression tests.
+- Local tests currently pass with **58** test files and **229** tests.
 - `https://www.coparrent.com` is serving the current pushed `origin/main` production build.
 - The public marketing surface, mobile dashboard, Messaging Hub, and Daily calling flow have all been hardened through late-March verification passes.
 - Messaging Hub thread creation, direct-message hydration, and live Daily audio/video calling are verified against the deployed backend.
@@ -186,7 +186,6 @@ For security architecture, see **`docs/security/SECURITY_MODEL.md`**.
 - Complete real-device push/PWA proof with screenshots and evidence.
 - Decide final passkey posture while Supabase still lacks hosted WebAuthn for this project.
 - Confirm deployed auth captcha configuration and finalize any remaining localhost-origin exceptions.
-- Finish env/config hygiene cleanup around stale local-only files and references.
 
 For the current operational snapshot, see **`docs/project/CURRENT_STATUS.md`**.
 
@@ -308,7 +307,6 @@ There are no remaining legacy hosted-runtime dependencies in the application cod
 - Keep `https://www.coparrent.com` as the canonical public/demo target while the apex cutover settles
 - Confirm deployed auth captcha configuration remains in place
 - Decide the final post-QA posture for passkeys and localhost-origin handling
-- Archive or remove stale env/config references like `_(2).env`
 
 ### Known Blocking Issues
 
@@ -316,7 +314,7 @@ There are no remaining legacy hosted-runtime dependencies in the application cod
 - Passkeys remain unavailable until Supabase exposes hosted WebAuthn or the product posture changes.
 - Deployed auth posture still needs config confirmation: keep captcha configured and review any localhost-origin exceptions.
 
-_Last updated: 2026-03-29_
+_Last updated: 2026-03-31_
 
 ---
 
@@ -387,7 +385,7 @@ This section inventories the app's major features and systems with their current
 | Stripe Checkout | Create checkout sessions | ✅ Complete | Stripe, create-checkout function | None | Low |
 | Subscription Webhooks | Handle Stripe events | ✅ Complete | stripe-webhook function | None | Low |
 | Customer Portal | Manage billing in Stripe | ✅ Complete | customer-portal function | None | Low |
-| Trial System | 7-day trial tracking | ✅ Complete | profiles.trial_ends_at | Auto-downgrade not tested | Medium |
+| Trial System | 7-day trial tracking | ✅ Complete | profiles.trial_ends_at | None | Low |
 | Feature Gating | Power features locked by tier | ✅ Complete | PremiumFeatureGate, usePremiumAccess | None | Low |
 | Plan Limits | Free (4 kids, 4 third-party) / Power (6/6) | ✅ Complete | planLimits.ts, getPlanLimits() | Limits need RLS enforcement | Medium |
 
@@ -582,7 +580,7 @@ These non-goals may be revisited later.
 | **Supabase Storage**      | Document storage with access logging                      | ✅ Active |
 | **Stripe**                | Subscription payments & billing                           | ✅ Active |
 | **Resend**                | Transactional emails (invitations, notifications)         | ✅ Active |
-| **Supabase Auth Captcha** | Bot protection on auth flows                              | ⚠️ Temporarily disabled for QA |
+| **Supabase Auth Captcha** | Bot protection on auth flows                              | ✅ Required by repo defaults for production; deployed posture must stay confirmed |
 | **Google OAuth**          | Social login                                              | ✅ Active |
 | **Apple OAuth**           | Social login                                              | ✅ Active |
 | **OpenRouter**            | All AI edge functions                                     | ✅ Active in repo |
@@ -1349,9 +1347,9 @@ This section provides an honest assessment of what must be completed before depl
 |------|--------|-------|
 | Stripe live mode configured | ✅ Ready | Live Power product and webhook path configured |
 | Webhook signature verification | ✅ Ready | Implemented in stripe-webhook |
-| Failed payment handling | ⚠️ Needs Validation | Logic exists, not tested live |
+| Failed payment handling | ✅ Complete | Webhook updates `past_due` + grace state with automated coverage; live Stripe smoke still recommended |
 | Subscription cancellation flow | ✅ Ready | Customer portal handles |
-| Trial expiration handling | ⚠️ Needs Validation | Auto-downgrade needs testing |
+| Trial expiration handling | ✅ Complete | `check-subscription` auto-downgrade is covered by automated tests |
 | Plan feature enforcement | ⚠️ Needs Validation | Some features may not gate properly |
 | Refund handling | ❌ Missing | No refund workflow implemented |
 | Invoice/receipt emails | ⚠️ Needs Validation | Stripe handles baseline receipts; custom templates still need review |
@@ -1442,7 +1440,7 @@ This section provides an honest assessment of what must be completed before depl
 | Live billing config drift | High | Stripe dashboard, edge functions, and docs must stay aligned |
 | Passkey posture unresolved | Medium | Keep passkeys hidden or revisit when Supabase exposes WebAuthn |
 | Limited error monitoring | Medium | Bugs may go unnoticed; integrate Sentry or similar |
-| Untested payment webhooks | Medium | Revenue issues possible; test with live Stripe events |
+| Live Stripe billing smoke still recommended | Medium | Run a post-deploy Stripe event smoke after billing changes land |
 | Auth posture / localhost config | Medium | Keep deployed captcha configured and finalize localhost-origin posture |
 | Apex host propagation | Low | Keep `https://www.coparrent.com` canonical until apex behavior is clean everywhere |
 
@@ -1480,6 +1478,8 @@ Use `.env.example` as the source of truth for local development and deployed env
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 - `VITE_SUPABASE_PROJECT_ID`
+
+Local `.env` files are local-only developer input and must not be committed. The `scripts/verify-*.ts` helpers may read those local values for QA runs, but they are not part of the runtime configuration contract.
 
 ---
 

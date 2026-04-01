@@ -1,6 +1,6 @@
 # CoParrent Project Completion Review
 
-_Last updated: 2026-03-28_
+_Last updated: 2026-03-30_
 
 This is the current project-completion split requested for release planning.
 
@@ -36,18 +36,26 @@ Completed in this pass:
 26. Fixed the hosted Google OAuth configuration, repaired the Vercel Git connection and Namecheap/Vercel domain wiring, and redeployed the current pushed `main` to production so `https://www.coparrent.com` now serves the live public app again.
 27. Completed the production `problem_reports` rollout on March 28, 2026 by applying the scoped SQL manually in the Supabase SQL editor, verifying the live table/policy/private bucket, and successfully saving a real report from `https://www.coparrent.com/help/contact`.
 28. Tightened the shared edge-function CORS baseline around the real production host surface, removed legacy `.app` / Lovable defaults, updated AI runtime endpoints to use the shared strict origin validator, and cleaned remaining runtime references so the app consistently advertises `coparrent.com` / `www.coparrent.com`.
+29. Completed the optional production problem-report screenshot-upload verification on March 28, 2026 by submitting a real image-attached report through the live public help/contact page and reading back the newest `problem_reports` row with a populated private-bucket `screenshot_path`.
+30. Re-ran the smoke harness directly against `https://www.coparrent.com` on late March 28, 2026 and confirmed home, login, invite landing, dashboard, and Messaging Hub all pass cleanly on the live public domain with zero unexpected diagnostics.
+31. Removed the legacy messaging runtime path and the live runtime reliance on `co_parent_id`, replacing the old `/dashboard/messages-legacy` surface with Messaging Hub only.
+32. Switched protected-route access to explicit allowlist/default-deny behavior and aligned sidebar/dashboard quick-link visibility with the same route rules.
+33. Finished the active-family runtime migration in the live Gift Lists and Creations flows and added regression coverage for missing-scope and cross-family isolation behavior.
+34. Hid the Chore Chart feature from the live app because the repo implementation was still local-only; the route now redirects back to Kids Hub and the audit docs no longer claim RLS-backed persistence.
+35. Re-verified the current local pipeline after the family-scope/runtime passes: lint, build, and the full Vitest suite all pass locally.
+36. Completed the stale env/config hygiene pass: removed the duplicate `_(2).env` file from the active workflow, kept `.env.example` as the repo template, and clarified that `scripts/verify-*.ts` are local QA helpers rather than runtime dependencies.
 
 Remaining Codex-only backlog:
 
-1. No remaining release-blocking local-code tasks are currently identified in the repo state.
+1. No current launch-blocking Codex-only backlog is called out in the verified repo state.
+2. If device validation or deployment checks expose new runtime gaps, treat those as follow-on tickets rather than current known blockers.
 
 ## Tasks That Need User Assistance
 
 1. Validate push notifications and PWA install behavior on physical iOS, Android, and desktop devices.
-2. Decide whether to re-enable auth captcha after QA and confirm the current tightened localhost-origin defaults should remain the permanent production posture.
-3. Decide how access codes are issued, audited, and scoped for launch, demos, and partner distribution.
+2. Confirm the deployed auth environment keeps captcha configured and confirm the current tightened localhost-origin defaults remain the intended production posture.
+3. Confirm the apex `https://coparrent.com` host finishes its DNS/certificate/redirect cutover cleanly and keep `https://www.coparrent.com` canonical until then.
 4. Decide the final passkey posture while hosted Supabase still does not expose WebAuthn for this project.
-5. Upgrade the Supabase organization if you want the Google chooser to show a branded auth host instead of the raw `supabase.co` project domain, then circle back with `docs/project/BRANDED_GOOGLE_AUTH_SETUP.md`.
 
 ## Release Readiness Summary
 
@@ -55,4 +63,4 @@ Remaining Codex-only backlog:
 - Local test status: passing
 - Local lint status: passing cleanly
 - Highest remaining release risk: real-device push/PWA behavior, final QA-exception cleanup, final passkey posture, and final confirmation that the apex `https://coparrent.com` host finishes its cutover cleanly everywhere
-- Highest remaining Codex-only risk: no major local release-blocking gaps are currently identified; the remaining risks are launch decisions and production rollout choices
+- Highest remaining Codex-only risk: no current launch-blocking repo task is called out; the remaining risks are primarily device verification and deployment/configuration confirmation
