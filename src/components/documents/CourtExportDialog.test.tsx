@@ -151,6 +151,7 @@ describe("CourtExportDialog", () => {
         exportFormat: "pdf",
       }),
     );
+    expect(createObjectUrlMock).toHaveBeenCalledTimes(1);
     expect(createExportMock.mock.calls[0]?.[0]?.includeSections).toEqual(
       expect.arrayContaining(["messages", "call_activity", "document_references"]),
     );

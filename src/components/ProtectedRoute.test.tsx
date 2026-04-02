@@ -76,6 +76,14 @@ describe("ProtectedRoute", () => {
             <Route path="/dashboard" element={<div>dashboard-home</div>} />
             <Route path="/law-office/dashboard" element={<div>law-office-dashboard</div>} />
             <Route
+              path="/kids/*"
+              element={
+                <ProtectedRoute requireParent={requireParent}>
+                  <div>kids-protected-content</div>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/dashboard/*"
               element={
                 <ProtectedRoute requireParent={requireParent}>
@@ -154,6 +162,26 @@ describe("ProtectedRoute", () => {
     expect(rendered.textContent).toContain("kids-home");
   });
 
+  it("allows child-scoped users onto the shared games route when explicitly permitted", () => {
+    mockedUseChildAccount.mockReturnValue({
+      ...defaultChildAccountState,
+      isChildAccount: true,
+    } as never);
+
+    const rendered = renderProtectedRoute("/dashboard/games");
+    expect(rendered.textContent).toContain("protected-content");
+  });
+
+  it("allows child-scoped users onto the shared games lobby route when explicitly permitted", () => {
+    mockedUseChildAccount.mockReturnValue({
+      ...defaultChildAccountState,
+      isChildAccount: true,
+    } as never);
+
+    const rendered = renderProtectedRoute("/dashboard/games/flappy-plane/lobby/session-1");
+    expect(rendered.textContent).toContain("protected-content");
+  });
+
   it("enforces requireParent even on otherwise accessible dashboard routes", () => {
     mockedUseFamilyRole.mockReturnValue({
       ...defaultFamilyRoleState,
@@ -174,6 +202,54 @@ describe("ProtectedRoute", () => {
     expect(rendered.textContent).toContain("Active family required");
     expect(rendered.textContent).toContain("cannot render without an active family");
     expect(rendered.textContent).toContain("Open onboarding");
+  });
+
+  it("fails closed for kids portal routes without an active family", () => {
+    mockedUseFamilyRole.mockReturnValue({
+      ...defaultFamilyRoleState,
+      activeFamilyId: null,
+    } as never);
+    mockedUseChildAccount.mockReturnValue({
+      ...defaultChildAccountState,
+      isChildAccount: true,
+    } as never);
+
+    const rendered = renderProtectedRoute("/kids/portal");
+    expect(rendered.textContent).toContain("Active family required");
+  });
+
+  it("fails closed for kids game routes without an active family", () => {
+    mockedUseFamilyRole.mockReturnValue({
+      ...defaultFamilyRoleState,
+      activeFamilyId: null,
+    } as never);
+    mockedUseChildAccount.mockReturnValue({
+      ...defaultChildAccountState,
+      isChildAccount: true,
+    } as never);
+
+    const rendered = renderProtectedRoute("/kids/games/flappy-plane");
+    expect(rendered.textContent).toContain("Active family required");
+  });
+
+  it("fails closed for shared games routes without an active family", () => {
+    mockedUseFamilyRole.mockReturnValue({
+      ...defaultFamilyRoleState,
+      activeFamilyId: null,
+    } as never);
+
+    const rendered = renderProtectedRoute("/dashboard/games");
+    expect(rendered.textContent).toContain("Active family required");
+  });
+
+  it("fails closed for shared games lobby routes without an active family", () => {
+    mockedUseFamilyRole.mockReturnValue({
+      ...defaultFamilyRoleState,
+      activeFamilyId: null,
+    } as never);
+
+    const rendered = renderProtectedRoute("/dashboard/games/flappy-plane/lobby/session-1");
+    expect(rendered.textContent).toContain("Active family required");
   });
 
   it("denies unknown protected routes by default", () => {

@@ -21,6 +21,8 @@ const Index = lazy(() => import("./pages/Index"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 const About = lazy(() => import("./pages/About"));
 const FeaturesPage = lazy(() => import("./pages/FeaturesPage"));
+const ChildAppPage = lazy(() => import("./pages/ChildAppPage"));
+const ChildAccessSetupPage = lazy(() => import("./pages/ChildAccessSetupPage"));
 const HelpCenter = lazy(() => import("./pages/HelpCenter"));
 const HelpGettingStarted = lazy(() => import("./pages/help/HelpGettingStarted"));
 const HelpScheduling = lazy(() => import("./pages/help/HelpScheduling"));
@@ -49,6 +51,9 @@ const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Onboarding = lazy(() => import("./pages/Onboarding"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const GameDashboard = lazy(() => import("./pages/GameDashboard"));
+const GameFlappyPage = lazy(() => import("./pages/GameFlappyPage"));
+const GameLobbyPage = lazy(() => import("./pages/GameLobbyPage"));
 const CalendarPage = lazy(() => import("./pages/CalendarPage"));
 const ChildrenPage = lazy(() => import("./pages/ChildrenPage"));
 const MessagingHubPage = lazy(() => import("./pages/MessagingHubPage"));
@@ -68,6 +73,8 @@ const SportsPage = lazy(() => import("./pages/SportsPage"));
 const GiftsPage = lazy(() => import("./pages/GiftsPage"));
 const AuditLogPage = lazy(() => import("./pages/AuditLogPage"));
 const KidsDashboard = lazy(() => import("./pages/KidsDashboard"));
+const KidsFlappyPage = lazy(() => import("./pages/KidsFlappyPage"));
+const KidsPortalPage = lazy(() => import("./pages/KidsPortalPage"));
 const KidCenterPage = lazy(() => import("./pages/KidCenterPage"));
 const KidsHubPage = lazy(() => import("./pages/KidsHubPage"));
 const NurseNancyPage = lazy(() => import("./pages/NurseNancyPage"));
@@ -104,6 +111,7 @@ const App = () => (
                 <Route path="/pricing" element={<RouteErrorBoundary routeName="Pricing"><Pricing /></RouteErrorBoundary>} />
                 <Route path="/about" element={<RouteErrorBoundary routeName="About"><About /></RouteErrorBoundary>} />
                 <Route path="/features" element={<RouteErrorBoundary routeName="Features"><FeaturesPage /></RouteErrorBoundary>} />
+                <Route path="/child-app" element={<RouteErrorBoundary routeName="Child App"><ChildAppPage /></RouteErrorBoundary>} />
                 <Route path="/help" element={<RouteErrorBoundary routeName="Help"><HelpCenter /></RouteErrorBoundary>} />
                 <Route path="/help/getting-started" element={<RouteErrorBoundary routeName="Help - Getting Started"><HelpGettingStarted /></RouteErrorBoundary>} />
                 <Route path="/help/getting-started/invitations" element={<RouteErrorBoundary routeName="Help - Invitations"><HelpInvitations /></RouteErrorBoundary>} />
@@ -141,17 +149,24 @@ const App = () => (
                 <Route path="/law-office/dashboard" element={<ProtectedRoute><RouteErrorBoundary routeName="Law Office Dashboard"><LawOfficeDashboard /></RouteErrorBoundary></ProtectedRoute>} />
                 
                 {/* Child Account Dashboard (Kids only) */}
+                <Route path="/kids/portal" element={<ProtectedRoute><RouteErrorBoundary routeName="Kids Portal"><KidsPortalPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/kids/games/flappy-plane" element={<ProtectedRoute><RouteErrorBoundary routeName="Kids Game"><KidsFlappyPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/kids" element={<ProtectedRoute><RouteErrorBoundary routeName="Kids Dashboard"><KidsDashboard /></RouteErrorBoundary></ProtectedRoute>} />
                 
                 {/* Protected Routes (Parent/Guardian) */}
                 <Route path="/onboarding" element={<ProtectedRoute><RouteErrorBoundary routeName="Onboarding"><Onboarding /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard" element={<ProtectedRoute><RouteErrorBoundary routeName="Dashboard"><Dashboard /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/games" element={<ProtectedRoute><RouteErrorBoundary routeName="Games"><GameDashboard /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/games/flappy-plane" element={<ProtectedRoute><RouteErrorBoundary routeName="Toy Plane Dash"><GameFlappyPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/games/flappy-plane/lobby" element={<ProtectedRoute><RouteErrorBoundary routeName="Toy Plane Dash Lobby"><GameLobbyPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/games/flappy-plane/lobby/:sessionId" element={<ProtectedRoute><RouteErrorBoundary routeName="Toy Plane Dash Lobby"><GameLobbyPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/calendar" element={<ProtectedRoute><RouteErrorBoundary routeName="Calendar"><CalendarPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/children" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Children"><ChildrenPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/messages" element={<ProtectedRoute><RouteErrorBoundary routeName="Messages"><MessagingHubPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/messages-legacy" element={<Navigate to="/dashboard/messages" replace />} />
                 <Route path="/dashboard/documents" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Documents"><DocumentsPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/settings" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Settings"><SettingsPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/settings/child-access/:childId" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Child Access Setup"><ChildAccessSetupPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/families/new" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Add Family"><AddFamilyPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/notifications" element={<ProtectedRoute><RouteErrorBoundary routeName="Notifications"><NotificationsPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/law-library" element={<ProtectedRoute><RouteErrorBoundary routeName="Law Library"><UnifiedLawLibraryPage /></RouteErrorBoundary></ProtectedRoute>} />

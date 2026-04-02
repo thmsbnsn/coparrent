@@ -1,6 +1,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home, ArrowLeft, Bug } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { hardNavigateTo } from '@/lib/hardNavigation';
 
 interface Props {
   children: ReactNode;
@@ -71,7 +72,7 @@ export class RouteErrorBoundary extends Component<Props, State> {
   };
 
   private handleGoHome = () => {
-    window.location.href = '/dashboard';
+    hardNavigateTo('/dashboard');
   };
 
   private handleGoBack = () => {

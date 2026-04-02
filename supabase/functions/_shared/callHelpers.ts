@@ -60,6 +60,15 @@ export interface CallSessionRecord {
 }
 
 const CALLABLE_MEMBER_ROLES = new Set(["parent", "guardian", "third_party"]);
+type ChildCallMode = "audio_only" | "audio_video";
+
+interface ChildCallSettingsRecord {
+  allowed_inbound_member_ids: string[] | null;
+  allowed_outbound_member_ids: string[] | null;
+  call_mode: ChildCallMode;
+  calling_enabled: boolean;
+  child_profile_id: string | null;
+}
 
 export function logCallStep(prefix: string, step: string, details?: Record<string, unknown>) {
   const detailsStr = details ? ` - ${JSON.stringify(details)}` : "";
@@ -87,6 +96,95 @@ export function ensureCallableRole(role: FamilyMemberRecord["role"]) {
   if (!CALLABLE_MEMBER_ROLES.has(role)) {
     throw new HttpError(403, "Only active parent, guardian, and third-party members can use calling.");
   }
+}
+
+async function getChildCallSettingsForProfile(
+  supabaseAdmin: SupabaseClient,
+  familyId: string,
+  childProfileId: string,
+): Promise<ChildCallSettingsRecord | null> {
+  const { data, error } = await supabaseAdmin
+    .from("child_call_settings")
+    .select(
+      "allowed_inbound_member_ids, allowed_outbound_member_ids, call_mode, calling_enabled, child_profile_id",
+    )
+    .eq("family_id", familyId)
+    .eq("child_profile_id", childProfileId)
+    .maybeSingle();
+
+  if (error) {
+    throw new HttpError(500, error.message);
+  }
+
+  return (data as ChildCallSettingsRecord | null) ?? null;
+}
+
+export async function assertCallPermissionForPair(
+  supabaseAdmin: SupabaseClient,
+  options: {
+    callType: "audio" | "video";
+    calleeMembership: FamilyMemberRecord;
+    callerMembership: FamilyMemberRecord;
+    familyId: string;
+  },
+) {
+  const requireVideoPermission = (mode: ChildCallMode, message: string) => {
+    if (options.callType === "video" && mode !== "audio_video") {
+      throw new HttpError(403, message);
+    }
+  };
+
+  if (options.callerMembership.role === "child") {
+    const childSettings = await getChildCallSettingsForProfile(
+      supabaseAdmin,
+      options.familyId,
+      options.callerMembership.profile_id,
+    );
+
+    if (!childSettings || !childSettings.calling_enabled) {
+      throw new HttpError(403, "Calling is not enabled for this child account.");
+    }
+
+    if (options.calleeMembership.role === "child") {
+      throw new HttpError(403, "Child accounts cannot place direct calls to other child accounts.");
+    }
+
+    if (!childSettings.allowed_outbound_member_ids?.includes(options.calleeMembership.id)) {
+      throw new HttpError(403, "This child is not allowed to call that family member.");
+    }
+
+    requireVideoPermission(
+      childSettings.call_mode,
+      "Video calling is not enabled for this child account.",
+    );
+    return;
+  }
+
+  ensureCallableRole(options.callerMembership.role);
+
+  if (options.calleeMembership.role === "child") {
+    const childSettings = await getChildCallSettingsForProfile(
+      supabaseAdmin,
+      options.familyId,
+      options.calleeMembership.profile_id,
+    );
+
+    if (!childSettings || !childSettings.calling_enabled) {
+      throw new HttpError(403, "Calling is not enabled for this child account.");
+    }
+
+    if (!childSettings.allowed_inbound_member_ids?.includes(options.callerMembership.id)) {
+      throw new HttpError(403, "This family member is not allowed to call that child.");
+    }
+
+    requireVideoPermission(
+      childSettings.call_mode,
+      "This child account is limited to audio-only calls.",
+    );
+    return;
+  }
+
+  ensureCallableRole(options.calleeMembership.role);
 }
 
 export async function requireAuthenticatedProfile(

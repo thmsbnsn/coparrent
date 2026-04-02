@@ -42,6 +42,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 vi.mock("@/lib/postAuthPath", () => ({
   resolvePostAuthPath: vi.fn().mockResolvedValue("/dashboard"),
+  stashPostAuthPathOverride: vi.fn(),
 }));
 
 vi.mock("@/lib/authCapabilities", async () => {
@@ -243,7 +244,7 @@ describe("production auth posture", () => {
     });
 
     const rendered = await renderAtRoute("/login", <Login />);
-    const emailInput = getInputById(rendered, "email");
+    const emailInput = getInputById(rendered, "identifier");
     const passwordInput = getInputById(rendered, "password");
     const submitButton = getButtonByText(rendered, "Sign in");
 
@@ -315,7 +316,7 @@ describe("production auth posture", () => {
     });
 
     const rendered = await renderAtRoute("/login", <Login />);
-    const emailInput = getInputById(rendered, "email");
+    const emailInput = getInputById(rendered, "identifier");
     const passwordInput = getInputById(rendered, "password");
     const submitButton = getButtonByText(rendered, "Sign in");
 

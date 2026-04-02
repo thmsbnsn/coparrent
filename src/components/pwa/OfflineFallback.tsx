@@ -1,14 +1,15 @@
 import { WifiOff, RefreshCw, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/ui/Logo";
+import { hardNavigateTo, hardReload } from "@/lib/hardNavigation";
 
 export const OfflineFallback = () => {
   const handleRetry = () => {
-    window.location.reload();
+    hardReload();
   };
 
   const handleHome = () => {
-    window.location.href = "/";
+    hardNavigateTo("/");
   };
 
   return (

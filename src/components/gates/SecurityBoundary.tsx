@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { logger } from "@/lib/logger";
 import { logSecurityEvent } from "@/lib/securityInvariants";
+import { hardReload } from "@/lib/hardNavigation";
 
 interface SecurityBoundaryProps {
   children: ReactNode;
@@ -126,7 +127,7 @@ export class SecurityBoundary extends Component<
                 </p>
               </div>
 
-              <Button variant="outline" onClick={() => window.location.reload()}>
+              <Button variant="outline" onClick={hardReload}>
                 Reload Page
               </Button>
             </CardContent>

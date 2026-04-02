@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   Calendar,
   Users,
+  Gamepad2,
   MessageSquare,
   FileText,
   Settings,
@@ -31,6 +32,8 @@ import { TrialBadge } from "@/components/dashboard/TrialBadge";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { FamilySwitcher } from "@/components/family/FamilySwitcher";
+import { FamilyPresenceToggle } from "@/components/family/FamilyPresenceToggle";
+import { usePresenceHeartbeat } from "@/hooks/usePresenceHeartbeat";
 import { canAccessProtectedRoute } from "@/lib/routeAccess";
 
 const GlobalCallManager = lazy(() =>
@@ -48,6 +51,7 @@ const parentNavItems = [
   { icon: Calendar, label: "Parenting Calendar", href: "/dashboard/calendar", id: "nav-calendar" },
   { icon: Users, label: "Child Info", href: "/dashboard/children", id: "nav-children" },
   { icon: Trophy, label: "Sports Hub", href: "/dashboard/sports", id: "nav-sports" },
+  { icon: Gamepad2, label: "Games", href: "/dashboard/games", id: "nav-games" },
   { icon: Baby, label: "Kids Hub", href: "/dashboard/kids-hub", id: "nav-kids-hub" },
   { icon: MessageSquare, label: "Messaging Hub", href: "/dashboard/messages", id: "nav-messages" },
   { icon: FileText, label: "Documents", href: "/dashboard/documents", id: "nav-documents" },
@@ -82,6 +86,13 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
   const { isChildAccount, loading: childLoading } = useChildAccount();
   const { toast } = useToast();
   const isLawOfficeLayout = userRole === "lawoffice";
+  const shouldShowFamilyPresence = !isLawOfficeLayout && Boolean(activeFamilyId);
+  const isDashboardGameRoute = location.pathname.startsWith("/dashboard/games/");
+
+  usePresenceHeartbeat({
+    enabled: shouldShowFamilyPresence && !isDashboardGameRoute,
+    locationType: "dashboard",
+  });
 
   // Filter nav items based on user role
   const allNavItems = userRole === "lawoffice" ? lawOfficeNavItems : parentNavItems;
@@ -248,6 +259,7 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
           <div className="flex-1" />
 
           <div className="flex items-center gap-3">
+            {shouldShowFamilyPresence && <FamilyPresenceToggle />}
             <ThemeToggle />
             <NotificationDropdown />
             <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">

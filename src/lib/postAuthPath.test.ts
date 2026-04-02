@@ -114,4 +114,20 @@ describe("resolvePostAuthPath", () => {
 
     expect(mockedEnsureFamily).toHaveBeenCalledWith("Taylor Parent");
   });
+
+  it("uses a stored post-auth override for child install mode and consumes it once", async () => {
+    sessionStorage.setItem("postAuthPathOverride", "/child-app");
+
+    await expect(
+      resolvePostAuthPath({
+        email: "child@example.com",
+        id: "user-child",
+        user_metadata: {},
+      } as never),
+    ).resolves.toBe("/child-app");
+
+    expect(sessionStorage.getItem("postAuthPathOverride")).toBeNull();
+    expect(mockedEnsureFamily).not.toHaveBeenCalled();
+    expect(parentChildrenEq).not.toHaveBeenCalled();
+  });
 });

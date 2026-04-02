@@ -1,26 +1,24 @@
 # Security Policy
 
-Project owner: Thomas Benson
-Company: BNSN Solutions
-Website: https://www.bnsnsolutions.com
+Last reviewed: 2026-03-31
 
 CoParrent is a private project. If you discover a security issue, report it privately and do not open a public issue or pull request.
 
 ## Reporting
 
-- Email: `security@coparrent.com`
+- Primary contact: `security@coparrent.com`
 - Fallback support contact: `support@coparrent.com`
 
 Please include:
 
 - a clear description of the issue
-- affected route, feature, table, or edge function
+- affected route, feature, table, RPC, or edge function
 - reproduction steps
 - expected impact
 - screenshots, logs, or proof-of-concept details if available
-- whether the issue involves family data, child accounts, billing, or authentication
+- whether the issue involves family-scoped data, child accounts, billing, or authentication
 
-## Response Expectations
+## Response Targets
 
 - Initial acknowledgement target: within 2 business days
 - Status update target: within 14 calendar days
@@ -35,9 +33,9 @@ This policy applies to:
 - Supabase edge functions and RPC-backed flows
 - family-scoped authorization and RLS enforcement
 - billing and subscription enforcement
-- push notifications, email notifications, and AI-assisted features
+- push notifications, file handling, and AI-assisted features
 
-## Out of Scope
+## Out Of Scope
 
 The following are generally not treated as security reports:
 
@@ -46,12 +44,14 @@ The following are generally not treated as security reports:
 - issues caused only by local misconfiguration
 - vulnerabilities in third-party services without a CoParrent-specific exploit path
 
-## Handling
+## Safe Testing Rules
 
-- Please avoid accessing or modifying data that does not belong to you.
-- Please stop testing once you have demonstrated the issue.
-- We may ask for validation details or a retest after a fix is prepared.
+- Do not access or modify data that does not belong to you.
+- Stop testing once you have demonstrated the issue.
+- Do not run destructive load or availability tests without explicit permission.
+- Share enough detail to reproduce the issue, but do not publish the report publicly.
 
-## Architecture Reference
+## Reference Docs
 
-Implementation details and trust-boundary notes live in [docs/security/SECURITY_MODEL.md](docs/security/SECURITY_MODEL.md).
+- Security architecture: [docs/security/SECURITY_MODEL.md](docs/security/SECURITY_MODEL.md)
+- Feature gating and access rules: [docs/security/GATED_FEATURES.md](docs/security/GATED_FEATURES.md)

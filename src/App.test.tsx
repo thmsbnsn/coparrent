@@ -84,6 +84,10 @@ vi.mock("./pages/KidsHubPage", () => ({
   default: () => <div>kids-hub-page</div>,
 }));
 
+vi.mock("./pages/ChildAccessSetupPage", () => ({
+  default: () => <div>child-access-setup-page</div>,
+}));
+
 const renderAppAtPath = async (path: string) => {
   window.history.replaceState({}, "", path);
 
@@ -160,5 +164,14 @@ describe("App messaging routes", () => {
 
     expect(window.location.pathname).toBe("/law-office/dashboard");
     expect(container.textContent).toContain("law-office-dashboard-page");
+  });
+
+  it("activates the child device setup wizard route", async () => {
+    const rendered = await renderAppAtPath("/dashboard/settings/child-access/child-1");
+    container = rendered.container;
+    root = rendered.root;
+
+    expect(window.location.pathname).toBe("/dashboard/settings/child-access/child-1");
+    expect(container.textContent).toContain("child-access-setup-page");
   });
 });

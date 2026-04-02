@@ -646,6 +646,12 @@ vi.mock("@/hooks/useCallSessions", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useChildAccount", () => ({
+  useChildAccount: () => ({
+    isChildAccount: false,
+  }),
+}));
+
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     functions: {

@@ -12,45 +12,96 @@ import { getPasswordResetRedirectUrl, resolveAuthBaseUrl } from "@/lib/authRedir
 
 const ForgotPassword = () => {
   const { toast } = useToast();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
+  const [parentManagedMessage, setParentManagedMessage] = useState<string | null>(null);
   const resetHost = new URL(resolveAuthBaseUrl()).host;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email.trim()) {
+    if (!identifier.trim()) {
       toast({
-        title: "Email required",
-        description: "Please enter your email address.",
+        title: "Identifier required",
+        description: "Enter an email address or child username.",
         variant: "destructive",
       });
       return;
     }
 
     setIsLoading(true);
+    setParentManagedMessage(null);
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: getPasswordResetRedirectUrl(),
-    });
+    try {
+      let resetEmail = identifier.trim();
 
-    setIsLoading(false);
+      if (!resetEmail.includes("@")) {
+        const { data, error } = await supabase.rpc("resolve_child_password_reset_target", {
+          p_identifier: resetEmail,
+        });
 
-    if (error) {
+        if (error) {
+          throw error;
+        }
+
+        const resetTarget = data as {
+          email?: string;
+          message?: string;
+          mode?: "parent_managed" | "self_service_email";
+        } | null;
+
+        if (resetTarget?.mode === "parent_managed") {
+          setParentManagedMessage(
+            resetTarget.message ??
+              "A parent or guardian needs to reset this child password from the family settings screen.",
+          );
+          setIsLoading(false);
+          return;
+        }
+
+        resetEmail = resetTarget?.email?.trim() || "";
+      } else {
+        const { data, error } = await supabase.rpc("resolve_child_password_reset_target", {
+          p_identifier: resetEmail,
+        });
+
+        if (!error && (data as { mode?: string; email?: string; message?: string } | null)?.mode === "parent_managed") {
+          setParentManagedMessage(
+            (data as { message?: string } | null)?.message ??
+              "A parent or guardian needs to reset this child password from the family settings screen.",
+          );
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      if (!resetEmail) {
+        throw new Error("Password reset email is unavailable.");
+      }
+
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: getPasswordResetRedirectUrl(),
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      setEmailSent(true);
+      toast({
+        title: "Check your email",
+        description: "We've sent you a password reset link.",
+      });
+    } catch (error) {
       toast({
         title: "Error",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Unable to start password reset.",
         variant: "destructive",
       });
-      return;
+    } finally {
+      setIsLoading(false);
     }
-
-    setEmailSent(true);
-    toast({
-      title: "Check your email",
-      description: "We've sent you a password reset link.",
-    });
   };
 
   return (
@@ -72,7 +123,7 @@ const ForgotPassword = () => {
             <div>
               <h1 className="text-2xl font-display font-bold mb-2">Check your email</h1>
               <p className="text-muted-foreground">
-                We've sent a password reset link to <strong>{email}</strong>
+                We've sent a password reset link to <strong>{identifier}</strong>
               </p>
             </div>
             <div className="space-y-3">
@@ -103,18 +154,18 @@ const ForgotPassword = () => {
           <>
             <h1 className="text-2xl font-display font-bold mb-2">Forgot password?</h1>
             <p className="text-muted-foreground mb-8">
-              Enter your email and we'll send you a reset link
+              Enter an email or child username and we&apos;ll tell you the right reset path
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="identifier">Email or child username</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="identifier"
+                  type="text"
+                  placeholder="you@example.com or kid-username"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
                   autoComplete="email"
                   autoCapitalize="off"
                   autoCorrect="off"
@@ -122,6 +173,12 @@ const ForgotPassword = () => {
                   required
                 />
               </div>
+
+              {parentManagedMessage ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  {parentManagedMessage}
+                </div>
+              ) : null}
 
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (

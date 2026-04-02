@@ -54,6 +54,10 @@ const getNotificationIcon = (type: string) => {
       return "📄";
     case "child_info_update":
       return "👶";
+    case "kid_portal_access_request":
+      return "🟢";
+    case "kid_portal_access_decision":
+      return "✅";
     default:
       return "🔔";
   }

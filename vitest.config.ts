@@ -4,6 +4,7 @@ export default {
   test: {
     environment: "jsdom",
     pool: "threads",
+    setupFiles: ["./vitest.setup.ts"],
     include: [
       "src/**/*.test.ts",
       "src/**/*.test.tsx",

@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { hardReload } from "@/lib/hardNavigation";
 import PWADiagnosticsPage from "@/pages/PWADiagnosticsPage";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
 
@@ -92,5 +93,18 @@ describe("PWADiagnosticsPage", () => {
     expect(rendered.textContent).toContain("Active subscription");
     expect(rendered.textContent).toContain("Open notification settings");
     expect(rendered.textContent).toContain("Push/PWA validation is not complete until the target physical device actually receives the notification");
+  });
+
+  it("uses the shared hard reload helper for refresh checks", async () => {
+    const rendered = await renderPage();
+    const refreshButton = Array.from(rendered.querySelectorAll("button")).find((candidate) =>
+      candidate.textContent?.includes("Refresh checks"),
+    );
+
+    await act(async () => {
+      refreshButton?.click();
+    });
+
+    expect(hardReload).toHaveBeenCalledTimes(1);
   });
 });

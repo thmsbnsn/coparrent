@@ -11,12 +11,17 @@ import {
 describe("routeAccess", () => {
   it("matches nested parent-only routes", () => {
     expect(isParentOnlyRoute("/dashboard/settings/security")).toBe(true);
+    expect(isParentOnlyRoute("/dashboard/settings/child-access/child-1")).toBe(true);
     expect(isParentOnlyRoute("/dashboard/families/new")).toBe(true);
     expect(isParentOnlyRoute("/dashboard/messages/thread-1")).toBe(false);
   });
 
   it("keeps child accounts inside their allowed route set", () => {
+    expect(isChildAllowedRoute("/dashboard/games")).toBe(true);
+    expect(isChildAllowedRoute("/dashboard/games/flappy-plane/lobby/session-1")).toBe(true);
     expect(isChildAllowedRoute("/dashboard/messages/thread-1")).toBe(true);
+    expect(isChildAllowedRoute("/kids/portal")).toBe(true);
+    expect(isChildAllowedRoute("/kids/games/flappy-plane")).toBe(true);
     expect(isChildAllowedRoute("/dashboard/expenses")).toBe(false);
     expect(isChildAllowedRoute("/pwa-diagnostics")).toBe(true);
 
@@ -33,6 +38,7 @@ describe("routeAccess", () => {
   });
 
   it("blocks third-party users from parent-only routes while allowing approved read paths", () => {
+    expect(canThirdPartyAccessRoute("/dashboard/games")).toBe(true);
     expect(canThirdPartyAccessRoute("/dashboard/messages/thread-1")).toBe(true);
     expect(canThirdPartyAccessRoute("/dashboard/settings")).toBe(false);
 
@@ -92,7 +98,12 @@ describe("routeAccess", () => {
   });
 
   it("requires active family scope only for registered family routes", () => {
+    expect(requiresActiveFamilyScope("/dashboard/games")).toBe(true);
+    expect(requiresActiveFamilyScope("/dashboard/games/flappy-plane/lobby/session-1")).toBe(true);
     expect(requiresActiveFamilyScope("/dashboard/messages")).toBe(true);
+    expect(requiresActiveFamilyScope("/dashboard/settings/child-access/child-1")).toBe(true);
+    expect(requiresActiveFamilyScope("/kids/portal")).toBe(true);
+    expect(requiresActiveFamilyScope("/kids/games/flappy-plane")).toBe(true);
     expect(requiresActiveFamilyScope("/law-office/dashboard")).toBe(false);
     expect(requiresActiveFamilyScope("/dashboard/law-library")).toBe(false);
     expect(requiresActiveFamilyScope("/pwa-diagnostics")).toBe(false);

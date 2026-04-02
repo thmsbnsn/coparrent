@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePushNotifications } from "@/hooks/usePushNotifications";
+import { hardReload } from "@/lib/hardNavigation";
 
 const getManifestHref = () => {
   if (typeof document === "undefined") return null;
@@ -68,7 +69,7 @@ const PWADiagnosticsPage = () => {
             Quick checks for install mode, subscription readiness, notifications, and service-worker registration in the current browser session.
           </p>
           <div className="flex flex-wrap gap-3">
-            <Button onClick={() => window.location.reload()}>
+            <Button onClick={hardReload}>
               <RefreshCw className="mr-2 h-4 w-4" />
               Refresh checks
             </Button>

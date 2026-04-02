@@ -1,48 +1,56 @@
 import { useCallback, useEffect, useState } from "react";
+import { format, parseISO } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
-import { format, isToday, parseISO } from "date-fns";
+import { useFamily } from "@/contexts/FamilyContext";
 
 interface ScheduleEvent {
   id: string;
-  title: string;
-  time: string;
-  type: "exchange" | "activity" | "sports";
   location?: string;
+  time: string;
+  title: string;
+  type: "exchange" | "activity" | "sports";
 }
 
 interface UseKidsScheduleReturn {
+  error: string | null;
   events: ScheduleEvent[];
   loading: boolean;
-  error: string | null;
   refetch: () => Promise<void>;
 }
 
 interface ActivityEventRow {
-  id: string;
-  title: string | null;
-  start_time: string | null;
-  event_type: string | null;
-  location_name: string | null;
   activity: {
     child_id: string | null;
+    family_id: string | null;
     name: string | null;
   } | {
     child_id: string | null;
+    family_id: string | null;
     name: string | null;
   }[] | null;
+  event_type: string | null;
+  id: string;
+  location_name: string | null;
+  start_time: string | null;
+  title: string | null;
 }
 
-/**
- * Hook to fetch today's schedule for a child account.
- * Combines custody schedule events and sports/activity events.
- */
 export const useKidsSchedule = (linkedChildId: string | null): UseKidsScheduleReturn => {
+  const { activeFamilyId } = useFamily();
   const [events, setEvents] = useState<ScheduleEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchSchedule = useCallback(async () => {
     if (!linkedChildId) {
+      setEvents([]);
+      setLoading(false);
+      return;
+    }
+
+    if (!activeFamilyId) {
+      setEvents([]);
+      setError("An active family is required before loading the kids schedule.");
       setLoading(false);
       return;
     }
@@ -51,10 +59,24 @@ export const useKidsSchedule = (linkedChildId: string | null): UseKidsScheduleRe
     setError(null);
 
     try {
+      const { data: child, error: childError } = await supabase
+        .from("children")
+        .select("id")
+        .eq("id", linkedChildId)
+        .eq("family_id", activeFamilyId)
+        .maybeSingle();
+
+      if (childError) {
+        throw childError;
+      }
+
+      if (!child) {
+        throw new Error("The linked child is not part of the active family.");
+      }
+
       const today = format(new Date(), "yyyy-MM-dd");
       const scheduleEvents: ScheduleEvent[] = [];
 
-      // Fetch activity events for today
       const { data: activityEvents, error: activityError } = await supabase
         .from("activity_events")
         .select(`
@@ -65,6 +87,7 @@ export const useKidsSchedule = (linkedChildId: string | null): UseKidsScheduleRe
           location_name,
           activity:child_activities!inner(
             child_id,
+            family_id,
             name
           )
         `)
@@ -72,78 +95,74 @@ export const useKidsSchedule = (linkedChildId: string | null): UseKidsScheduleRe
         .eq("is_cancelled", false);
 
       if (activityError) {
-        console.error("Error fetching activity events:", activityError);
-      } else if (activityEvents) {
-        const normalizedActivityEvents = activityEvents as ActivityEventRow[];
-
-        // Filter events for this child
-        const childEvents = normalizedActivityEvents.filter((event) => {
-          const activity = Array.isArray(event.activity) ? event.activity[0] : event.activity;
-          return activity?.child_id === linkedChildId;
-        });
-
-        for (const event of childEvents) {
-          const activity = Array.isArray(event.activity) ? event.activity[0] : event.activity;
-          scheduleEvents.push({
-            id: event.id,
-            title: event.title || activity?.name || "Event",
-            time: event.start_time ? format(parseISO(`2000-01-01T${event.start_time}`), "h:mm a") : "",
-            type: "sports",
-            location: event.location_name || undefined,
-          });
-        }
+        throw activityError;
       }
 
-      // Check if today is an exchange day based on custody schedules
+      for (const event of (activityEvents as ActivityEventRow[] | null) ?? []) {
+        const activity = Array.isArray(event.activity) ? event.activity[0] : event.activity;
+
+        if (!activity || activity.child_id !== linkedChildId || activity.family_id !== activeFamilyId) {
+          continue;
+        }
+
+        scheduleEvents.push({
+          id: event.id,
+          location: event.location_name || undefined,
+          time: event.start_time ? format(parseISO(`2000-01-01T${event.start_time}`), "h:mm a") : "",
+          title: event.title || activity.name || "Event",
+          type: event.event_type === "activity" ? "activity" : "sports",
+        });
+      }
+
       const { data: schedules, error: scheduleError } = await supabase
         .from("custody_schedules")
         .select("id, exchange_time, exchange_location, child_ids")
+        .eq("family_id", activeFamilyId)
         .not("child_ids", "is", null);
 
       if (scheduleError) {
-        console.error("Error fetching custody schedules:", scheduleError);
-      } else if (schedules) {
-        // Check if this child is in any schedule
-        for (const schedule of schedules) {
-          const childIds = schedule.child_ids as string[] | null;
-          if (childIds?.includes(linkedChildId) && schedule.exchange_time) {
-            // Check if today might be an exchange day (simplified check)
-            scheduleEvents.unshift({
-              id: `exchange-${schedule.id}`,
-              title: "Custody Exchange",
-              time: schedule.exchange_time,
-              type: "exchange",
-              location: schedule.exchange_location || undefined,
-            });
-            break; // Only show one exchange per day
-          }
+        throw scheduleError;
+      }
+
+      for (const schedule of schedules ?? []) {
+        const childIds = schedule.child_ids as string[] | null;
+
+        if (childIds?.includes(linkedChildId) && schedule.exchange_time) {
+          scheduleEvents.unshift({
+            id: `exchange-${schedule.id}`,
+            location: schedule.exchange_location || undefined,
+            time: schedule.exchange_time,
+            title: "Custody Exchange",
+            type: "exchange",
+          });
+          break;
         }
       }
 
-      // Sort by time
-      scheduleEvents.sort((a, b) => {
-        if (!a.time) return 1;
-        if (!b.time) return -1;
-        return a.time.localeCompare(b.time);
+      scheduleEvents.sort((left, right) => {
+        if (!left.time) return 1;
+        if (!right.time) return -1;
+        return left.time.localeCompare(right.time);
       });
 
       setEvents(scheduleEvents);
     } catch (err) {
       console.error("Error in useKidsSchedule:", err);
-      setError("Failed to load schedule");
+      setEvents([]);
+      setError(err instanceof Error ? err.message : "Failed to load schedule");
     } finally {
       setLoading(false);
     }
-  }, [linkedChildId]);
+  }, [activeFamilyId, linkedChildId]);
 
   useEffect(() => {
     void fetchSchedule();
   }, [fetchSchedule]);
 
   return {
+    error,
     events,
     loading,
-    error,
     refetch: fetchSchedule,
   };
 };

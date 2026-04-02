@@ -1,243 +1,280 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { CalendarDays, Loader2, LogOut, MessageCircleMore, Play, SmilePlus } from "lucide-react";
 import { motion } from "framer-motion";
-import { Calendar, MessageSquare, Smile, Sun, Heart, MapPin, Loader2 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Logo } from "@/components/ui/Logo";
-import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useChildAccount } from "@/hooks/useChildAccount";
+import { useCallableFamilyMembers } from "@/hooks/useCallableFamilyMembers";
+import { useCallSessions } from "@/hooks/useCallSessions";
+import { useKidPortalAccess } from "@/hooks/useKidPortalAccess";
 import { useKidsSchedule } from "@/hooks/useKidsSchedule";
 import { useMoodCheckin } from "@/hooks/useMoodCheckin";
-import { supabase } from "@/integrations/supabase/client";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { KidsHomeHero } from "@/components/kids/KidsHomeHero";
+import { KidsNavDock } from "@/components/kids/KidsNavDock";
+import { ChildCallLauncher } from "@/components/kids/ChildCallLauncher";
+import { FamilyPresenceToggle } from "@/components/family/FamilyPresenceToggle";
 import { useToast } from "@/hooks/use-toast";
+import { usePresenceHeartbeat } from "@/hooks/usePresenceHeartbeat";
+import { isChildGameAllowed } from "@/lib/childAccess";
+import { requiresPortalApproval } from "@/lib/kidsPortal";
+
+const GAME_CARDS = [
+  {
+    accent: "from-sky-500 via-cyan-500 to-teal-400",
+    cta: "Fly now",
+    label: "Toy Plane Dash",
+    subtitle: "Playable now",
+    to: "/kids/games/flappy-plane",
+  },
+  { accent: "from-fuchsia-500 to-rose-400", cta: "Coming soon", label: "Animal Match", subtitle: "Placeholder game" },
+  { accent: "from-amber-500 to-orange-400", cta: "Coming soon", label: "Color Splash", subtitle: "Placeholder game" },
+  { accent: "from-violet-500 to-indigo-400", cta: "Coming soon", label: "Treasure Train", subtitle: "Placeholder game" },
+  { accent: "from-emerald-500 to-lime-400", cta: "Coming soon", label: "Sky Builder", subtitle: "Placeholder game" },
+] as const;
 
 const MOODS = [
-  { emoji: "😊", label: "Happy", color: "bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:border-green-800" },
-  { emoji: "😌", label: "Calm", color: "bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800" },
-  { emoji: "😔", label: "Sad", color: "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-800" },
-  { emoji: "😤", label: "Frustrated", color: "bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900/30 dark:text-orange-300 dark:border-orange-800" },
-  { emoji: "😴", label: "Tired", color: "bg-purple-100 text-purple-700 border-purple-200 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800" },
-  { emoji: "🤗", label: "Loved", color: "bg-pink-100 text-pink-700 border-pink-200 dark:bg-pink-900/30 dark:text-pink-300 dark:border-pink-800" },
+  { emoji: "😊", label: "Happy" },
+  { emoji: "😌", label: "Calm" },
+  { emoji: "😔", label: "Sad" },
+  { emoji: "😤", label: "Frustrated" },
+  { emoji: "😴", label: "Tired" },
+  { emoji: "🤗", label: "Loved" },
 ];
 
-interface TodayScheduleCardProps {
-  linkedChildId: string | null;
-  showFullDetails: boolean;
-}
+const GamesPanel = ({
+  allowedGameSlugs,
+  gamesEnabled,
+}: {
+  allowedGameSlugs: string[];
+  gamesEnabled: boolean;
+}) => (
+  <section className="rounded-[2rem] border border-border bg-white/85 p-5 shadow-sm">
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <p className="text-sm font-medium text-muted-foreground">Game shelf</p>
+        <h2 className="text-2xl font-display font-semibold">Play next</h2>
+      </div>
+      <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-medium text-white">
+        1 ready + 4 soon
+      </div>
+    </div>
 
-const TodayScheduleCard = ({ linkedChildId, showFullDetails }: TodayScheduleCardProps) => {
-  const { events, loading } = useKidsSchedule(linkedChildId);
-
-  return (
-    <Card className="overflow-hidden border-2 border-primary/20">
-      <CardHeader className="bg-primary/5 pb-4">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Calendar className="w-5 h-5 text-primary" />
-          Today's Schedule
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-4 space-y-3">
-        {loading ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="w-6 h-6 animate-spin text-primary" />
-          </div>
-        ) : events.length === 0 ? (
-          <p className="text-muted-foreground text-center py-4">No events today 🎉</p>
-        ) : (
-          events.map((event, index) => (
-            <motion.div
-              key={event.id}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.1 }}
-              className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border"
+    {!gamesEnabled ? (
+      <div className="mt-5 rounded-[1.75rem] bg-slate-100 p-5 text-sm text-slate-700">
+        A parent turned games off for this child account on this device.
+      </div>
+    ) : (
+      <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        {GAME_CARDS.filter((game) =>
+          !game.to || isChildGameAllowed({ allowed_game_slugs: allowedGameSlugs, games_enabled: gamesEnabled }, "flappy-plane"),
+        ).map((game) => (
+        <div
+          key={game.label}
+          className={`rounded-[1.75rem] bg-gradient-to-br ${game.accent} p-5 text-white shadow-[0_18px_40px_rgba(15,23,42,0.18)]`}
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/80">
+            {game.subtitle}
+          </p>
+          <h3 className="mt-8 text-2xl font-display font-semibold">{game.label}</h3>
+          {game.to ? (
+            <Link
+              to={game.to}
+              className="mt-8 inline-flex items-center rounded-full bg-white px-4 py-2 text-sm font-semibold text-sky-700 shadow-sm transition hover:bg-sky-50"
             >
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                {event.type === "exchange" ? (
-                  <Sun className="w-5 h-5 text-primary" />
-                ) : (
-                  <Heart className="w-5 h-5 text-primary" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">
-                  {showFullDetails ? event.title : "Event"}
-                </p>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span>{event.time}</span>
-                  {showFullDetails && event.location && (
-                    <>
-                      <span>•</span>
-                      <span className="flex items-center gap-1 truncate">
-                        <MapPin className="w-3 h-3" />
-                        {event.location}
-                      </span>
-                    </>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          ))
-        )}
-      </CardContent>
-    </Card>
-  );
-};
+              <Play className="mr-2 h-4 w-4" />
+              {game.cta}
+            </Link>
+          ) : (
+            <div className="mt-8 inline-flex rounded-full bg-white/20 px-4 py-2 text-sm font-medium backdrop-blur">
+              {game.cta}
+            </div>
+          )}
+        </div>
+        ))}
+      </div>
+    )}
+  </section>
+);
 
-interface MoodCheckInProps {
-  linkedChildId: string | null;
+const TodayPanel = ({
+  events,
+  loading,
+  showFullDetails,
+}: {
+  events: ReturnType<typeof useKidsSchedule>["events"];
+  loading: boolean;
+  showFullDetails: boolean;
+}) => (
+  <section className="rounded-[2rem] border border-border bg-white/85 p-5 shadow-sm">
+    <div className="flex items-center gap-3">
+      <div className="rounded-2xl bg-sky-100 p-3 text-sky-700">
+        <CalendarDays className="h-5 w-5" />
+      </div>
+      <div>
+        <p className="text-sm font-medium text-muted-foreground">Today</p>
+        <h2 className="text-xl font-display font-semibold">What is happening?</h2>
+      </div>
+    </div>
+
+    <div className="mt-5 space-y-3">
+      {loading ? (
+        <div className="flex items-center justify-center py-10 text-muted-foreground">
+          <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+          Loading today...
+        </div>
+      ) : events.length === 0 ? (
+        <div className="rounded-[1.5rem] bg-slate-100 p-5 text-sm text-slate-700">
+          No big plans are on the calendar today.
+        </div>
+      ) : (
+        events.map((event) => (
+          <div key={event.id} className="rounded-[1.5rem] bg-slate-100 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
+              {event.type}
+            </p>
+            <p className="mt-2 text-lg font-semibold">{showFullDetails ? event.title : "Event"}</p>
+            <p className="mt-1 text-sm text-slate-600">
+              {event.time || "Today"}
+              {showFullDetails && event.location ? ` • ${event.location}` : ""}
+            </p>
+          </div>
+        ))
+      )}
+    </div>
+  </section>
+);
+
+const MoodPanel = ({
+  allowMoodCheckins,
+  onSelectMood,
+  saving,
+  todaysMood,
+}: {
   allowMoodCheckins: boolean;
-}
-
-const MoodCheckIn = ({ linkedChildId, allowMoodCheckins }: MoodCheckInProps) => {
-  const { todaysMood, saving, saveMood } = useMoodCheckin(linkedChildId);
-  const { toast } = useToast();
-
+  onSelectMood: (mood: { emoji: string; label: string }) => Promise<void>;
+  saving: boolean;
+  todaysMood: ReturnType<typeof useMoodCheckin>["todaysMood"];
+}) => {
   if (!allowMoodCheckins) {
     return null;
   }
 
-  const handleMoodSelect = async (mood: typeof MOODS[0]) => {
-    const success = await saveMood(mood.label, mood.emoji);
-    
-    if (success) {
-      toast({
-        title: "Mood saved! 🎉",
-        description: `You're feeling ${mood.label.toLowerCase()} today.`,
-      });
-    } else {
-      toast({
-        title: "Oops!",
-        description: "Couldn't save your mood. Try again!",
-        variant: "destructive",
-      });
-    }
-  };
-
-  if (todaysMood) {
-    const moodData = MOODS.find(m => m.label === todaysMood.mood);
-    return (
-      <Card className="overflow-hidden border-2 border-accent/20">
-        <CardHeader className="bg-accent/5 pb-4">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Smile className="w-5 h-5 text-accent-foreground" />
-            Today's Mood
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-4">
-          <div className="flex flex-col items-center py-4">
-            <span className="text-6xl mb-2">{todaysMood.emoji}</span>
-            <p className="font-medium text-lg">{todaysMood.mood}</p>
-            <p className="text-sm text-muted-foreground mt-1">You checked in today!</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <Card className="overflow-hidden border-2 border-accent/20">
-      <CardHeader className="bg-accent/5 pb-4">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Smile className="w-5 h-5 text-accent-foreground" />
-          How are you feeling?
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-4">
-        <div className="grid grid-cols-3 gap-3">
-          {MOODS.map((mood, index) => (
-            <motion.button
+    <section className="rounded-[2rem] border border-border bg-white/85 p-5 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="rounded-2xl bg-pink-100 p-3 text-pink-700">
+          <SmilePlus className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">Mood</p>
+          <h2 className="text-xl font-display font-semibold">How do you feel?</h2>
+        </div>
+      </div>
+
+      {todaysMood ? (
+        <div className="mt-5 rounded-[1.75rem] bg-gradient-to-br from-pink-50 to-amber-50 p-6 text-center">
+          <div className="text-6xl">{todaysMood.emoji}</div>
+          <p className="mt-3 text-xl font-display font-semibold">{todaysMood.mood}</p>
+          <p className="mt-1 text-sm text-muted-foreground">You already checked in today.</p>
+        </div>
+      ) : (
+        <div className="mt-5 grid grid-cols-3 gap-3">
+          {MOODS.map((mood) => (
+            <button
               key={mood.label}
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.05 }}
-              onClick={() => handleMoodSelect(mood)}
+              type="button"
               disabled={saving}
-              className={`p-4 rounded-xl border-2 transition-all bg-muted/30 hover:bg-muted/50 border-transparent hover:border-border disabled:opacity-50`}
+              onClick={() => void onSelectMood(mood)}
+              className="rounded-[1.5rem] bg-slate-100 px-3 py-4 text-center transition hover:bg-slate-200 disabled:opacity-60"
             >
-              <span className="text-3xl block mb-1">{mood.emoji}</span>
-              <span className="text-xs font-medium">{mood.label}</span>
-            </motion.button>
+              <span className="block text-3xl">{mood.emoji}</span>
+              <span className="mt-2 block text-xs font-medium">{mood.label}</span>
+            </button>
           ))}
         </div>
-        {saving && (
-          <div className="flex items-center justify-center mt-4">
-            <Loader2 className="w-5 h-5 animate-spin text-primary" />
-          </div>
-        )}
-      </CardContent>
-    </Card>
+      )}
+    </section>
   );
 };
 
-interface MessagesCardProps {
-  allowMessaging: boolean;
-}
-
-const MessagesCard = ({ allowMessaging }: MessagesCardProps) => {
-  const navigate = useNavigate();
-
-  if (!allowMessaging) {
+const MessagesPanel = ({
+  canSendMessages,
+  onOpen,
+}: {
+  canSendMessages: boolean;
+  onOpen: () => void;
+}) => {
+  if (!canSendMessages) {
     return null;
   }
 
   return (
-    <Card
-      className="overflow-hidden border-2 border-secondary/20 cursor-pointer hover:shadow-md transition-shadow"
-      onClick={() => navigate("/dashboard/messages")}
-    >
-      <CardHeader className="bg-secondary/5 pb-4">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <MessageSquare className="w-5 h-5 text-secondary-foreground" />
-          Messages
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="pt-4">
-        <p className="text-muted-foreground text-center py-4">
-          Tap to see messages from your family
-        </p>
-      </CardContent>
-    </Card>
+    <section className="rounded-[2rem] border border-border bg-white/85 p-5 shadow-sm">
+      <div className="flex items-center gap-3">
+        <div className="rounded-2xl bg-amber-100 p-3 text-amber-700">
+          <MessageCircleMore className="h-5 w-5" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">Messages</p>
+          <h2 className="text-xl font-display font-semibold">Talk to family</h2>
+        </div>
+      </div>
+
+      <p className="mt-4 text-sm text-muted-foreground">
+        Open the family message space to read notes and send safe replies.
+      </p>
+
+      <Button
+        type="button"
+        className="mt-5 h-12 rounded-full bg-slate-950 px-6 text-white hover:bg-slate-800"
+        onClick={onOpen}
+      >
+        Open messages
+      </Button>
+    </section>
   );
 };
 
 export default function KidsDashboard() {
-  const { user, signOut, loading: authLoading } = useAuth();
-  const { isChildAccount, permissions, loading: permLoading, linkedChildId } = useChildAccount();
-  const [childName, setChildName] = useState<string>("");
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, signOut, loading: authLoading } = useAuth();
+  const {
+    allow_family_chat,
+    allowed_game_slugs,
+    allow_mood_checkins,
+    allow_parent_messaging,
+    call_mode,
+    calling_enabled,
+    child_name,
+    communication_enabled,
+    games_enabled,
+    isChildAccount,
+    linkedChildId,
+    loading: childLoading,
+    portal_mode,
+    scopeError,
+    show_full_event_details,
+  } = useChildAccount();
+  const { loading: portalLoading, requestState } = useKidPortalAccess();
+  const { events, loading: scheduleLoading } = useKidsSchedule(linkedChildId);
+  const { loading: callableLoading, members: callableMembers } = useCallableFamilyMembers();
+  const { todaysMood, saving, saveMood } = useMoodCheckin(linkedChildId);
+  const { createCall } = useCallSessions(null);
+
+  usePresenceHeartbeat({
+    enabled: Boolean(isChildAccount && !scopeError),
+    locationType: "dashboard",
+  });
 
   useEffect(() => {
-    const fetchChildName = async () => {
-      if (!linkedChildId) return;
-
-      const { data } = await supabase
-        .from("children")
-        .select("name")
-        .eq("id", linkedChildId)
-        .maybeSingle();
-
-      if (data) {
-        setChildName(data.name);
-      }
-    };
-
-    if (linkedChildId) {
-      fetchChildName();
-    }
-  }, [linkedChildId]);
-
-  // Redirect parent accounts to normal dashboard
-  useEffect(() => {
-    if (!authLoading && !permLoading && !isChildAccount && user) {
+    if (!authLoading && !childLoading && !isChildAccount && user) {
       navigate("/dashboard");
     }
-  }, [authLoading, permLoading, isChildAccount, user, navigate]);
+  }, [authLoading, childLoading, isChildAccount, navigate, user]);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -245,19 +282,22 @@ export default function KidsDashboard() {
     }
   }, [authLoading, navigate, user]);
 
-  const handleSignOut = async () => {
-    await signOut();
-    toast({
-      title: "Signed out",
-      description: "See you later! 👋",
-    });
-    navigate("/");
-  };
+  useEffect(() => {
+    if (
+      !authLoading &&
+      !childLoading &&
+      !portalLoading &&
+      isChildAccount &&
+      requiresPortalApproval(portal_mode, requestState)
+    ) {
+      navigate("/kids/portal", { replace: true });
+    }
+  }, [authLoading, childLoading, isChildAccount, navigate, portalLoading, portal_mode, requestState]);
 
-  if (authLoading || permLoading) {
+  if (authLoading || childLoading || portalLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner size="lg" message="Loading..." />
+      <div className="min-h-screen bg-[linear-gradient(180deg,#fff8ed_0%,#ffe0c6_100%)]">
+        <LoadingSpinner fullScreen message="Loading kids dashboard..." />
       </div>
     );
   }
@@ -266,72 +306,135 @@ export default function KidsDashboard() {
     return null;
   }
 
+  if (scopeError) {
+    return (
+      <div className="min-h-screen bg-[linear-gradient(180deg,#fff8ed_0%,#ffe0c6_100%)] p-6">
+        <div className="mx-auto max-w-xl rounded-[2rem] border border-rose-200 bg-white/90 p-8 shadow-sm">
+          <h1 className="text-2xl font-display font-semibold">Family scope required</h1>
+          <p className="mt-3 text-sm text-muted-foreground">{scopeError}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      className="min-h-screen bg-gradient-to-b from-background to-muted/30"
-      style={{ paddingTop: "env(safe-area-inset-top, 0)" }}
-    >
-      {/* Header */}
-      <header className="bg-card border-b sticky top-0 z-30">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#fff8ed_0%,#ffe0c6_45%,#f7f4ef_100%)] px-4 py-5 sm:px-6">
+      <div className="mx-auto max-w-[1480px]">
+        <div className="mb-5 flex items-center justify-between gap-4">
           <Logo size="sm" />
           <div className="flex items-center gap-3">
-            <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={handleSignOut}>
-              Sign Out
+            <FamilyPresenceToggle tone="kids" />
+            <div className="rounded-full bg-white/85 px-4 py-2 text-right shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">Hello there</p>
+              <p className="text-base font-display font-semibold text-slate-900">{child_name ?? "Kiddo"}</p>
+            </div>
+            <Button
+              variant="outline"
+              className="rounded-full bg-white/70"
+              onClick={async () => {
+                await signOut();
+                toast({
+                  title: "Signed out",
+                  description: "See you next time.",
+                });
+                navigate("/");
+              }}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Sign out
             </Button>
           </div>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Welcome */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-3xl font-display font-bold">
-            Hi, {childName || "there"}! 👋
-          </h1>
-          <p className="text-muted-foreground mt-1">Here's what's happening today</p>
-        </motion.div>
+        <div className="grid gap-6 lg:grid-cols-[92px_minmax(0,1fr)]">
+          <div className="order-2 lg:order-1">
+            <KidsNavDock />
+          </div>
 
-        {/* Today's Schedule */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <TodayScheduleCard 
-            linkedChildId={linkedChildId} 
-            showFullDetails={permissions.show_full_event_details}
-          />
-        </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="order-1 space-y-6"
+          >
+            <KidsHomeHero childName={child_name ?? "friend"} />
+            <GamesPanel allowedGameSlugs={allowed_game_slugs} gamesEnabled={games_enabled} />
 
-        {/* Mood Check-in */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <MoodCheckIn 
-            linkedChildId={linkedChildId}
-            allowMoodCheckins={permissions.allow_mood_checkins}
-          />
-        </motion.div>
+            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="space-y-6">
+                <ChildCallLauncher
+                  contacts={communication_enabled && calling_enabled ? callableMembers : []}
+                  loading={callableLoading}
+                  onStartCall={async (contact, callType) => {
+                    const session = await createCall({
+                      callType,
+                      calleeProfileId: contact.profileId,
+                      source: "dashboard",
+                    });
 
-        {/* Messages */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-        >
-          <MessagesCard 
-            allowMessaging={permissions.allow_parent_messaging || permissions.allow_family_chat}
-          />
-        </motion.div>
-      </main>
+                    if (!session) {
+                      toast({
+                        title: "Call not started",
+                        description: "This call could not be started right now.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                />
 
-      {/* Safe area bottom padding */}
-      <div style={{ paddingBottom: "env(safe-area-inset-bottom, 1rem)" }} />
+                {!communication_enabled && (
+                  <div className="rounded-[2rem] border border-border bg-white/85 p-5 shadow-sm">
+                    <h3 className="text-xl font-display font-semibold">Communication</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      A parent turned off child communication on this device, so calls and messages
+                      stay hidden here.
+                    </p>
+                  </div>
+                )}
+
+                {communication_enabled && !calling_enabled && (
+                  <div className="rounded-[2rem] border border-border bg-white/85 p-5 shadow-sm">
+                    <h3 className="text-xl font-display font-semibold">Calls</h3>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      A parent needs to turn on calling before approved family members appear here.
+                    </p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Current mode: {call_mode === "audio_video" ? "Audio + video" : "Audio only"}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-6">
+                <TodayPanel
+                  events={events}
+                  loading={scheduleLoading}
+                  showFullDetails={show_full_event_details}
+                />
+                <MoodPanel
+                  allowMoodCheckins={allow_mood_checkins}
+                  onSelectMood={async (mood) => {
+                    const success = await saveMood(mood.label, mood.emoji);
+
+                    toast({
+                      title: success ? "Mood saved" : "Mood not saved",
+                      description: success
+                        ? `You picked ${mood.label.toLowerCase()}.`
+                        : "Try that one more time.",
+                      variant: success ? "default" : "destructive",
+                    });
+                  }}
+                  saving={saving}
+                  todaysMood={todaysMood}
+                />
+                <MessagesPanel
+                  canSendMessages={communication_enabled && (allow_parent_messaging || allow_family_chat)}
+                  onOpen={() => navigate("/dashboard/messages")}
+                />
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </div>
     </div>
   );
 }

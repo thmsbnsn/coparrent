@@ -7,6 +7,7 @@ interface ProtectedRouteRule {
 }
 
 const PROTECTED_ROUTE_RULES: readonly ProtectedRouteRule[] = [
+  { path: "/dashboard/games", allowThirdParty: true, allowLawOffice: false, allowChild: true, familyScoped: true },
   { path: "/dashboard/calendar", allowThirdParty: true, allowLawOffice: false, allowChild: true, familyScoped: true },
   { path: "/dashboard/children", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
   { path: "/dashboard/messages", allowThirdParty: true, allowLawOffice: false, allowChild: true, familyScoped: true },
@@ -26,6 +27,8 @@ const PROTECTED_ROUTE_RULES: readonly ProtectedRouteRule[] = [
   { path: "/dashboard", allowThirdParty: true, allowLawOffice: false, allowChild: false, familyScoped: true },
   { path: "/law-office/dashboard", allowThirdParty: false, allowLawOffice: true, allowChild: false, familyScoped: false },
   { path: "/onboarding", allowThirdParty: true, allowLawOffice: false, allowChild: false, familyScoped: false },
+  { path: "/kids/portal", allowThirdParty: false, allowLawOffice: false, allowChild: true, familyScoped: true },
+  { path: "/kids/games", allowThirdParty: false, allowLawOffice: false, allowChild: true, familyScoped: true },
   { path: "/kids", allowThirdParty: false, allowLawOffice: false, allowChild: true, familyScoped: true },
   { path: "/admin", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: false },
   { path: "/pwa-diagnostics", allowThirdParty: true, allowLawOffice: false, allowChild: true, familyScoped: false },

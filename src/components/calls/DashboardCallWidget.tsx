@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { CALL_ROLE_LABELS } from "@/lib/calls";
 import type { CallableFamilyMember } from "@/hooks/useCallableFamilyMembers";
+import { canUseVideoCall } from "@/lib/kidsPortal";
 
 interface DashboardCallWidgetProps {
   contacts: CallableFamilyMember[];
@@ -185,24 +186,30 @@ export const DashboardCallWidget = ({
                                   </>
                                 )}
                               </Button>
-                              <Button
-                                type="button"
-                                className="h-12 rounded-2xl border border-white/20 bg-slate-950/25 text-white hover:bg-slate-950/35"
-                                disabled={disabled || loading || Boolean(pendingKey)}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void handleStartCall(contact, "video");
-                                }}
-                              >
-                                {pendingKey === videoKey ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <>
-                                    <Video className="mr-2 h-4 w-4" />
-                                    Video
-                                  </>
-                                )}
-                              </Button>
+                              {canUseVideoCall(contact.allowedCallMode) ? (
+                                <Button
+                                  type="button"
+                                  className="h-12 rounded-2xl border border-white/20 bg-slate-950/25 text-white hover:bg-slate-950/35"
+                                  disabled={disabled || loading || Boolean(pendingKey)}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void handleStartCall(contact, "video");
+                                  }}
+                                >
+                                  {pendingKey === videoKey ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <>
+                                      <Video className="mr-2 h-4 w-4" />
+                                      Video
+                                    </>
+                                  )}
+                                </Button>
+                              ) : (
+                                <div className="flex items-center justify-center rounded-2xl border border-white/15 bg-white/10 text-sm text-white/90">
+                                  Audio only
+                                </div>
+                              )}
                             </div>
 
                             <Button

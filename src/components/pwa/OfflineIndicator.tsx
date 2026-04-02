@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { WifiOff, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { hardReload } from "@/lib/hardNavigation";
 
 export const OfflineIndicator = () => {
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
@@ -19,7 +20,7 @@ export const OfflineIndicator = () => {
   }, []);
 
   const handleRetry = () => {
-    window.location.reload();
+    hardReload();
   };
 
   return (

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Logo } from "@/components/ui/Logo";
@@ -20,10 +20,11 @@ import {
 import { getAuthCaptchaState } from "@/lib/authCapabilities";
 import { logger } from "@/lib/logger";
 import { safeErrorMessage } from "@/lib/safeText";
-import { resolvePostAuthPath } from "@/lib/postAuthPath";
+import { resolvePostAuthPath, stashPostAuthPathOverride } from "@/lib/postAuthPath";
 
 const Login = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { user, loading } = useAuth();
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -38,9 +39,9 @@ const Login = () => {
     return localStorage.getItem("rememberMe") === "true";
   });
   const [formData, setFormData] = useState(() => {
-    const savedEmail = localStorage.getItem("rememberedEmail");
+    const savedIdentifier = localStorage.getItem("rememberedLoginIdentifier");
     return {
-      email: savedEmail || "",
+      identifier: savedIdentifier || "",
       password: "",
     };
   });
@@ -62,6 +63,10 @@ const Login = () => {
       };
     }
   }, [user, loading, navigate, mfaRequired]);
+
+  useEffect(() => {
+    stashPostAuthPathOverride(searchParams.get("next"));
+  }, [searchParams]);
 
   const prepareMfaChallenge = (factorsData: {
     totp: Array<{ id: string; status: string; friendly_name?: string | null }>;
@@ -115,8 +120,41 @@ const Login = () => {
 
     setIsLoading(true);
 
+    let resolvedEmail = formData.identifier.trim();
+
+    if (resolvedEmail && !resolvedEmail.includes("@")) {
+      const { data: identifierData, error: identifierError } = await supabase.rpc(
+        "resolve_child_login_identifier",
+        {
+          p_child_username: resolvedEmail,
+        },
+      );
+
+      if (identifierError) {
+        setIsLoading(false);
+        toast({
+          title: "Sign in failed",
+          description: safeErrorMessage(identifierError, "That child username is not ready for sign in."),
+          variant: "destructive",
+        });
+        return;
+      }
+
+      resolvedEmail = ((identifierData as { email?: string } | null)?.email ?? "").trim();
+
+      if (!resolvedEmail) {
+        setIsLoading(false);
+        toast({
+          title: "Sign in failed",
+          description: "That child username is missing a login email.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: formData.email,
+      email: resolvedEmail,
       password: formData.password,
       options: captchaRequired ? { captchaToken } : undefined,
     });
@@ -124,7 +162,7 @@ const Login = () => {
     setIsLoading(false);
 
     if (error) {
-      logger.warn("Login failed", { email: formData.email });
+      logger.warn("Login failed", { identifier: formData.identifier });
       // Clear password on error
       setFormData(prev => ({ ...prev, password: "" }));
       if (passwordRef.current) passwordRef.current.value = "";
@@ -164,10 +202,10 @@ const Login = () => {
     // Save "Remember me" preference
     if (rememberMe) {
       localStorage.setItem("rememberMe", "true");
-      localStorage.setItem("rememberedEmail", formData.email);
+      localStorage.setItem("rememberedLoginIdentifier", formData.identifier);
     } else {
       localStorage.removeItem("rememberMe");
-      localStorage.removeItem("rememberedEmail");
+      localStorage.removeItem("rememberedLoginIdentifier");
     }
 
     toast({
@@ -227,13 +265,13 @@ const Login = () => {
 
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email address</Label>
+                  <Label htmlFor="identifier">Email or child username</Label>
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    id="identifier"
+                    type="text"
+                    placeholder="you@example.com or kid-username"
+                    value={formData.identifier}
+                    onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                     autoComplete="username"
                     autoCapitalize="off"
                     autoCorrect="off"

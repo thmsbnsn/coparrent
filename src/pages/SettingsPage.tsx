@@ -284,6 +284,7 @@ const SettingsPage = () => {
 
         {/* Child Account Controls Section */}
         <motion.div
+          id="child-access-section"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.13 }}
@@ -291,7 +292,7 @@ const SettingsPage = () => {
         >
           <div className="flex items-center gap-3 mb-6">
             <Baby className="w-5 h-5 text-primary" />
-            <h2 className="font-display font-semibold">Child Accounts</h2>
+            <h2 className="font-display font-semibold">Child Accounts & Access</h2>
           </div>
           <ChildAccountControls />
         </motion.div>

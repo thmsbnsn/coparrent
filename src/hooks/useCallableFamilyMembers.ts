@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
-import { CALLABLE_MEMBER_ROLES, type MemberRole } from "@/lib/calls";
+import type { ChildCallMode } from "@/lib/kidsPortal";
+import type { MemberRole } from "@/lib/calls";
 
 export interface CallableFamilyMember {
+  allowedCallMode: ChildCallMode;
   avatarUrl: string | null;
   email: string | null;
   fullName: string | null;
@@ -14,17 +16,12 @@ export interface CallableFamilyMember {
 }
 
 interface FamilyMemberRow {
-  avatar_url?: string | null;
-  email?: string | null;
-  full_name?: string | null;
-  id?: string;
-  membership_id?: string;
+  allowed_call_mode: ChildCallMode | null;
+  avatar_url: string | null;
+  email: string | null;
+  full_name: string | null;
+  membership_id: string;
   profile_id: string;
-  profiles?: {
-    avatar_url: string | null;
-    email: string | null;
-    full_name: string | null;
-  } | null;
   relationship_label: string | null;
   role: MemberRole;
 }
@@ -40,6 +37,8 @@ const formatRelationshipLabel = (relationshipLabel: string | null, role: MemberR
   }
 
   switch (role) {
+    case "child":
+      return "Child";
     case "guardian":
       return "Guardian";
     case "third_party":
@@ -53,10 +52,12 @@ export const useCallableFamilyMembers = () => {
   const { activeFamilyId, profileId } = useFamilyRole();
   const [members, setMembers] = useState<CallableFamilyMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scopeError, setScopeError] = useState<string | null>(null);
 
   const fetchMembers = useCallback(async () => {
     if (!activeFamilyId || !profileId) {
       setMembers([]);
+      setScopeError("An active family is required before loading callable family members.");
       setLoading(false);
       return;
     }
@@ -69,48 +70,21 @@ export const useCallableFamilyMembers = () => {
       })
       .returns<FamilyMemberRow[]>();
 
-    let sourceRows = (data as FamilyMemberRow[] | null) ?? [];
-
     if (error) {
-      console.warn("RPC callable family member lookup failed, falling back to direct family_members query:", error);
-
-      const fallbackResult = await supabase
-        .from("family_members")
-        .select(`
-          id,
-          profile_id,
-          relationship_label,
-          role,
-          profiles!family_members_profile_id_fkey (
-            full_name,
-            email,
-            avatar_url
-          )
-        `)
-        .eq("family_id", activeFamilyId)
-        .eq("status", "active")
-        .in("role", [...CALLABLE_MEMBER_ROLES])
-        .neq("profile_id", profileId);
-
-      if (fallbackResult.error) {
-        console.error("Error fetching callable family members:", fallbackResult.error);
-        setMembers([]);
-        setLoading(false);
-        return;
-      }
-
-      sourceRows = (fallbackResult.data as FamilyMemberRow[] | null) ?? [];
+      console.error("Error fetching callable family members:", error);
+      setMembers([]);
+      setScopeError(error.message || "Unable to load callable family members for the active family.");
+      setLoading(false);
+      return;
     }
 
-    const nextMembers = sourceRows
+    const nextMembers = ((data as FamilyMemberRow[] | null) ?? [])
       .map((row) => ({
-        avatarUrl: row.avatar_url ?? row.profiles?.avatar_url ?? null,
-        email: row.email ?? row.profiles?.email ?? null,
-        fullName:
-          row.full_name ??
-          row.profiles?.full_name ??
-          formatRelationshipLabel(row.relationship_label, row.role),
-        membershipId: row.membership_id ?? row.id ?? row.profile_id,
+        allowedCallMode: row.allowed_call_mode ?? "audio_video",
+        avatarUrl: row.avatar_url,
+        email: row.email,
+        fullName: row.full_name ?? formatRelationshipLabel(row.relationship_label, row.role),
+        membershipId: row.membership_id,
         profileId: row.profile_id,
         relationshipLabel: row.relationship_label ?? null,
         role: row.role,
@@ -122,6 +96,7 @@ export const useCallableFamilyMembers = () => {
       });
 
     setMembers(nextMembers);
+    setScopeError(null);
     setLoading(false);
   }, [activeFamilyId, profileId]);
 
@@ -133,5 +108,6 @@ export const useCallableFamilyMembers = () => {
     loading,
     members,
     refresh: fetchMembers,
+    scopeError,
   };
 };

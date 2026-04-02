@@ -75,6 +75,7 @@ import { PullToRefreshIndicator } from "@/components/messages/PullToRefreshIndic
 import { CallActionButtons } from "@/components/calls/CallActionButtons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useCallSessions } from "@/hooks/useCallSessions";
+import { useChildAccount } from "@/hooks/useChildAccount";
 import { useProblemReport } from "@/components/feedback/useProblemReport";
 import { buildMessageTimeline } from "@/components/messages/threadTimeline";
 import type {
@@ -577,6 +578,7 @@ const MessagingHubPage = () => {
     currentThreadCall,
     incomingSession,
   } = useCallSessions(activeThread?.id ?? null);
+  const { isChildAccount } = useChildAccount();
   const { openReportModal } = useProblemReport();
   
   const { setTyping, clearTyping } = useTypingIndicator(activeThread?.id || null);
@@ -2450,14 +2452,16 @@ const MessagingHubPage = () => {
                               </Badge>
                             </div>
                           </div>
-                          <div className="ml-auto rounded-[18px] border border-white/10 bg-white/5 p-1.5">
-                            <CallActionButtons
-                              disabled={Boolean(currentThreadCall)}
-                              loading={Boolean(startingCallType)}
-                              onStartAudio={() => void handleStartCall("audio")}
-                              onStartVideo={() => void handleStartCall("video")}
-                            />
-                          </div>
+                          {!isChildAccount ? (
+                            <div className="ml-auto rounded-[18px] border border-white/10 bg-white/5 p-1.5">
+                              <CallActionButtons
+                                disabled={Boolean(currentThreadCall)}
+                                loading={Boolean(startingCallType)}
+                                onStartAudio={() => void handleStartCall("audio")}
+                                onStartVideo={() => void handleStartCall("video")}
+                              />
+                            </div>
+                          ) : null}
                         </>
                       )}
                     </div>

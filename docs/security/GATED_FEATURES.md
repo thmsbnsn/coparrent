@@ -1,6 +1,6 @@
 # Gated Features
 
-Last reviewed: 2026-04-01
+Last reviewed: 2026-04-02
 
 This document summarizes the current feature-gating model in the repo. It focuses on where access is enforced and avoids claiming stronger enforcement than the code currently proves.
 
@@ -60,8 +60,11 @@ The route allowlist in [../../src/lib/routeAccess.ts](../../src/lib/routeAccess.
 High-level summary:
 
 - Third-party users are allowed on a limited set of protected routes such as dashboard, calendar, messages, notifications, law library, blog, onboarding, and PWA diagnostics.
-- Child accounts are allowed on an even smaller set, including `/kids`, calendar, messages, notifications, and PWA diagnostics.
+- Third-party users also have explicit access to the shared games surface at `/dashboard/games` and the nested shared game routes under `/dashboard/games/*`.
+- Child accounts are allowed on an even smaller set, including `/kids`, `/kids/portal`, `/kids/games/*`, `/dashboard/games`, `/dashboard/games/*`, calendar, messages, notifications, and PWA diagnostics.
+- The dedicated `/child-app` launch route is a child-mode shell and install/start-path foundation, not a trust boundary. Family-scoped child settings still fail closed without explicit active family scope after sign-in.
 - Parent-only or guardian-only operational routes include children, documents, settings, expenses, sports, gifts, kid-center, kids-hub, and audit.
+- The guided child device setup flow under `/dashboard/settings/child-access/:childId` inherits the parent-only, family-scoped posture from the settings route and is not reachable to child or third-party accounts.
 
 ## Current Feature-Gate Summary
 
@@ -77,6 +80,8 @@ High-level summary:
 | AI message analyze / rephrase / draft | Parent/guardian flow with premium entitlement | `aiGuard` |
 | AI schedule suggest | Parent/guardian flow with premium entitlement | `aiGuard` |
 | Messaging Hub access | Family-scoped route for permitted roles | route allowlist plus thread-level server access |
+| Child access settings, device restrictions, and guided setup wizard | Parent/guardian family-scoped settings flow | route allowlist plus child portal and child device-access RPCs requiring explicit `family_id` |
+| Shared Games dashboard, lobby, and game routes | Family-scoped route for explicitly permitted roles, including child-safe shared entry for `/dashboard/games` and lobby/session flow under `/dashboard/games/*` | route allowlist plus family-scoped presence, generic game-session RPCs, server-set session seeds/start times, and server-owned result/winner resolution that fail closed without explicit scope |
 | Messaging export receipts | Family-scoped thread export with Power entitlement | `messaging-thread-export` edge function requiring explicit `family_id`, thread access, server-side Power entitlement, and stored receipt verification |
 | Daily calling | Family-scoped parent/guardian/third-party flow | callable-member checks plus `call_sessions` and `call_events` access limited to participants |
 | Document export dialog | Parent/guardian family-wide export with Power entitlement | `PermissionButton` UX plus `court-record-export` edge function requiring explicit `family_id`, parent/guardian membership, server-side Power entitlement, immutable artifact storage, and stored receipt verification |
@@ -90,6 +95,7 @@ High-level summary:
 - Daily calling persists participant-visible session and event state, but the repo does not include recording, transcripts, or a dedicated immutable call-history export surface.
 - Family-wide court-record exports include call session/event evidence only and document metadata/access history only. They do not include call media or raw document binaries.
 - Historical docs that claimed broader third-party route access than `routeAccess.ts` are outdated. The route allowlist file is the current source of truth.
+- Shared game routes now sit on a reusable family multiplayer foundation. Toy Plane Dash is the first consumer, but the session/lobby/result model is generic by `game_slug`, not a Flappy-only special case.
 
 ## Related Docs
 

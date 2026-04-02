@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Download, X, Smartphone } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { CHILD_APP_INSTALL_PATH } from "@/lib/childAccess";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -19,6 +20,10 @@ export const PWAInstallPrompt = () => {
   const [showIOSInstructions, setShowIOSInstructions] = useState(false);
 
   useEffect(() => {
+    if (window.location.pathname.startsWith(CHILD_APP_INSTALL_PATH)) {
+      return;
+    }
+
     // Check if already installed or dismissed
     const dismissed = localStorage.getItem("pwa-install-dismissed");
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches;

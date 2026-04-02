@@ -2,8 +2,8 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.2";
 import { strictCors, getCorsHeaders } from "../_shared/cors.ts";
 import {
+  assertCallPermissionForPair,
   HttpError,
-  ensureCallableRole,
   ensureDirectMessageThread,
   getActiveMembershipForProfile,
   getActiveMembershipForUser,
@@ -94,10 +94,14 @@ serve(async (req) => {
     }
 
     const callerMembership = await getActiveMembershipForUser(supabaseAdmin, body.family_id, user.id);
-    ensureCallableRole(callerMembership.role);
-
     const calleeMembership = await getActiveMembershipForProfile(supabaseAdmin, body.family_id, body.callee_profile_id);
-    ensureCallableRole(calleeMembership.role);
+
+    await assertCallPermissionForPair(supabaseAdmin, {
+      callType: body.call_type,
+      calleeMembership,
+      callerMembership,
+      familyId: body.family_id,
+    });
 
     if (calleeMembership.profile_id === profile.id) {
       throw new HttpError(400, "You cannot call yourself.");
@@ -148,7 +152,7 @@ serve(async (req) => {
         familyId: body.family_id,
         participantAProfileId: profile.id,
         participantBProfileId: body.callee_profile_id,
-        primaryParentId: callerMembership.primary_parent_id,
+        primaryParentId: callerMembership.primary_parent_id || calleeMembership.primary_parent_id,
       });
 
       threadId = ensuredThread.id;
@@ -298,7 +302,7 @@ serve(async (req) => {
           profileId: body.callee_profile_id,
           tag: `incoming-call-${createdSession.id}`,
           title: notificationTitle,
-          url: "/dashboard/messages",
+          url: calleeMembership.role === "child" ? "/kids" : "/dashboard/messages",
         });
 
         logCallStep(LOG_PREFIX, "Call push dispatch attempted", pushResult);

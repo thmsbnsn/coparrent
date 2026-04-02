@@ -7,6 +7,7 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useChildAccount } from "@/hooks/useChildAccount";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
+import { usePresenceHeartbeat } from "@/hooks/usePresenceHeartbeat";
 
 const toast = vi.hoisted(() => vi.fn());
 
@@ -20,6 +21,10 @@ vi.mock("@/hooks/useFamilyRole", () => ({
 
 vi.mock("@/hooks/useChildAccount", () => ({
   useChildAccount: vi.fn(),
+}));
+
+vi.mock("@/hooks/usePresenceHeartbeat", () => ({
+  usePresenceHeartbeat: vi.fn(),
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
@@ -66,6 +71,10 @@ vi.mock("@/components/family/FamilySwitcher", () => ({
   FamilySwitcher: () => <div>family-switcher</div>,
 }));
 
+vi.mock("@/components/family/FamilyPresenceToggle", () => ({
+  FamilyPresenceToggle: () => <div>family-presence-toggle</div>,
+}));
+
 vi.mock("@/components/ui/Logo", () => ({
   Logo: () => <div>logo</div>,
 }));
@@ -85,6 +94,7 @@ vi.mock("framer-motion", () => ({
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedUseFamilyRole = vi.mocked(useFamilyRole);
 const mockedUseChildAccount = vi.mocked(useChildAccount);
+const mockedUsePresenceHeartbeat = vi.mocked(usePresenceHeartbeat);
 
 const flushPromises = async () => {
   await Promise.resolve();
@@ -112,6 +122,10 @@ describe("DashboardLayout", () => {
     mockedUseChildAccount.mockReturnValue({
       isChildAccount: false,
       loading: false,
+    } as never);
+    mockedUsePresenceHeartbeat.mockReturnValue({
+      scopeError: null,
+      updatePresence: vi.fn(),
     } as never);
   });
 
@@ -157,8 +171,11 @@ describe("DashboardLayout", () => {
     } as never);
 
     const rendered = await renderLayout("/dashboard/messages");
+    const gamesLink = rendered.querySelector<HTMLAnchorElement>("#nav-games");
 
     expect(rendered.querySelector("#nav-dashboard")).not.toBeNull();
+    expect(gamesLink).not.toBeNull();
+    expect(gamesLink?.getAttribute("href")).toBe("/dashboard/games");
     expect(rendered.querySelector("#nav-calendar")).not.toBeNull();
     expect(rendered.querySelector("#nav-messages")).not.toBeNull();
     expect(rendered.querySelector("#nav-journal")).not.toBeNull();
@@ -171,6 +188,7 @@ describe("DashboardLayout", () => {
     expect(rendered.querySelector("#nav-documents")).toBeNull();
     expect(rendered.querySelector("#nav-expenses")).toBeNull();
     expect(rendered.querySelector("#nav-settings")).toBeNull();
+    expect(rendered.textContent).toContain("family-presence-toggle");
   });
 
   it("keeps child-scoped users limited to child-allowed navigation links", async () => {
@@ -187,8 +205,11 @@ describe("DashboardLayout", () => {
     } as never);
 
     const rendered = await renderLayout("/dashboard/calendar");
+    const gamesLink = rendered.querySelector<HTMLAnchorElement>("#nav-games");
 
     expect(rendered.querySelector("#nav-calendar")).not.toBeNull();
+    expect(gamesLink).not.toBeNull();
+    expect(gamesLink?.getAttribute("href")).toBe("/dashboard/games");
     expect(rendered.querySelector("#nav-messages")).not.toBeNull();
 
     expect(rendered.querySelector("#nav-dashboard")).toBeNull();
@@ -214,5 +235,6 @@ describe("DashboardLayout", () => {
     expect(rendered.textContent).not.toContain("trial-badge");
     expect(rendered.textContent).not.toContain("onboarding-overlay");
     expect(rendered.textContent).not.toContain("global-call-manager");
+    expect(rendered.textContent).not.toContain("family-presence-toggle");
   });
 });

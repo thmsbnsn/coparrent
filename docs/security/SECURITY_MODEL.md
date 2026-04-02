@@ -1,6 +1,6 @@
 # Security Model
 
-Last reviewed: 2026-04-01
+Last reviewed: 2026-04-02
 
 This document defines the current security architecture and trust boundaries for CoParrent. It is written to stay aligned with the repo rather than with older assumptions or aspirational deployment claims.
 
@@ -75,6 +75,8 @@ Current server-side examples include:
 
 - `aiGuard` for AI role and entitlement checks
 - `check-subscription` and `stripe-webhook` for billing state
+- child portal, child calling, and child device-access RPCs that require explicit `family_id`
+- family game session, lobby, synchronized start, and result RPCs that require explicit `family_id`
 - `messaging-thread-export` for family-scoped export creation, download, and verification
 - invite and notification functions that validate family membership and ownership server-side
 
@@ -96,7 +98,10 @@ Important points:
 
 - admin access is backed by `user_roles` and server-side checks
 - child accounts have a smaller route and capability surface
+- child device access settings are parent-managed, family-scoped, and intended to back future child-install and quick-unlock posture
+- the guided child device setup flow is a parent-only route layered on top of those same family-scoped child access settings
 - third-party users are limited to a narrower protected-route allowlist than parents and guardians
+- shared family games now sit on a generic session foundation keyed by `family_id` and `game_slug`, with server-owned `seed`, `start_time`, result rows, and winner resolution
 
 ## Subscription And Billing Security
 
@@ -183,6 +188,25 @@ Repo-confirmed push-related pieces include:
 - `sync-push-subscription`
 - shared push helpers
 - server-side notification send paths
+
+## Shared Game Session Security
+
+The shared games surface now has a reusable family-scoped multiplayer/session foundation.
+
+Repo-confirmed controls include:
+
+- `family_game_sessions` and `family_game_session_members` scoped by active family membership
+- server-generated session `seed`
+- server-set synchronized `start_time`
+- `family_game_session_results` stored per family-scoped session member
+- server-side winner resolution from shared session results
+- family presence updates for lobby and in-game states using explicit `family_id`
+
+Important boundaries:
+
+- the client may render countdowns and standings, but it does not authorize families, session membership, readiness, or winners
+- session reads, joins, starts, and result reports must fail closed when `family_id` is missing
+- no cross-family session discovery, invites, or fallback resolution are part of the intended model
 
 Physical-device validation is still separate from repo confirmation.
 
