@@ -1255,8 +1255,8 @@ const MessagingHubPage = () => {
           : recordState === "error"
             ? activeThreadLoadError || "The selected thread could not be loaded right now."
             : recordState === "ready"
-              ? `${messages.length} message${messages.length === 1 ? "" : "s"} currently visible in this record.`
-              : "This record is open and ready for the first message.";
+              ? `${messages.length} recorded message${messages.length === 1 ? "" : "s"} currently visible in this conversation.`
+              : "No messages are on record yet. The first message will begin this conversation.";
   const composerDisabled =
     recordState === "loading_existing" ||
     recordState === "loading_empty" ||
@@ -1363,7 +1363,7 @@ const MessagingHubPage = () => {
       : recordState === "error" || recordState === "history_unavailable"
         ? "border-warning/35 bg-warning/10 text-warning"
         : recordState === "ready"
-          ? "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+          ? "border-accent/30 bg-accent/10 text-cyan-50"
           : "border-white/10 bg-white/5 text-slate-200/70",
   );
 
@@ -1543,17 +1543,22 @@ const MessagingHubPage = () => {
                   </div>
                   <div className="mt-1 flex items-center gap-2">
                     {thread.other_participant?.role && getRoleBadge(thread.other_participant.role)}
-                    <span className="rounded-full border border-border/70 bg-background/45 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                      {thread.last_message ? "Recorded thread" : "Ready to start"}
+                    <span className={cn(
+                      "rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em]",
+                      thread.last_message
+                        ? "border-primary/15 bg-primary/10 text-primary"
+                        : "border-border/70 bg-background/45 text-muted-foreground",
+                    )}>
+                      {thread.last_message ? "Existing record" : "First message pending"}
                     </span>
                   </div>
                   <p className="mt-1 truncate text-xs text-muted-foreground">
-                    {getThreadPreviewText(thread, "No messages yet")}
+                    {getThreadPreviewText(thread, "No messages are on record yet")}
                   </p>
                   <p className="mt-1 text-[11px] text-muted-foreground/80">
                     {thread.last_message
-                      ? "Existing direct record"
-                      : "Direct thread ready for the first message"}
+                      ? "Recorded conversation already underway"
+                      : "The first message will begin this direct record"}
                   </p>
                 </div>
                 {showIndicator && getUnreadForThread(thread.id) > 0 && (
@@ -1639,6 +1644,222 @@ const MessagingHubPage = () => {
     );
   };
 
+  const exportReceiptPanel = activeThread ? (
+    <section className="no-print mt-4 rounded-[28px] border border-border/70 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--card)/0.92))] p-4 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.9)] sm:p-5">
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                Export Receipt
+              </p>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
+                  receiptPanelPresentation.badgeToneClass,
+                )}
+              >
+                {receiptPanelPresentation.isAlert ? (
+                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : receiptPanelPresentation.badgeLabel === "Verified" ? (
+                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <Info className="h-3.5 w-3.5" aria-hidden="true" />
+                )}
+                {receiptPanelPresentation.badgeLabel}
+              </Badge>
+              {threadExportsLoading && (
+                <Badge variant="outline" className="rounded-full bg-background/70 text-muted-foreground">
+                  Loading records
+                </Badge>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <p className="text-lg font-semibold text-foreground">
+                {latestThreadExport
+                  ? `Latest export receipt recorded ${format(new Date(latestThreadExport.exported_at), "MMM d, yyyy 'at' h:mm a")}`
+                  : receiptPanelPresentation.headline}
+              </p>
+              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                {receiptPanelPresentation.description}
+              </p>
+              {latestThreadExport && (
+                <p className="text-xs text-muted-foreground">
+                  This export includes a tamper-evident receipt generated from server-authoritative records. You can verify whether the PDF still matches the stored receipt.
+                </p>
+              )}
+            </div>
+
+            {latestThreadExport && (
+              <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-border/70 bg-background/55 px-4 py-3 text-xs text-muted-foreground">
+                    <p className="font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      Receipt ID
+                    </p>
+                    <code className="mt-3 block break-all text-[11px] leading-5 text-foreground">
+                      {latestThreadExport.id}
+                    </code>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="mt-3 h-8 rounded-lg px-2 text-[11px]"
+                      aria-label="Copy receipt ID"
+                      onClick={() =>
+                        void handleCopyReceiptValue(
+                          "Receipt ID",
+                          latestThreadExport.id,
+                          "receipt-id",
+                        )
+                      }
+                    >
+                      {copiedReceiptField === "receipt-id" ? (
+                        <>
+                          <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                          Copy receipt ID
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  <div className="rounded-2xl border border-border/70 bg-background/55 px-4 py-3 text-xs text-muted-foreground">
+                    <p className="font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      Receipt details
+                    </p>
+                    <p className="mt-3 text-sm font-medium text-foreground">
+                      {latestThreadExport.record_count} record entr{latestThreadExport.record_count === 1 ? "y" : "ies"}
+                    </p>
+                    <div className="mt-3 space-y-1 text-[11px] leading-5 text-muted-foreground">
+                      <p>Raw result: {latestReceiptVerificationResult?.status ?? "unknown"}</p>
+                      {latestThreadExport.signing_key_id ? (
+                        <p>Signing key ID: {latestThreadExport.signing_key_id}</p>
+                      ) : null}
+                      {latestThreadExport.signature_algorithm ? (
+                        <p>Algorithm: {latestThreadExport.signature_algorithm}</p>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-border/70 bg-[linear-gradient(180deg,hsl(var(--background)/0.9),hsl(var(--muted)/0.2))] px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        PDF Hash
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Full value is copyable. The stored receipt is what links this hash to the server-generated PDF artifact.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
+                      aria-label="Copy PDF hash"
+                      disabled={!latestThreadExport.pdf_artifact_hash}
+                      onClick={() =>
+                        latestThreadExport.pdf_artifact_hash &&
+                        void handleCopyReceiptValue(
+                          "PDF hash",
+                          latestThreadExport.pdf_artifact_hash,
+                          "pdf-hash",
+                        )
+                      }
+                    >
+                      {copiedReceiptField === "pdf-hash" ? (
+                        <>
+                          <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+                          Copy hash
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <code className="mt-4 block break-all rounded-xl border border-border/70 bg-background/80 px-3 py-3 text-[12px] leading-6 text-foreground">
+                    {formatHashValue(latestThreadExport.pdf_artifact_hash)}
+                  </code>
+                </div>
+              </div>
+            )}
+
+            {latestThreadExport && (
+              <p className="text-xs text-muted-foreground">
+                The exact PDF bytes are generated on the server, hashed after rendering, and linked by the server-signed receipt. The PDF does not contain an embedded Acrobat-style digital signature.
+              </p>
+            )}
+            {threadExportsError && (
+              <p className="text-sm text-warning">{threadExportsError}</p>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl"
+              disabled={!activeFamilyId || !latestThreadExport || downloadingArtifact === "pdf"}
+              onClick={() =>
+                void handleDownloadStoredArtifact("pdf", latestThreadExport?.id ?? null)
+              }
+            >
+              {downloadingArtifact === "pdf" ? "Downloading PDF..." : "Download PDF"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl"
+              disabled={!activeFamilyId || !latestThreadExport || downloadingArtifact === "json_evidence_package"}
+              onClick={() =>
+                void handleDownloadStoredArtifact(
+                  "json_evidence_package",
+                  latestThreadExport?.id ?? null,
+                )
+              }
+            >
+              {downloadingArtifact === "json_evidence_package"
+                ? "Downloading JSON..."
+                : "Download JSON package"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl"
+              disabled={!activeFamilyId || !activeThread || threadExportsLoading}
+              onClick={() => {
+                setSelectedExportId(latestThreadExport?.id ?? null);
+                setShowVerifyDialog(true);
+              }}
+            >
+              Verify receipt
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl"
+              disabled={!activeFamilyId || !activeThread || threadExportsLoading}
+              onClick={() => void loadThreadExports()}
+            >
+              Refresh records
+            </Button>
+          </div>
+        </div>
+      </div>
+    </section>
+  ) : null;
+
   if (loading) {
     return (
       <DashboardLayout>
@@ -1690,18 +1911,25 @@ const MessagingHubPage = () => {
               <div className="absolute left-8 top-6 h-32 w-32 rounded-full bg-primary/20 blur-3xl" />
               <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-accent/15 blur-3xl" />
               <div className="relative flex flex-col gap-5">
-                <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                   <div className="min-w-0 space-y-4">
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="inline-flex rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/80">
-                        {modeSummaryLabel}
+                        Messaging record
                       </div>
                       <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-primary-foreground/70">
-                        {currentThreadTypeLabel}
+                        {modeSummaryLabel}
                       </div>
-                      <div className={cn("inline-flex rounded-full border px-3 py-1 text-xs font-medium", threadStatusBadgeClass)}>
-                        {recordStateLabel}
-                      </div>
+                      {activeThread ? (
+                        <>
+                          <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-primary-foreground/70">
+                            {currentThreadTypeLabel}
+                          </div>
+                          <div className={cn("inline-flex rounded-full border px-3 py-1 text-xs font-medium", threadStatusBadgeClass)}>
+                            {recordStateLabel}
+                          </div>
+                        </>
+                      ) : null}
                       {showIndicator && totalUnread > 0 && (
                         <UnreadBadge count={totalUnread} size="md" />
                       )}
@@ -1711,33 +1939,39 @@ const MessagingHubPage = () => {
                         Messaging Hub
                       </h1>
                       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-200/80">
-                        {currentThreadTitle}. {currentThreadDescription}
+                        Review the current family record, switch into court view when needed, and keep the conversation itself ahead of utility controls.
                       </p>
                     </div>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2 xl:w-[360px] xl:grid-cols-1">
-                    <div className="rounded-[24px] border border-white/10 bg-white/5 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm">
+                    <div className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
-                        Current mode
+                        Selected conversation
                       </p>
-                      <p className="mt-3 text-lg font-semibold text-white">{modeSummaryLabel}</p>
-                      <p className="mt-1 text-sm text-slate-300/70">
-                        Use court view for review and export, or chat view for day-to-day drafting.
-                      </p>
-                    </div>
-                    <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
-                        Loaded thread
-                      </p>
-                      <p className="mt-3 text-lg font-semibold text-white">{recordStateLabel}</p>
-                      <p className="mt-1 text-sm text-slate-300/70">
+                      <p className="mt-2 text-lg font-semibold text-white">{currentThreadTitle}</p>
+                      <p className="mt-1 text-sm leading-6 text-slate-300/76">
                         {activeThread
-                          ? recordStateDescription
-                          : "Choose the family record, a group, or a direct thread to load the full record."}
+                          ? currentThreadDescription
+                          : "Choose the family channel, a group, or a direct thread to load the full record."}
                       </p>
                     </div>
                   </div>
+                  {isMobile && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="relative w-fit rounded-2xl border-white/10 bg-white/5 px-4 text-white hover:bg-white/10"
+                      onClick={() => setShowSidebar(true)}
+                    >
+                      <Menu className="mr-2 h-4 w-4" />
+                      Conversations
+                      {showIndicator && totalUnread > 0 && (
+                        <UnreadBadge
+                          count={totalUnread}
+                          className="absolute -right-1.5 -top-1.5"
+                          size="sm"
+                        />
+                      )}
+                    </Button>
+                  )}
                 </div>
 
                 {setupError && (
@@ -1751,328 +1985,6 @@ const MessagingHubPage = () => {
                         Retry setup
                       </Button>
                     </div>
-                  </div>
-                )}
-
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-                  <div className="flex flex-wrap items-stretch gap-3">
-                    {isMobile && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="relative rounded-2xl border-white/10 bg-white/5 px-4"
-                        onClick={() => setShowSidebar(true)}
-                      >
-                        <Menu className="mr-2 h-4 w-4" />
-                        Conversations
-                        {showIndicator && totalUnread > 0 && (
-                          <UnreadBadge
-                            count={totalUnread}
-                            className="absolute -top-1 -right-1"
-                            size="sm"
-                          />
-                        )}
-                      </Button>
-                    )}
-
-                    <div className="rounded-[22px] border border-white/10 bg-white/5 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300/70">
-                        Viewing mode
-                      </p>
-                      <CourtViewToggle
-                        enabled={courtView}
-                        onToggle={() =>
-                          setViewMode((currentMode) =>
-                            currentMode === "court" ? "chat" : "court",
-                          )
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-stretch gap-3">
-                    <div className="rounded-[22px] border border-white/10 bg-slate-950/35 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-300/70">
-                        Utilities
-                      </p>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
-                          onClick={() => void handleRefresh()}
-                          disabled={isRefreshing || isPullRefreshing}
-                        >
-                          <RefreshCw
-                            className={cn(
-                              "mr-2 h-4 w-4",
-                              (isRefreshing || isPullRefreshing) && "animate-spin",
-                            )}
-                          />
-                          {isRefreshing || isPullRefreshing ? "Refreshing..." : "Refresh"}
-                        </Button>
-
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10" aria-label="More messaging actions">
-                              <MoreHorizontal className="mr-2 h-4 w-4" />
-                              More
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56">
-                            <DropdownMenuItem onClick={() => setShowSearch(true)}>
-                              <Search className="mr-2 h-4 w-4" />
-                              Search messages
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openReportModal("manual")}>
-                              <MessageSquare className="mr-2 h-4 w-4" />
-                              Report a problem
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              disabled={exportDisabled}
-                              onClick={() => void handleExportPDF()}
-                            >
-                              <FileText className="mr-2 h-4 w-4" />
-                              {exportingThread ? "Exporting evidence package..." : "Export evidence package"}
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              disabled={!activeThread || !activeFamilyId || threadExportsLoading}
-                              onClick={() => {
-                                setSelectedExportId(latestThreadExport?.id ?? null);
-                                setShowVerifyDialog(true);
-                              }}
-                            >
-                              <Check className="mr-2 h-4 w-4" />
-                              Verify saved receipt
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              disabled={!courtView || timelineItems.length === 0}
-                              onClick={handlePrint}
-                            >
-                              <Printer className="mr-2 h-4 w-4" />
-                              Print current view
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {activeThread && (
-                  <div className="rounded-[24px] border border-white/10 bg-[linear-gradient(135deg,rgba(8,47,73,0.48),rgba(15,23,42,0.68))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-                    <div className="flex flex-col gap-5">
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0 flex-1 space-y-4">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
-                              Export Receipt
-                            </p>
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
-                                receiptPanelPresentation.badgeToneClass,
-                              )}
-                            >
-                              {receiptPanelPresentation.isAlert ? (
-                                <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                              ) : receiptPanelPresentation.badgeLabel === "Verified" ? (
-                                <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                              ) : (
-                                <Info className="h-3.5 w-3.5" aria-hidden="true" />
-                              )}
-                              {receiptPanelPresentation.badgeLabel}
-                            </Badge>
-                            {threadExportsLoading && (
-                              <Badge variant="outline" className="border-white/10 bg-white/5 text-slate-200/70">
-                                Loading records
-                              </Badge>
-                            )}
-                          </div>
-
-                          <div className="space-y-2">
-                            <p className="text-lg font-semibold text-white">
-                              {latestThreadExport
-                                ? `Latest export receipt recorded ${format(new Date(latestThreadExport.exported_at), "MMM d, yyyy 'at' h:mm a")}`
-                                : receiptPanelPresentation.headline}
-                            </p>
-                            <p className="max-w-3xl text-sm leading-6 text-slate-300/80">
-                              {receiptPanelPresentation.description}
-                            </p>
-                            {latestThreadExport && (
-                              <p className="text-xs text-slate-300/60">
-                                This export includes a tamper-evident receipt generated from server-authoritative records. You can verify whether the PDF still matches the stored receipt.
-                              </p>
-                            )}
-                          </div>
-
-                          {latestThreadExport && (
-                            <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                              <div className="grid gap-3 sm:grid-cols-2">
-                                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-200/80">
-                                  <p className="font-semibold uppercase tracking-[0.14em] text-slate-300/70">
-                                    Receipt ID
-                                  </p>
-                                  <code className="mt-3 block break-all text-[11px] leading-5 text-slate-50">
-                                    {latestThreadExport.id}
-                                  </code>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    className="mt-3 h-8 rounded-lg px-2 text-[11px]"
-                                    aria-label="Copy receipt ID"
-                                    onClick={() =>
-                                      void handleCopyReceiptValue(
-                                        "Receipt ID",
-                                        latestThreadExport.id,
-                                        "receipt-id",
-                                      )
-                                    }
-                                  >
-                                    {copiedReceiptField === "receipt-id" ? (
-                                      <>
-                                        <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                                        Copied
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                                        Copy receipt ID
-                                      </>
-                                    )}
-                                  </Button>
-                                </div>
-
-                                <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-xs text-slate-200/80">
-                                  <p className="font-semibold uppercase tracking-[0.14em] text-slate-300/70">
-                                    Receipt details
-                                  </p>
-                                  <p className="mt-3 text-sm font-medium text-white">
-                                    {latestThreadExport.record_count} record entr{latestThreadExport.record_count === 1 ? "y" : "ies"}
-                                  </p>
-                                  <div className="mt-3 space-y-1 text-[11px] leading-5 text-slate-300/75">
-                                    <p>Raw result: {latestReceiptVerificationResult?.status ?? "unknown"}</p>
-                                    {latestThreadExport.signing_key_id ? (
-                                      <p>Signing key ID: {latestThreadExport.signing_key_id}</p>
-                                    ) : null}
-                                    {latestThreadExport.signature_algorithm ? (
-                                      <p>Algorithm: {latestThreadExport.signature_algorithm}</p>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="rounded-2xl border border-white/10 bg-slate-950/35 px-4 py-3">
-                                <div className="flex flex-wrap items-center justify-between gap-3">
-                                  <div>
-                                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-300/70">
-                                      PDF Hash
-                                    </p>
-                                    <p className="mt-1 text-xs text-slate-300/65">
-                                      Full value is copyable. The stored receipt is what links this hash to the server-generated PDF artifact.
-                                    </p>
-                                  </div>
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
-                                    aria-label="Copy PDF hash"
-                                    disabled={!latestThreadExport.pdf_artifact_hash}
-                                    onClick={() =>
-                                      latestThreadExport.pdf_artifact_hash &&
-                                      void handleCopyReceiptValue(
-                                        "PDF hash",
-                                        latestThreadExport.pdf_artifact_hash,
-                                        "pdf-hash",
-                                      )
-                                    }
-                                  >
-                                    {copiedReceiptField === "pdf-hash" ? (
-                                      <>
-                                        <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                                        Copied
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                                        Copy hash
-                                      </>
-                                    )}
-                                  </Button>
-                                </div>
-                                <code className="mt-4 block break-all rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-[12px] leading-6 text-slate-50">
-                                  {formatHashValue(latestThreadExport.pdf_artifact_hash)}
-                                </code>
-                              </div>
-                            </div>
-                          )}
-
-                          {latestThreadExport && (
-                            <p className="text-xs text-slate-300/60">
-                              The exact PDF bytes are generated on the server, hashed after rendering, and linked by the server-signed receipt. The PDF does not contain an embedded Acrobat-style digital signature.
-                            </p>
-                          )}
-                          {threadExportsError && (
-                            <p className="text-sm text-warning">{threadExportsError}</p>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
-                            disabled={!activeFamilyId || !latestThreadExport || downloadingArtifact === "pdf"}
-                            onClick={() =>
-                              void handleDownloadStoredArtifact("pdf", latestThreadExport?.id ?? null)
-                            }
-                          >
-                            {downloadingArtifact === "pdf" ? "Downloading PDF..." : "Download PDF"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
-                            disabled={!activeFamilyId || !latestThreadExport || downloadingArtifact === "json_evidence_package"}
-                            onClick={() =>
-                              void handleDownloadStoredArtifact(
-                                "json_evidence_package",
-                                latestThreadExport?.id ?? null,
-                              )
-                            }
-                          >
-                            {downloadingArtifact === "json_evidence_package"
-                              ? "Downloading JSON..."
-                              : "Download JSON package"}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
-                            disabled={!activeFamilyId || !activeThread || threadExportsLoading}
-                            onClick={() => {
-                              setSelectedExportId(latestThreadExport?.id ?? null);
-                              setShowVerifyDialog(true);
-                            }}
-                          >
-                            Verify receipt
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10"
-                            disabled={!activeFamilyId || !activeThread || threadExportsLoading}
-                            onClick={() => void loadThreadExports()}
-                          >
-                            Refresh records
-                          </Button>
-                        </div>
-                    </div>
-                  </div>
                   </div>
                 )}
               </div>
@@ -2397,63 +2309,88 @@ const MessagingHubPage = () => {
                     "border-b border-border/80 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(15,23,42,0.7))] px-4 py-4 sm:px-5",
                     courtView && "bg-[linear-gradient(135deg,rgba(15,23,42,0.94),rgba(17,24,39,0.78))]"
                   )}>
-                    <div className="flex w-full flex-wrap items-center gap-3">
-                      {activeThread.thread_type === "family_channel" ? (
-                        <>
-                          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
-                            <Hash className="h-5 w-5" />
+                    <div className="flex flex-col gap-4">
+                      <div className="flex w-full items-start justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+                          {activeThread.thread_type === "family_channel" ? (
+                            <>
+                              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+                                <Hash className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <h2 className="text-sm font-semibold text-white">Family Channel</h2>
+                                <p className="text-[11px] text-slate-300/70">
+                                  Official family communication record
+                                </p>
+                              </div>
+                            </>
+                          ) : activeThread.thread_type === "group_chat" ? (
+                            <>
+                              <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border border-accent/20 bg-accent/10 text-accent">
+                                <UsersRound className="h-5 w-5" />
+                              </div>
+                              <div className="min-w-0">
+                                <h2 className="truncate text-sm font-semibold text-white">
+                                  {activeThread.name || "Group"}
+                                </h2>
+                                <p className="truncate text-[11px] text-slate-300/70">
+                                  {activeThread.participants?.map((p) => p.full_name || p.email).join(", ")}
+                                </p>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <Avatar className="h-11 w-11 flex-shrink-0 border border-white/10">
+                                <AvatarFallback className="text-sm">
+                                  {getInitials(
+                                    activeThread.other_participant?.full_name,
+                                    activeThread.other_participant?.email
+                                  )}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0">
+                                <h2 className="truncate text-sm font-semibold text-white">
+                                  {activeThread.other_participant?.full_name ||
+                                   activeThread.other_participant?.email ||
+                                   "Unknown"}
+                                </h2>
+                                <div className="mt-1 flex flex-wrap items-center gap-2">
+                                  {activeThread.other_participant?.role && (
+                                    getRoleBadge(activeThread.other_participant.role)
+                                  )}
+                                  <Badge variant="outline" className="border-white/10 bg-white/5 text-[10px] uppercase tracking-[0.14em] text-slate-200/70">
+                                    Direct record
+                                  </Badge>
+                                  <Badge variant="outline" className={threadStatusBadgeClass}>
+                                    {recordStateLabel}
+                                  </Badge>
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                        {!isMobile && !isChildAccount && activeThread.thread_type === "direct_message" ? (
+                          <div className="rounded-[18px] border border-white/10 bg-white/5 p-1.5">
+                            <CallActionButtons
+                              disabled={Boolean(currentThreadCall)}
+                              loading={Boolean(startingCallType)}
+                              onStartAudio={() => void handleStartCall("audio")}
+                              onStartVideo={() => void handleStartCall("video")}
+                            />
                           </div>
-                          <div className="min-w-0">
-                            <h2 className="text-sm font-semibold text-white">Family Channel</h2>
-                            <p className="text-[11px] text-slate-300/70">
-                              Official family communication record
-                            </p>
-                          </div>
-                        </>
-                      ) : activeThread.thread_type === "group_chat" ? (
-                        <>
-                          <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border border-accent/20 bg-accent/10 text-accent">
-                            <UsersRound className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0">
-                            <h2 className="truncate text-sm font-semibold text-white">
-                              {activeThread.name || "Group"}
-                            </h2>
-                            <p className="truncate text-[11px] text-slate-300/70">
-                              {activeThread.participants?.map((p) => p.full_name || p.email).join(", ")}
-                            </p>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <Avatar className="h-11 w-11 flex-shrink-0 border border-white/10">
-                            <AvatarFallback className="text-sm">
-                              {getInitials(
-                                activeThread.other_participant?.full_name,
-                                activeThread.other_participant?.email
-                              )}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="min-w-0">
-                            <h2 className="truncate text-sm font-semibold text-white">
-                              {activeThread.other_participant?.full_name ||
-                               activeThread.other_participant?.email ||
-                               "Unknown"}
-                            </h2>
-                            <div className="mt-1 flex flex-wrap items-center gap-2">
-                              {activeThread.other_participant?.role && (
-                                getRoleBadge(activeThread.other_participant.role)
-                              )}
-                              <Badge variant="outline" className="border-white/10 bg-white/5 text-[10px] uppercase tracking-[0.14em] text-slate-200/70">
-                                Direct record
-                              </Badge>
-                              <Badge variant="outline" className={threadStatusBadgeClass}>
-                                {recordStateLabel}
-                              </Badge>
-                            </div>
-                          </div>
-                          {!isChildAccount ? (
-                            <div className="ml-auto rounded-[18px] border border-white/10 bg-white/5 p-1.5">
+                        ) : null}
+                      </div>
+                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-white/10 bg-white/5 px-3 py-2.5">
+                        <p className="text-xs text-slate-300/75">
+                          {recordState === "ready"
+                            ? `${messages.length} recorded message${messages.length === 1 ? "" : "s"} visible.`
+                            : recordState === "empty"
+                              ? "No messages on record yet."
+                              : recordStateDescription}
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {!isChildAccount && activeThread.thread_type === "direct_message" ? (
+                            <div className="rounded-[18px] border border-white/10 bg-white/5 p-1.5 md:hidden">
                               <CallActionButtons
                                 disabled={Boolean(currentThreadCall)}
                                 loading={Boolean(startingCallType)}
@@ -2462,8 +2399,82 @@ const MessagingHubPage = () => {
                               />
                             </div>
                           ) : null}
-                        </>
-                      )}
+                          <CourtViewToggle
+                            compact={isMobile}
+                            enabled={courtView}
+                            onToggle={() =>
+                              setViewMode((currentMode) =>
+                                currentMode === "court" ? "chat" : "court",
+                              )
+                            }
+                          />
+                          <Button
+                            variant="outline"
+                            size={isMobile ? "icon" : "sm"}
+                            className="rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10"
+                            onClick={() => void handleRefresh()}
+                            disabled={isRefreshing || isPullRefreshing}
+                            aria-label={isRefreshing || isPullRefreshing ? "Refreshing thread" : "Refresh thread"}
+                          >
+                            <RefreshCw
+                              className={cn(
+                                "h-4 w-4",
+                                !isMobile && "mr-2",
+                                (isRefreshing || isPullRefreshing) && "animate-spin",
+                              )}
+                            />
+                            {!isMobile && ((isRefreshing || isPullRefreshing) ? "Refreshing..." : "Refresh")}
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size={isMobile ? "icon" : "sm"}
+                                className="rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10"
+                                aria-label="More messaging actions"
+                              >
+                                <MoreHorizontal className={cn("h-4 w-4", !isMobile && "mr-2")} />
+                                {!isMobile && "More"}
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                              <DropdownMenuItem onClick={() => setShowSearch(true)}>
+                                <Search className="mr-2 h-4 w-4" />
+                                Search messages
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => openReportModal("manual")}>
+                                <MessageSquare className="mr-2 h-4 w-4" />
+                                Report a problem
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                disabled={exportDisabled}
+                                onClick={() => void handleExportPDF()}
+                              >
+                                <FileText className="mr-2 h-4 w-4" />
+                                {exportingThread ? "Exporting evidence package..." : "Export evidence package"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={!activeThread || !activeFamilyId || threadExportsLoading}
+                                onClick={() => {
+                                  setSelectedExportId(latestThreadExport?.id ?? null);
+                                  setShowVerifyDialog(true);
+                                }}
+                              >
+                                <Check className="mr-2 h-4 w-4" />
+                                Verify saved receipt
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                disabled={!courtView || timelineItems.length === 0}
+                                onClick={handlePrint}
+                              >
+                                <Printer className="mr-2 h-4 w-4" />
+                                Print current view
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -2485,22 +2496,22 @@ const MessagingHubPage = () => {
                     RULE: Evidence and Action must be visually separated
                   */}
                   <div className="flex min-h-0 flex-1 flex-col bg-[linear-gradient(180deg,rgba(15,23,42,0.06),transparent_35%)] px-3 py-3 sm:px-4">
-                    <div className="mb-3 flex items-center justify-between gap-3 rounded-[22px] border border-border/70 bg-background/35 px-4 py-3">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border/70 bg-background/35 px-4 py-2.5">
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                           Record timeline
                         </p>
-                        <p className="mt-1 text-sm text-muted-foreground">
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
                           {recordState === "loading_existing"
-                            ? "Recorded messages, call activity, and system events are loading for this thread."
+                            ? "Existing conversation record is loading."
                             : recordState === "loading_empty"
-                              ? "Checking this record before the drafting area becomes active."
+                              ? "Checking this thread before the first message."
                               : recordState === "history_unavailable" || recordState === "error"
-                                ? "Refresh this thread before relying on the visible record."
-                                : "Messages, call activity, and system events remain in order for review."}
+                                ? "Refresh before relying on the visible record."
+                                : "Messages, call activity, and system events remain in order."}
                         </p>
                       </div>
-                      <Badge variant="outline" className="rounded-full">
+                      <Badge variant="outline" className="rounded-full bg-background/70">
                         {evidenceSummaryLabel}
                       </Badge>
                     </div>
@@ -2563,14 +2574,14 @@ const MessagingHubPage = () => {
                     RULE: Visually separate drafting from history
                    */}
                   <div className="no-print border-t border-border/80 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.12))] px-3 pb-3 pt-3 sm:px-4">
-                    <div className="mb-3 rounded-[22px] border border-border/70 bg-background/35 px-4 py-3">
+                    <div className="mb-3 rounded-[20px] border border-border/70 bg-background/35 px-4 py-2.5">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                         Deliberate composer
                       </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
                         {composerDisabled
                           ? composerHelperText
-                          : "Draft carefully. The message becomes part of the permanent family record as soon as it is sent."}
+                          : "Draft carefully. Sending places the message into the permanent family record."}
                       </p>
                     </div>
                     <div className="rounded-[26px] border border-border/70 bg-background/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
@@ -2619,6 +2630,8 @@ const MessagingHubPage = () => {
               )}
             </motion.div>
           </div>
+
+          {exportReceiptPanel}
 
           {/* New Conversation Modal */}
           <Dialog open={showNewDM && !showGroupConfirm} onOpenChange={(open) => {

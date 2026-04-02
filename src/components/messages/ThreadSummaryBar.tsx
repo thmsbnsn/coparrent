@@ -50,6 +50,7 @@ export const ThreadSummaryBar = ({
     recordState === "loading_existing" || recordState === "loading_empty";
   const blockedRecord =
     recordState === "error" || recordState === "history_unavailable";
+  const readyRecord = recordState === "ready";
   const statusBadge =
     recordState === "loading_existing"
       ? "Loading recorded history"
@@ -60,8 +61,14 @@ export const ThreadSummaryBar = ({
           : recordState === "error"
             ? "Load blocked"
             : emptyThread
-              ? "No messages yet"
-              : `${totalMessages} message${totalMessages === 1 ? "" : "s"}`;
+              ? "No messages on record"
+              : "Existing record";
+  const countBadge =
+    readyRecord
+      ? `${totalMessages} message${totalMessages === 1 ? "" : "s"} on record`
+      : emptyThread
+        ? "First message pending"
+        : null;
   const statusNote =
     recordState === "loading_existing"
       ? "This thread already has recorded activity. Loading the full history now."
@@ -72,39 +79,52 @@ export const ThreadSummaryBar = ({
           : recordState === "error"
             ? "The selected record could not be loaded right now. Refresh before replying."
             : emptyThread
-              ? `${thread.note}. The record is open and ready for the first message.`
-              : `${thread.note}. Messages are permanent and exportable for review.`;
+              ? `${thread.note}. No messages are on record yet, so the first message will open the conversation history.`
+              : `${thread.note}. ${totalMessages} recorded message${totalMessages === 1 ? "" : "s"} are visible in order for review.`;
+  const statusToneClass = loadingRecord
+    ? "border-primary/20 bg-primary/10 text-primary"
+    : blockedRecord
+      ? "border-warning/35 bg-warning/10 text-warning"
+      : readyRecord
+        ? "border-accent/25 bg-accent/10 text-accent"
+        : "border-border/70 bg-background/65 text-muted-foreground";
 
   return (
     <div
       className={cn(
-        "border-b border-border bg-muted/30 px-4 py-2.5",
+        "border-b border-border/80 bg-[linear-gradient(180deg,hsl(var(--background)/0.86),hsl(var(--muted)/0.28))] px-4 py-3",
         className
       )}
     >
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <Badge variant="outline" className="gap-1.5">
-          <Icon className="h-3.5 w-3.5" />
-          {thread.label}
-        </Badge>
-        {loadingRecord ? (
-          <Badge variant="secondary">{statusBadge}</Badge>
-        ) : blockedRecord ? (
-          <Badge variant="destructive">{statusBadge}</Badge>
-        ) : (
-          <>
-            {unreadCount > 0 && (
-              <Badge variant="destructive">{unreadCount} unread</Badge>
-            )}
-            <Badge variant="secondary">{statusBadge}</Badge>
-          </>
-        )}
-        <Badge variant={courtView ? "default" : "outline"} className="gap-1.5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <Badge variant="outline" className="gap-1.5 rounded-full bg-background/70">
+            <Icon className="h-3.5 w-3.5" />
+            {thread.label}
+          </Badge>
+          <Badge variant="outline" className={cn("rounded-full", statusToneClass)}>
+            {statusBadge}
+          </Badge>
+          {countBadge ? (
+            <Badge variant="outline" className="rounded-full border-border/70 bg-background/70 text-muted-foreground">
+              {countBadge}
+            </Badge>
+          ) : null}
+          {unreadCount > 0 && (
+            <Badge variant="destructive" className="rounded-full">
+              {unreadCount} unread
+            </Badge>
+          )}
+        </div>
+        <Badge
+          variant={courtView ? "default" : "outline"}
+          className="w-fit gap-1.5 rounded-full"
+        >
           <FileText className="h-3.5 w-3.5" />
-          {courtView ? "Court view active" : "Chat view active"}
+          {courtView ? "Court view" : "Chat view"}
         </Badge>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-2 text-xs leading-5 text-muted-foreground">
         {statusNote}
         {recordState === "ready" && unreadCount > 0 && " Review unread items before replying."}
       </p>

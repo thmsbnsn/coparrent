@@ -51,4 +51,13 @@ describe("ThreadSummaryBar", () => {
     expect(rendered.textContent).toContain("History unavailable");
     expect(rendered.textContent).toContain("did not hydrate in this view");
   });
+
+  it("makes an active thread read as an existing record instead of a first-message state", () => {
+    const rendered = renderBar({ recordState: "ready", totalMessages: 2 });
+
+    expect(rendered.textContent).toContain("Existing record");
+    expect(rendered.textContent).toContain("2 messages on record");
+    expect(rendered.textContent).toContain("2 recorded messages are visible in order for review.");
+    expect(rendered.textContent).not.toContain("First message pending");
+  });
 });

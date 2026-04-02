@@ -89,10 +89,10 @@ export const CourtThread = ({
       })}
 
       {!hasUserMessages && (
-        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-5 text-center">
-          <p className="text-sm font-medium">No messages yet</p>
+        <div className="rounded-xl border border-dashed border-border bg-[linear-gradient(180deg,hsl(var(--background)/0.9),hsl(var(--muted)/0.2))] p-5 text-center">
+          <p className="text-sm font-medium">No messages on record yet</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            The conversation record is already open. Send the first message when you are ready.
+            This record is open but still empty. Send the first message when you are ready to begin the documented conversation.
           </p>
         </div>
       )}

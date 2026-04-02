@@ -904,7 +904,7 @@ describe("MessagingHubPage", () => {
     });
 
     expect(rendered.textContent).toContain("Existing record");
-    expect(rendered.textContent).toContain("2 messages currently visible in this record.");
+    expect(rendered.textContent).toContain("2 recorded messages currently visible in this conversation.");
     expect(rendered.querySelector('[data-testid="composer"]')?.getAttribute("data-disabled")).toBe("false");
   });
 
@@ -1156,5 +1156,8 @@ describe("MessagingHubPage", () => {
     expect(rendered.textContent).toContain("Export Receipt");
     expect(rendered.textContent).toContain("Copy hash");
     expect(rendered.textContent).toContain("Latest export receipt recorded");
+    expect(rendered.textContent).toContain("Conversations");
+    expect(rendered.textContent).not.toContain("Current mode");
+    expect(rendered.textContent).not.toContain("Loaded thread");
   });
 });

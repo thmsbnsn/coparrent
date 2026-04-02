@@ -98,10 +98,10 @@ export const ChatThread = ({ hasUserMessages, timelineItems }: ChatThreadProps) 
       })}
 
       {!hasUserMessages && (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-5 text-center">
-          <p className="text-sm font-medium">No messages yet</p>
+        <div className="rounded-2xl border border-dashed border-border bg-[linear-gradient(180deg,hsl(var(--background)/0.88),hsl(var(--muted)/0.2))] p-5 text-center">
+          <p className="text-sm font-medium">No messages on record yet</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            The thread is ready. Use the deliberate composer below when you need to send the first message.
+            The first message you send here will begin the conversation record. Use the deliberate composer below when you are ready.
           </p>
         </div>
       )}
