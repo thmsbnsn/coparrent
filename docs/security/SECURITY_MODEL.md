@@ -219,6 +219,7 @@ The repo currently supports a stricter auth and origin posture than older versio
 - deployed localhost-origin posture
 - final canonical public host posture
 - final passkey posture
+- a reproducible staging/bootstrap posture for the newer shared-game and family-presence database layer. The targeted production rollout for those features was applied on 2026-04-02, but a clean staging replay is still blocked because the local migration history is not a full baseline. The first replay blocker is [../../supabase/migrations/20260315205438_expand_audit_logging.sql](../../supabase/migrations/20260315205438_expand_audit_logging.sql), which referenced `public.calendar_events` before that table exists in a clean apply path.
 
 These are deployment questions, not code-only questions.
 

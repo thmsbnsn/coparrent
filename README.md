@@ -8,11 +8,15 @@ Last reviewed: 2026-04-02
 
 This README is intentionally limited to repo-confirmed statements plus clearly labeled historical evidence.
 
-- The current mainline codebase has been reviewed locally on 2026-04-01.
+- The current mainline codebase has been reviewed locally on 2026-04-02.
 - `npm run lint` passes locally.
 - `npm run build` passes locally.
-- `npm run test -- --run` passes locally with 88 test files and 343 tests.
+- `npm run test -- --run` passes locally with 93 test files and 359 tests.
 - The repo includes verification helpers for preview smoke, Stripe, invites, Daily calling, shared family game flow, AI runtime, Messaging Hub, and push/PWA checks.
+- The production frontend was redeployed on 2026-04-02 and aliased to `https://coparrent.com`.
+- The production shared-game and family-presence database bundle was applied on 2026-04-02, so the new family game RPCs now exist in production.
+- Local development can now target the staging Supabase project explicitly through `VITE_SUPABASE_TARGET=staging` plus the staging Vite env vars in [.env.example](.env.example).
+- The remaining database posture gap is staging reproducibility: the local migration chain still does not rebuild a brand-new staging project cleanly because older baseline schema is missing from local migration history.
 - Historical live verification artifacts from March 2026 exist in [docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md).
 - Those external checks were not rerun as part of this documentation cleanup. Treat them as evidence on file, not as a fresh guarantee.
 
@@ -21,6 +25,7 @@ This README is intentionally limited to repo-confirmed statements plus clearly l
 - Public site: marketing pages, pricing, help center, blog, court-record overview, and legal pages.
 - Auth and onboarding: email/password auth, Google OAuth, invite acceptance, onboarding, and family selection.
 - Family operations: dashboard, calendar, children, documents, expenses, sports, gift lists, journal, notifications, and child-oriented views.
+- Shared family games: Game Dashboard, family presence/activity UI, generic game-session/lobby model, and Toy Plane Dash as the first playable game.
 - Messaging and calling: Messaging Hub, family/direct/group threads, message drafting aids, and Daily-backed calling flows with persisted session/event state.
 - Export and evidence flows: server-generated Messaging Hub evidence packages, server-generated family-wide court-record exports, verification-backed PDF and evidence-package downloads, and expense report generation.
 - Support and admin: admin dashboard, law-library management, problem reporting, and PWA diagnostics.
@@ -64,6 +69,8 @@ These are still open or require user-assisted confirmation:
 - Fresh deployed verification of the Object Lock-backed export path after any meaningful release.
 - Deciding whether legacy pre-Object-Lock export artifacts remain read-only legacy records or are migrated into the newer storage posture.
 - Deciding whether call evidence remains timeline/status based or grows into a dedicated media export surface. The current repo does not include call recording or transcripts.
+- Building a reproducible staging baseline for Supabase, either by backfilling missing historical schema into local migrations or by creating a formal production-derived staging bootstrap.
+- Running the real two-user shared-game verifier against a dedicated test family after that staging/bootstrap posture is settled.
 
 See [docs/project/CURRENT_STATUS.md](docs/project/CURRENT_STATUS.md) and [docs/project/next-10-tasks.md](docs/project/next-10-tasks.md).
 
@@ -87,6 +94,18 @@ npm install
 npm run dev
 ```
 
+### Optional Staging Target
+
+To point local browser runtime at the staging Supabase project instead of production:
+
+```bash
+VITE_SUPABASE_TARGET=staging
+VITE_SUPABASE_STAGING_URL=...
+VITE_SUPABASE_STAGING_PUBLISHABLE_KEY=...
+```
+
+The verifier script can also point at staging independently through the `VERIFY_FAMILY_GAME_*` or `SUPABASE_STAGING_*` env vars without changing the normal app runtime.
+
 ### Key Verification Commands
 
 ```bash
@@ -98,11 +117,11 @@ npm run test -- --run
 Additional repo helpers:
 
 ```bash
-npm run verify-preview-smoke
-npm run verify-stripe
-npm run verify-daily-calls
-npm run verify-family-games
-npm run verify-push-pwa
+npm run verify:preview-smoke
+npm run verify:stripe
+npm run verify:daily-calls
+npm run verify:family-games
+npm run verify:push-pwa
 ```
 
 These helper scripts are QA tools. They are not runtime dependencies.
@@ -111,6 +130,7 @@ These helper scripts are QA tools. They are not runtime dependencies.
 
 - Current repo snapshot: [docs/project/CURRENT_STATUS.md](docs/project/CURRENT_STATUS.md)
 - Completion split: [docs/project/PROJECT_COMPLETION_REVIEW.md](docs/project/PROJECT_COMPLETION_REVIEW.md)
+- Shared games status: [docs/project/GAME_SYSTEM_STATUS.md](docs/project/GAME_SYSTEM_STATUS.md)
 - Next priorities: [docs/project/next-10-tasks.md](docs/project/next-10-tasks.md)
 - Security model: [docs/security/SECURITY_MODEL.md](docs/security/SECURITY_MODEL.md)
 - Feature gating: [docs/security/GATED_FEATURES.md](docs/security/GATED_FEATURES.md)

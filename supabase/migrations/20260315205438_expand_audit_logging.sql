@@ -56,20 +56,26 @@ END;
 $$;
 
 -- Create triggers on activity_events table
-CREATE TRIGGER audit_activity_events_insert
-  AFTER INSERT ON public.activity_events
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_activity_events_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.activity_events') IS NOT NULL THEN
+    CREATE TRIGGER audit_activity_events_insert
+      AFTER INSERT ON public.activity_events
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_activity_events_changes();
 
-CREATE TRIGGER audit_activity_events_update
-  AFTER UPDATE ON public.activity_events
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_activity_events_changes();
+    CREATE TRIGGER audit_activity_events_update
+      AFTER UPDATE ON public.activity_events
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_activity_events_changes();
 
-CREATE TRIGGER audit_activity_events_delete
-  AFTER DELETE ON public.activity_events
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_activity_events_changes();
+    CREATE TRIGGER audit_activity_events_delete
+      AFTER DELETE ON public.activity_events
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_activity_events_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- CALENDAR EVENTS AUDIT LOGGING
@@ -120,20 +126,26 @@ END;
 $$;
 
 -- Create triggers on calendar_events table
-CREATE TRIGGER audit_calendar_events_insert
-  AFTER INSERT ON public.calendar_events
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_calendar_events_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.calendar_events') IS NOT NULL THEN
+    CREATE TRIGGER audit_calendar_events_insert
+      AFTER INSERT ON public.calendar_events
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_calendar_events_changes();
 
-CREATE TRIGGER audit_calendar_events_update
-  AFTER UPDATE ON public.calendar_events
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_calendar_events_changes();
+    CREATE TRIGGER audit_calendar_events_update
+      AFTER UPDATE ON public.calendar_events
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_calendar_events_changes();
 
-CREATE TRIGGER audit_calendar_events_delete
-  AFTER DELETE ON public.calendar_events
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_calendar_events_changes();
+    CREATE TRIGGER audit_calendar_events_delete
+      AFTER DELETE ON public.calendar_events
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_calendar_events_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- THREAD MESSAGES AUDIT LOGGING
@@ -190,20 +202,26 @@ END;
 $$;
 
 -- Create triggers on thread_messages table
-CREATE TRIGGER audit_thread_messages_insert
-  AFTER INSERT ON public.thread_messages
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_thread_messages_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.thread_messages') IS NOT NULL THEN
+    CREATE TRIGGER audit_thread_messages_insert
+      AFTER INSERT ON public.thread_messages
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_thread_messages_changes();
 
-CREATE TRIGGER audit_thread_messages_update
-  AFTER UPDATE ON public.thread_messages
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_thread_messages_changes();
+    CREATE TRIGGER audit_thread_messages_update
+      AFTER UPDATE ON public.thread_messages
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_thread_messages_changes();
 
-CREATE TRIGGER audit_thread_messages_delete
-  AFTER DELETE ON public.thread_messages
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_thread_messages_changes();
+    CREATE TRIGGER audit_thread_messages_delete
+      AFTER DELETE ON public.thread_messages
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_thread_messages_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- DOCUMENTS AUDIT LOGGING
@@ -254,20 +272,26 @@ END;
 $$;
 
 -- Create triggers on documents table
-CREATE TRIGGER audit_documents_insert
-  AFTER INSERT ON public.documents
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_documents_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.documents') IS NOT NULL THEN
+    CREATE TRIGGER audit_documents_insert
+      AFTER INSERT ON public.documents
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_documents_changes();
 
-CREATE TRIGGER audit_documents_update
-  AFTER UPDATE ON public.documents
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_documents_changes();
+    CREATE TRIGGER audit_documents_update
+      AFTER UPDATE ON public.documents
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_documents_changes();
 
-CREATE TRIGGER audit_documents_delete
-  AFTER DELETE ON public.documents
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_documents_changes();
+    CREATE TRIGGER audit_documents_delete
+      AFTER DELETE ON public.documents
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_documents_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- EXPENSES AUDIT LOGGING
@@ -318,20 +342,26 @@ END;
 $$;
 
 -- Create triggers on expenses table
-CREATE TRIGGER audit_expenses_insert
-  AFTER INSERT ON public.expenses
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_expenses_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.expenses') IS NOT NULL THEN
+    CREATE TRIGGER audit_expenses_insert
+      AFTER INSERT ON public.expenses
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_expenses_changes();
 
-CREATE TRIGGER audit_expenses_update
-  AFTER UPDATE ON public.expenses
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_expenses_changes();
+    CREATE TRIGGER audit_expenses_update
+      AFTER UPDATE ON public.expenses
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_expenses_changes();
 
-CREATE TRIGGER audit_expenses_delete
-  AFTER DELETE ON public.expenses
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_expenses_changes();
+    CREATE TRIGGER audit_expenses_delete
+      AFTER DELETE ON public.expenses
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_expenses_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- GIFT LISTS AUDIT LOGGING
@@ -382,20 +412,26 @@ END;
 $$;
 
 -- Create triggers on gift_lists table
-CREATE TRIGGER audit_gift_lists_insert
-  AFTER INSERT ON public.gift_lists
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_gift_lists_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.gift_lists') IS NOT NULL THEN
+    CREATE TRIGGER audit_gift_lists_insert
+      AFTER INSERT ON public.gift_lists
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_gift_lists_changes();
 
-CREATE TRIGGER audit_gift_lists_update
-  AFTER UPDATE ON public.gift_lists
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_gift_lists_changes();
+    CREATE TRIGGER audit_gift_lists_update
+      AFTER UPDATE ON public.gift_lists
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_gift_lists_changes();
 
-CREATE TRIGGER audit_gift_lists_delete
-  AFTER DELETE ON public.gift_lists
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_gift_lists_changes();
+    CREATE TRIGGER audit_gift_lists_delete
+      AFTER DELETE ON public.gift_lists
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_gift_lists_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- GIFT ITEMS AUDIT LOGGING
@@ -452,20 +488,26 @@ END;
 $$;
 
 -- Create triggers on gift_items table
-CREATE TRIGGER audit_gift_items_insert
-  AFTER INSERT ON public.gift_items
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_gift_items_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.gift_items') IS NOT NULL THEN
+    CREATE TRIGGER audit_gift_items_insert
+      AFTER INSERT ON public.gift_items
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_gift_items_changes();
 
-CREATE TRIGGER audit_gift_items_update
-  AFTER UPDATE ON public.gift_items
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_gift_items_changes();
+    CREATE TRIGGER audit_gift_items_update
+      AFTER UPDATE ON public.gift_items
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_gift_items_changes();
 
-CREATE TRIGGER audit_gift_items_delete
-  AFTER DELETE ON public.gift_items
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_gift_items_changes();
+    CREATE TRIGGER audit_gift_items_delete
+      AFTER DELETE ON public.gift_items
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_gift_items_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- CHORES AUDIT LOGGING
@@ -521,20 +563,26 @@ END;
 $$;
 
 -- Create triggers on chores table
-CREATE TRIGGER audit_chores_insert
-  AFTER INSERT ON public.chores
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_chores_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.chores') IS NOT NULL THEN
+    CREATE TRIGGER audit_chores_insert
+      AFTER INSERT ON public.chores
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_chores_changes();
 
-CREATE TRIGGER audit_chores_update
-  AFTER UPDATE ON public.chores
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_chores_changes();
+    CREATE TRIGGER audit_chores_update
+      AFTER UPDATE ON public.chores
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_chores_changes();
 
-CREATE TRIGGER audit_chores_delete
-  AFTER DELETE ON public.chores
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_chores_changes();
+    CREATE TRIGGER audit_chores_delete
+      AFTER DELETE ON public.chores
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_chores_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- FAMILY MEMBERS AUDIT LOGGING
@@ -585,20 +633,26 @@ END;
 $$;
 
 -- Create triggers on family_members table
-CREATE TRIGGER audit_family_members_insert
-  AFTER INSERT ON public.family_members
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_family_members_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.family_members') IS NOT NULL THEN
+    CREATE TRIGGER audit_family_members_insert
+      AFTER INSERT ON public.family_members
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_family_members_changes();
 
-CREATE TRIGGER audit_family_members_update
-  AFTER UPDATE ON public.family_members
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_family_members_changes();
+    CREATE TRIGGER audit_family_members_update
+      AFTER UPDATE ON public.family_members
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_family_members_changes();
 
-CREATE TRIGGER audit_family_members_delete
-  AFTER DELETE ON public.family_members
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_family_members_changes();
+    CREATE TRIGGER audit_family_members_delete
+      AFTER DELETE ON public.family_members
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_family_members_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- CHILD PERMISSIONS AUDIT LOGGING
@@ -649,20 +703,26 @@ END;
 $$;
 
 -- Create triggers on child_permissions table
-CREATE TRIGGER audit_child_permissions_insert
-  AFTER INSERT ON public.child_permissions
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_child_permissions_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.child_permissions') IS NOT NULL THEN
+    CREATE TRIGGER audit_child_permissions_insert
+      AFTER INSERT ON public.child_permissions
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_child_permissions_changes();
 
-CREATE TRIGGER audit_child_permissions_update
-  AFTER UPDATE ON public.child_permissions
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_child_permissions_changes();
+    CREATE TRIGGER audit_child_permissions_update
+      AFTER UPDATE ON public.child_permissions
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_child_permissions_changes();
 
-CREATE TRIGGER audit_child_permissions_delete
-  AFTER DELETE ON public.child_permissions
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_child_permissions_changes();
+    CREATE TRIGGER audit_child_permissions_delete
+      AFTER DELETE ON public.child_permissions
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_child_permissions_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- PROFILES AUDIT LOGGING (for profile updates)
@@ -703,10 +763,16 @@ END;
 $$;
 
 -- Create trigger on profiles table (only for updates)
-CREATE TRIGGER audit_profiles_update
-  AFTER UPDATE ON public.profiles
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_profiles_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.profiles') IS NOT NULL THEN
+    CREATE TRIGGER audit_profiles_update
+      AFTER UPDATE ON public.profiles
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_profiles_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- NOTIFICATIONS AUDIT LOGGING
@@ -746,10 +812,16 @@ END;
 $$;
 
 -- Create trigger on notifications table (only for inserts)
-CREATE TRIGGER audit_notifications_insert
-  AFTER INSERT ON public.notifications
-  FOR EACH ROW
-  EXECUTE FUNCTION audit_notifications_changes();
+DO $$
+BEGIN
+  IF to_regclass('public.notifications') IS NOT NULL THEN
+    CREATE TRIGGER audit_notifications_insert
+      AFTER INSERT ON public.notifications
+      FOR EACH ROW
+      EXECUTE FUNCTION audit_notifications_changes();
+  END IF;
+END
+$$;
 
 -- =====================================================
 -- RPC FUNCTIONS FOR VIEW LOGGING

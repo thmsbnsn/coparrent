@@ -2,8 +2,23 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const SUPABASE_TARGET = (import.meta.env.VITE_SUPABASE_TARGET ?? "production").toLowerCase();
+const USE_STAGING = SUPABASE_TARGET === "staging";
+const SUPABASE_URL = USE_STAGING
+  ? import.meta.env.VITE_SUPABASE_STAGING_URL ?? import.meta.env.VITE_SUPABASE_URL
+  : import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY = USE_STAGING
+  ? import.meta.env.VITE_SUPABASE_STAGING_PUBLISHABLE_KEY ??
+    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
+  : import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  throw new Error(
+    USE_STAGING
+      ? "Missing staging Supabase configuration. Set VITE_SUPABASE_STAGING_URL and VITE_SUPABASE_STAGING_PUBLISHABLE_KEY, or switch VITE_SUPABASE_TARGET back to production."
+      : "Missing Supabase configuration. Set VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY before starting the app.",
+  );
+}
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

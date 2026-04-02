@@ -96,6 +96,7 @@ export const DashboardLayout = ({
   const hasFamilyPresenceScope = !isLawOfficeLayout && Boolean(activeFamilyId);
   const shouldShowFamilyPresence = hasFamilyPresenceScope && showFamilyPresenceToggle;
   const isDashboardGameRoute = location.pathname.startsWith("/dashboard/games/");
+  const mobileInlinePadding = "max(1rem, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px))";
 
   usePresenceHeartbeat({
     enabled: hasFamilyPresenceScope && !isDashboardGameRoute,
@@ -254,7 +255,9 @@ export const DashboardLayout = ({
           style={{ 
             paddingTop: 'env(safe-area-inset-top, 0)', 
             minHeight: '4rem',
-            paddingBottom: '0.5rem'
+            paddingBottom: '0.5rem',
+            paddingLeft: mobileInlinePadding,
+            paddingRight: mobileInlinePadding,
           }}
         >
           <button
@@ -278,7 +281,13 @@ export const DashboardLayout = ({
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 min-w-0 overflow-x-clip p-4 lg:p-6">
+        <main
+          className="flex-1 min-w-0 overflow-x-clip p-4 lg:p-6"
+          style={{
+            paddingLeft: mobileInlinePadding,
+            paddingRight: mobileInlinePadding,
+          }}
+        >
           {children}
         </main>
       </div>
