@@ -252,6 +252,33 @@ export default function GameFlappyPage() {
     return currentPlayerResult ? [currentPlayerResult] : [];
   }, [currentPlayerResult, results]);
 
+  const currentPlacement = useMemo(() => {
+    if (!profileId) {
+      return null;
+    }
+
+    const placementIndex = displayedResults.findIndex((result) => result.profileId === profileId);
+    return placementIndex >= 0 ? placementIndex : null;
+  }, [displayedResults, profileId]);
+
+  const nextStepLabel = useMemo(() => {
+    if (!sessionId) {
+      return "Try another round from here or head back to the shared games dashboard for the next family launch.";
+    }
+
+    if (session?.status === "finished") {
+      return isCreator
+        ? "Set up the rematch when the family is ready, then everyone can mark ready again in the same room."
+        : "Head back to the lobby and wait for the host to reset the room for another shared launch.";
+    }
+
+    if (session?.memberCount && displayedResults.length < session.memberCount) {
+      return `${displayedResults.length} of ${session.memberCount} pilots have reported so far. The standings will settle when the rest of the family finishes.`;
+    }
+
+    return "The race is still live. Stay here while the server collects the rest of the family results.";
+  }, [displayedResults.length, isCreator, session?.memberCount, session?.status, sessionId]);
+
   const readyDescription = sessionId
     ? session?.status === "active" && countdownLabel
       ? `Synchronized family race launch in ${countdownLabel}. Everyone gets the same seeded obstacle layout.`
@@ -428,11 +455,14 @@ export default function GameFlappyPage() {
                 </Button>
               </div>
             )}
+            currentPlacement={currentPlacement}
             currentProfileId={profileId}
             headline={resultsHeadline}
+            nextStepLabel={nextStepLabel}
             results={displayedResults}
             sessionStatus={session?.status ?? "finished"}
             subcopy={resultsSubcopy}
+            totalMembers={session?.memberCount ?? null}
           />
         ) : null}
       </div>

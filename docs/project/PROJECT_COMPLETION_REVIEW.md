@@ -43,20 +43,21 @@ Confirmed on 2026-04-02:
 
 ## Not Fully Closed Yet
 
-The newer shared games and family presence backend stack is now applied in production, but the environment story is still not fully closed.
+The newer shared games and family presence backend stack is now applied in production, and the staging environment story is materially stronger than it was earlier on 2026-04-02.
 
-Current blocker:
+What changed:
 
-- a clean staging database replay fails at [../../supabase/migrations/20260315205438_expand_audit_logging.sql](../../supabase/migrations/20260315205438_expand_audit_logging.sql)
-- that migration creates triggers on `public.calendar_events`, but that table does not exist at that point in a clean apply path
-- a later replay step also proves that a fresh project is missing the older `public.families` baseline assumed by later migrations
+- the migration chain defects discovered during staging replay were corrected in tracked source
+- [../../supabase/migrations/20260324000000_add_explicit_family_scope_baseline.sql](../../supabase/migrations/20260324000000_add_explicit_family_scope_baseline.sql) now restores the missing explicit-family baseline the later March/April migrations expected
+- the staging project now reaches the current schema head
+- the dedicated same-family multiplayer verifier completes successfully against staging
 
 Practical consequence:
 
 - production now has the newer game/presence RPCs
 - local and verifier tooling can target the staging project explicitly
-- but a brand-new staging project still cannot be rebuilt cleanly from the repo migrations alone
-- the first real two-user multiplayer verification pass still needs a dedicated same-family test setup
+- the staging proof environment is usable for the shared game flow
+- the first real same-family multiplayer verification pass is no longer just repo-theoretical; it now runs successfully against staging
 
 ## Historically Verified Externally, But Not Rechecked In This Doc Pass
 
@@ -78,8 +79,8 @@ These should be described as evidence on file, not as freshly reconfirmed behavi
 
 ## Still Requiring User Assistance Or Operational Confirmation
 
-- build a reproducible staging baseline so staging can reach the current shared-game schema without manual bootstrapping
-- run the real multiplayer verifier against a dedicated same-family test setup
+- keep the repaired staging migration chain healthy as new schema work lands
+- rerun the multiplayer verifier after meaningful shared-game/backend changes
 - real-device push/PWA validation
 - final deployed auth posture confirmation
 - final canonical-host confirmation
@@ -92,12 +93,13 @@ These should be described as evidence on file, not as freshly reconfirmed behavi
 
 There is no major repo-only blocker for the main family, billing, messaging, export, and frontend game surfaces.
 
-There is, however, a concrete operational blocker around environment reproducibility:
+There is still operational work left, but it is no longer the earlier staging bootstrap blocker.
 
-- the database migration chain does not replay cleanly into a brand-new staging project
-- that means staging is not yet a trustworthy clean-room proof environment for the newly deployed game backend
+The current risk is now concentrated in:
 
-So the current risk is staging/bootstrap and verification-oriented, not a missing frontend or session-model implementation inside the repo and not missing production game RPCs.
+- ongoing discipline around the repaired migration chain
+- live/device validation after future releases
+- remaining signed-in UX defects such as the authenticated pricing-banner path if they still reproduce
 
 ## Related Docs
 

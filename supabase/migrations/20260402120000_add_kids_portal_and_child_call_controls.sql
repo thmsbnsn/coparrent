@@ -1262,8 +1262,8 @@ BEGIN
 END;
 $function$;
 
-DROP FUNCTION IF EXISTS public.get_callable_family_members(uuid);
-CREATE OR REPLACE FUNCTION public.get_callable_family_members(
+DROP FUNCTION IF EXISTS public.get_callable_family_members(uuid) CASCADE;
+CREATE FUNCTION public.get_callable_family_members(
   p_family_id uuid
 )
 RETURNS TABLE (

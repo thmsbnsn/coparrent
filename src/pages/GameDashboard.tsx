@@ -1,11 +1,10 @@
 import { Link } from "react-router-dom";
-import { CarFront, Rocket, ShipWheel, TimerReset } from "lucide-react";
+import { CarFront, Rocket, ShipWheel, TimerReset, type LucideIcon } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { FamilyGameActivityPanel } from "@/components/games/FamilyGameActivityPanel";
 import { GameCard } from "@/components/games/GameCard";
 import { GameComingSoonCard } from "@/components/games/GameComingSoonCard";
 import { GameDashboardHero } from "@/components/games/GameDashboardHero";
-import { FLAPPY_ASSETS } from "@/assets/games/flappy";
 import { Button } from "@/components/ui/button";
 import { ParentHeaderCallAction } from "@/components/calls/ParentHeaderCallAction";
 import { useFamily } from "@/contexts/FamilyContext";
@@ -15,45 +14,19 @@ import { useGameSessions } from "@/hooks/useGameSessions";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { isChildGameAllowed } from "@/lib/childAccess";
 import { isMissingSupabaseFunctionError } from "@/lib/featureAvailabilityErrors";
-import { FAMILY_GAMES } from "@/lib/gameRegistry";
+import {
+  FAMILY_GAMES,
+  PLAYABLE_FAMILY_GAMES,
+  UPCOMING_FAMILY_GAMES,
+  type FamilyGameSlug,
+} from "@/lib/gameRegistry";
 
-const AVAILABLE_GAMES = [
-  {
-    accentClass: "from-sky-500 via-cyan-500 to-emerald-400",
-    artAlt: "Blue toy plane",
-    artClassName: "h-24 w-auto sm:h-28",
-    artSrc: FLAPPY_ASSETS.sprites.plane,
-    description:
-      "Open a family lobby first, then launch the synchronized Toy Plane Dash race once everyone is ready.",
-    eyebrow: "Playable now",
-    icon: TimerReset,
-    title: FAMILY_GAMES.flappyPlane.displayName,
-  },
-] as const;
-
-const COMING_SOON_GAMES = [
-  {
-    accentClass: "from-rose-500 via-orange-400 to-amber-300",
-    description: "Friendly lap races built for side-by-side family competition with simple touch controls.",
-    icon: CarFront,
-    label: "Future racing",
-    title: FAMILY_GAMES.familyRaceway.displayName,
-  },
-  {
-    accentClass: "from-indigo-500 via-sky-500 to-cyan-300",
-    description: "Picture-first space missions, quick co-op goals, and bright exploration moments.",
-    icon: Rocket,
-    label: "Future space",
-    title: FAMILY_GAMES.starHopper.displayName,
-  },
-  {
-    accentClass: "from-emerald-500 via-teal-500 to-cyan-400",
-    description: "Treasure maps, shared puzzles, and playful pirate adventures without cluttered controls.",
-    icon: ShipWheel,
-    label: "Future pirate",
-    title: FAMILY_GAMES.pirateHarbor.displayName,
-  },
-] as const;
+const GAME_ICONS: Record<FamilyGameSlug, LucideIcon> = {
+  "family-raceway": CarFront,
+  "flappy-plane": TimerReset,
+  "pirate-harbor": ShipWheel,
+  "star-hopper": Rocket,
+};
 
 export default function GameDashboard() {
   const featuredGame = FAMILY_GAMES.flappyPlane;
@@ -114,11 +87,18 @@ export default function GameDashboard() {
       : familyLobbyUpdating
         ? `Open ${featuredGame.displayName} preview`
         : `Open ${featuredGame.displayName} lobby`;
-  const availableGames = AVAILABLE_GAMES.map((game) => ({
-    ...game,
+  const availableGames = PLAYABLE_FAMILY_GAMES.map((game) => ({
+    accentClass: game.accentClass,
     actionLabel: featuredActionLabel,
-    to: featuredActionHref,
-  })).filter(() => childCanPlayFlappy);
+    artAlt: game.previewArtAlt,
+    artClassName: game.previewArtClassName,
+    artSrc: game.previewArtSrc,
+    description: game.dashboardDescription,
+    eyebrow: game.dashboardEyebrow,
+    icon: GAME_ICONS[game.slug],
+    title: game.displayName,
+    to: game.slug === featuredGame.slug ? featuredActionHref : game.playPath,
+  })).filter((game) => (game.title === featuredGame.displayName ? childCanPlayFlappy : true));
   const showCallLauncher =
     Boolean(roleFamilyId) && isParent && !isThirdParty && !isLawOffice && !isChildAccount;
 
@@ -291,8 +271,16 @@ export default function GameDashboard() {
               </div>
 
               <div className="mt-5 grid gap-4 lg:grid-cols-3">
-                {COMING_SOON_GAMES.map((game) => (
-                  <GameComingSoonCard key={game.title} {...game} />
+                {UPCOMING_FAMILY_GAMES.map((game) => (
+                  <GameComingSoonCard
+                    key={game.slug}
+                    accentClass={game.accentClass}
+                    description={game.teaserDescription}
+                    icon={GAME_ICONS[game.slug]}
+                    label={game.teaserLabel}
+                    title={game.displayName}
+                    to={game.playPath}
+                  />
                 ))}
               </div>
             </section>

@@ -11,7 +11,7 @@ As of this review:
 - The current mainline codebase was reviewed locally on 2026-04-02.
 - `npm run lint` passes locally.
 - `npm run build` passes locally.
-- `npm run test -- --run` passes locally with 93 test files and 359 tests.
+- `npm run test -- --run` passes locally with 94 test files and 363 tests.
 
 Current repo capabilities include:
 
@@ -21,7 +21,7 @@ Current repo capabilities include:
 - Messaging Hub with direct, group, and family threads, AI drafting support, and message-thread export receipts
 - Daily-backed calling flows in dashboard and messaging contexts, with persisted call-session and call-event state
 - family-wide court-record exports built server-side from family-scoped records with stored receipt and artifact metadata
-- family presence, shared games dashboard, reusable game-session/lobby foundation, and Toy Plane Dash as the first game consumer
+- family presence, shared games dashboard, registry-backed game overview routes, reusable game-session/lobby foundation, and Toy Plane Dash as the first live game consumer
 - admin dashboard, law-library management, problem reporting, and PWA diagnostics
 
 Current repo hardening also includes:
@@ -39,6 +39,7 @@ Important implementation boundaries:
 - Call activity is persisted and included honestly as session/event evidence context. The repo does not include call recording, transcripts, or a standalone call-media archive.
 - Family-wide court-record exports include document metadata and access history, not raw document binaries. Journal entries remain intentionally excluded.
 - Shared games are implemented on a generic `game_slug` foundation. Toy Plane Dash is the first real game, but the session/lobby/result model is not Flappy-only.
+- The shared game registry now also drives dedicated overview routes for upcoming titles, so future games no longer exist only as hard-coded dashboard placeholders.
 - The shared game frontend now degrades to maintenance messaging and solo preview when required backend RPCs are missing, instead of exposing raw schema-cache errors to users.
 - The browser client can target staging explicitly through `VITE_SUPABASE_TARGET=staging` and the staging Vite env vars.
 
@@ -51,10 +52,12 @@ These are dated operational notes from 2026-04-02, not just repo assumptions:
 - The production database now includes the previously missing shared-game and family-presence RPC layer.
 - A direct production RPC probe now returns `Authentication required` for the shared game/presence RPC endpoints instead of the earlier missing-function schema-cache error.
 - A separate staging Supabase project exists and local development can target it explicitly.
-- A clean replay into a brand-new staging project still does not work from local migrations alone because older baseline schema is missing from local migration history.
-- The first clean-replay blocker was [../../supabase/migrations/20260315205438_expand_audit_logging.sql](../../supabase/migrations/20260315205438_expand_audit_logging.sql), and a later replay step also proved that a fresh project is missing the older `public.families` baseline assumed by March/April 2026 migrations.
+- On 2026-04-02, the staging project was advanced to the current schema after repairing the tracked migration chain:
+  - [../../supabase/migrations/20260324000000_add_explicit_family_scope_baseline.sql](../../supabase/migrations/20260324000000_add_explicit_family_scope_baseline.sql) was added to restore the missing explicit-family baseline.
+  - several replay defects in March/April 2026 migrations were corrected so a fresh staging replay could reach head.
+- A dedicated staging family-game fixture now exists and the multiplayer verifier completes successfully against that staging setup.
 
-That means production now has the newer shared-game and family-presence backend pieces, but staging is not yet a reproducible from-scratch environment.
+That means both production and staging now contain the newer shared-game and family-presence backend pieces, and staging is no longer blocked on the earlier schema-replay gap.
 
 ## Historical External Verification On File
 
@@ -77,8 +80,8 @@ Those checks were not rerun as part of this documentation pass. Treat them as da
 
 ## Open Items That Are Not Closed By Repo Inspection
 
-- Build a reproducible staging baseline for Supabase so a brand-new staging project can reach the current schema without manual archaeology.
-- Run the real family-game verifier against a dedicated test family with two real accounts in the same family.
+- Keep the repaired Supabase migration chain healthy as new database work lands.
+- Re-run the real family-game verifier against the dedicated staging family after meaningful multiplayer changes.
 - Real-device push/PWA validation on iOS, Android, and desktop.
 - Final deployed auth posture confirmation, especially captcha and localhost-origin behavior.
 - Final canonical-host posture confirmation for public deployment.
@@ -96,7 +99,7 @@ The project should be described today as:
 - production shared-game and family-presence backend bundle applied
 - strongly documented
 - repo-complete for the shared games frontend and server model
-- still blocked on reproducible staging/bootstrap work for Supabase
+- staging-ready with a verified dedicated multiplayer fixture
 - still carrying a short list of deployment and physical-device confirmations
 
 That is a credible current-state story without overstating certainty.

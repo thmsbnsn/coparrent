@@ -37,8 +37,10 @@ describe("GameSessionResultsCard", () => {
       root?.render(
         <GameSessionResultsCard
           actions={<div>race-actions</div>}
+          currentPlacement={1}
           currentProfileId="profile-2"
           headline="You lost"
+          nextStepLabel="Head back to the lobby for a rematch."
           results={[
             {
               avatarUrl: null,
@@ -70,6 +72,7 @@ describe("GameSessionResultsCard", () => {
           ]}
           sessionStatus="finished"
           subcopy="Final standings are locked."
+          totalMembers={3}
         />,
       );
     });
@@ -84,6 +87,10 @@ describe("GameSessionResultsCard", () => {
     expect(container.textContent).toContain("Winner");
     expect(container.textContent).toContain("You");
     expect(container.textContent).toContain("MP");
+    expect(container.textContent).toContain("Your finish");
+    expect(container.textContent).toContain("Winner spotlight");
+    expect(container.textContent).toContain("Next step");
+    expect(container.textContent).toContain("Head back to the lobby for a rematch.");
     expect(container.textContent).toContain("Score");
     expect(container.textContent).toContain("Distance");
     expect(container.textContent).toContain("Skip reveal");

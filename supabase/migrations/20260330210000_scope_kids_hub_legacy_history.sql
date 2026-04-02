@@ -20,7 +20,7 @@ WITH activity_folder_family_candidates AS (
   WHERE af.family_id IS NULL
 ),
 unambiguous_activity_folder_families AS (
-  SELECT id, min(family_id) AS family_id
+  SELECT id, min(family_id::text)::uuid AS family_id
   FROM activity_folder_family_candidates
   GROUP BY id
   HAVING count(DISTINCT family_id) = 1
@@ -40,7 +40,7 @@ WITH generated_activity_folder_candidates AS (
   WHERE ga.family_id IS NULL
 ),
 unambiguous_generated_activity_folder_families AS (
-  SELECT id, min(family_id) AS family_id
+  SELECT id, min(family_id::text)::uuid AS family_id
   FROM generated_activity_folder_candidates
   GROUP BY id
   HAVING count(DISTINCT family_id) = 1
@@ -55,7 +55,7 @@ generated_activity_user_candidates AS (
   WHERE ga.family_id IS NULL
 ),
 unambiguous_generated_activity_user_families AS (
-  SELECT id, min(family_id) AS family_id
+  SELECT id, min(family_id::text)::uuid AS family_id
   FROM generated_activity_user_candidates
   GROUP BY id
   HAVING count(DISTINCT family_id) = 1
@@ -97,7 +97,7 @@ WITH coloring_page_family_candidates AS (
   WHERE cp.family_id IS NULL
 ),
 unambiguous_coloring_page_families AS (
-  SELECT id, min(family_id) AS family_id
+  SELECT id, min(family_id::text)::uuid AS family_id
   FROM coloring_page_family_candidates
   GROUP BY id
   HAVING count(DISTINCT family_id) = 1

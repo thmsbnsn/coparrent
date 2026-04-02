@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import process from "node:process";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { loadLocalEnv } from "./lib/load-local-env.ts";
 
 interface VerifyAccountConfig {
   email: string;
@@ -80,6 +81,8 @@ const FALLBACK_SUPABASE_URL_KEY = "VITE_SUPABASE_URL";
 const FALLBACK_SUPABASE_ANON_KEY_KEY = "VITE_SUPABASE_PUBLISHABLE_KEY";
 const GAME_SLUG = process.env.VERIFY_FAMILY_GAME_SLUG ?? "flappy-plane";
 const GAME_DISPLAY_NAME = process.env.VERIFY_FAMILY_GAME_DISPLAY_NAME ?? "Toy Plane Dash";
+
+loadLocalEnv();
 
 function logStep(step: string, details?: Record<string, unknown>) {
   const timestamp = new Date().toISOString();

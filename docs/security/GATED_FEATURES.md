@@ -96,7 +96,7 @@ High-level summary:
 - Family-wide court-record exports include call session/event evidence only and document metadata/access history only. They do not include call media or raw document binaries.
 - Historical docs that claimed broader third-party route access than `routeAccess.ts` are outdated. The route allowlist file is the current source of truth.
 - Shared game routes now sit on a reusable family multiplayer foundation. Toy Plane Dash is the first consumer, but the session/lobby/result model is generic by `game_slug`, not a Flappy-only special case.
-- The shared games and family-presence gating model is repo-confirmed, and the targeted production database bundle for those features was applied on 2026-04-02. The frontend still keeps maintenance and solo-preview fallbacks for partial environments such as staging or older deployments.
+- The shared games and family-presence gating model is repo-confirmed, and the targeted production database bundle for those features was applied on 2026-04-02. The frontend still keeps maintenance and solo-preview fallbacks for genuinely partial or older deployments, but staging itself is now on the current schema head and used as the multiplayer proof environment.
 
 ## Related Docs
 

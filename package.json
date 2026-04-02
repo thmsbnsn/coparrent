@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "supabase:link:staging": "supabase link --project-ref dcdailweczrhkbbezjjc",
     "supabase:link:production": "supabase link --project-ref jnxtskcpwzuxyxjzqrkv",
+    "seed:family-games:staging": "node --experimental-strip-types scripts/seed-family-game-fixture.ts",
     "verify:messaging-hub": "node --experimental-strip-types scripts/verify-messaging-hub.ts",
     "verify:invites": "node --experimental-strip-types scripts/verify-invites.ts",
     "verify:stripe": "node --experimental-strip-types scripts/verify-stripe.ts",

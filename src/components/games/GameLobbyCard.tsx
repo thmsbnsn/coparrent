@@ -46,6 +46,19 @@ export const GameLobbyCard = ({
   const isSessionFinished = session.status === "finished";
   const statusLabel = getFamilyGameSessionStatusLabel(session.status);
   const readyLabel = `${session.readyCount}/${session.memberCount} ready`;
+  const readinessMessage = isSessionFinished
+    ? currentMember?.isCreator
+      ? "Reset this room with a fresh shared seed, then ask everyone to mark ready again for the rematch."
+      : "The race is over. Return here after the host resets the room, then mark ready again for the next launch."
+    : isSessionActive
+      ? "The synchronized launch is already in progress. New readiness changes stay locked until the race ends."
+      : canStart
+        ? "Everyone is marked ready. The host can launch the synchronized race now."
+        : currentMember
+          ? currentMember.status === "ready"
+            ? "You are marked ready. Wait for the rest of the family so the host can launch."
+            : "Mark yourself ready once you want to be counted for the synchronized launch."
+          : "Join this family-scoped room first, then mark yourself ready so the host can launch.";
 
   return (
     <section className="rounded-[2rem] border border-border/70 bg-card/90 p-5 shadow-sm sm:p-6">
@@ -133,6 +146,13 @@ export const GameLobbyCard = ({
                 ? "This race is complete. The host can reset the same family-scoped room with a fresh shared seed, then everyone readies up again for the next launch."
                 : "Everyone can join this family lobby. Ready status is tracked server-side, the host starts the shared countdown, and the game page uses the same family-scoped session state for the race seed and results."}
             </p>
+
+            <div className="rounded-[1.4rem] border border-white/12 bg-white/8 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300/78">
+                Ready check
+              </p>
+              <p className="mt-2 text-sm leading-6 text-white/90">{readinessMessage}</p>
+            </div>
 
             {isSessionFinished ? (
               currentMember?.isCreator ? (

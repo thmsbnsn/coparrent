@@ -11,12 +11,12 @@ This README is intentionally limited to repo-confirmed statements plus clearly l
 - The current mainline codebase has been reviewed locally on 2026-04-02.
 - `npm run lint` passes locally.
 - `npm run build` passes locally.
-- `npm run test -- --run` passes locally with 93 test files and 359 tests.
+- `npm run test -- --run` passes locally with 94 test files and 363 tests.
 - The repo includes verification helpers for preview smoke, Stripe, invites, Daily calling, shared family game flow, AI runtime, Messaging Hub, and push/PWA checks.
 - The production frontend was redeployed on 2026-04-02 and aliased to `https://coparrent.com`.
 - The production shared-game and family-presence database bundle was applied on 2026-04-02, so the new family game RPCs now exist in production.
 - Local development can now target the staging Supabase project explicitly through `VITE_SUPABASE_TARGET=staging` plus the staging Vite env vars in [.env.example](.env.example).
-- The remaining database posture gap is staging reproducibility: the local migration chain still does not rebuild a brand-new staging project cleanly because older baseline schema is missing from local migration history.
+- The staging Supabase project was advanced to the current schema on 2026-04-02 after repairing the migration chain and adding the missing explicit-family baseline bridge migration.
 - Historical live verification artifacts from March 2026 exist in [docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md).
 - Those external checks were not rerun as part of this documentation cleanup. Treat them as evidence on file, not as a fresh guarantee.
 
@@ -69,8 +69,8 @@ These are still open or require user-assisted confirmation:
 - Fresh deployed verification of the Object Lock-backed export path after any meaningful release.
 - Deciding whether legacy pre-Object-Lock export artifacts remain read-only legacy records or are migrated into the newer storage posture.
 - Deciding whether call evidence remains timeline/status based or grows into a dedicated media export surface. The current repo does not include call recording or transcripts.
-- Building a reproducible staging baseline for Supabase, either by backfilling missing historical schema into local migrations or by creating a formal production-derived staging bootstrap.
-- Running the real two-user shared-game verifier against a dedicated test family after that staging/bootstrap posture is settled.
+- Keeping the repaired Supabase migration chain healthy as new schema work lands.
+- Re-running the staged family-game verifier after meaningful multiplayer/backend changes.
 
 See [docs/project/CURRENT_STATUS.md](docs/project/CURRENT_STATUS.md) and [docs/project/next-10-tasks.md](docs/project/next-10-tasks.md).
 
@@ -105,6 +105,12 @@ VITE_SUPABASE_STAGING_PUBLISHABLE_KEY=...
 ```
 
 The verifier script can also point at staging independently through the `VERIFY_FAMILY_GAME_*` or `SUPABASE_STAGING_*` env vars without changing the normal app runtime.
+
+To seed or refresh the dedicated staging family-game fixture before running the verifier:
+
+```bash
+npm run seed:family-games:staging
+```
 
 ### Key Verification Commands
 

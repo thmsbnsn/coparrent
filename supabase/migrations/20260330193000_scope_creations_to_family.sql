@@ -23,7 +23,7 @@ WITH creation_family_candidates AS (
   WHERE c.family_id IS NULL
 ),
 unambiguous_creation_families AS (
-  SELECT id, min(family_id) AS family_id
+  SELECT id, min(family_id::text)::uuid AS family_id
   FROM creation_family_candidates
   GROUP BY id
   HAVING count(DISTINCT family_id) = 1
@@ -41,7 +41,7 @@ WITH folder_family_candidates AS (
     AND c.family_id IS NOT NULL
 ),
 unambiguous_folder_families AS (
-  SELECT id, min(family_id) AS family_id
+  SELECT id, min(family_id::text)::uuid AS family_id
   FROM folder_family_candidates
   GROUP BY id
   HAVING count(DISTINCT family_id) = 1
@@ -64,7 +64,7 @@ WITH folder_owner_family_candidates AS (
   WHERE cf.family_id IS NULL
 ),
 unambiguous_owner_folder_families AS (
-  SELECT id, min(family_id) AS family_id
+  SELECT id, min(family_id::text)::uuid AS family_id
   FROM folder_owner_family_candidates
   GROUP BY id
   HAVING count(DISTINCT family_id) = 1

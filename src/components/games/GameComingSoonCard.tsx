@@ -1,4 +1,6 @@
 import type { LucideIcon } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 interface GameComingSoonCardProps {
   accentClass: string;
@@ -6,6 +8,7 @@ interface GameComingSoonCardProps {
   icon: LucideIcon;
   label: string;
   title: string;
+  to?: string;
 }
 
 export const GameComingSoonCard = ({
@@ -14,6 +17,7 @@ export const GameComingSoonCard = ({
   icon: Icon,
   label,
   title,
+  to,
 }: GameComingSoonCardProps) => (
   <article className="overflow-hidden rounded-[1.8rem] border border-border/70 bg-card/85 shadow-sm">
     <div className={`h-28 bg-gradient-to-br ${accentClass} px-5 py-4 text-white`}>
@@ -30,8 +34,19 @@ export const GameComingSoonCard = ({
 
     <div className="p-5">
       <p className="text-sm leading-6 text-muted-foreground">{description}</p>
-      <div className="mt-4 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-        Coming soon
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+          Coming soon
+        </div>
+        {to ? (
+          <Link
+            to={to}
+            className="inline-flex items-center rounded-full border border-border/70 bg-background px-3 py-1 text-xs font-semibold text-foreground transition hover:bg-muted"
+          >
+            See game plan
+            <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+          </Link>
+        ) : null}
       </div>
     </div>
   </article>

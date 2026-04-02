@@ -1,3 +1,6 @@
+ALTER TABLE public.gift_lists
+ADD COLUMN IF NOT EXISTS family_id uuid REFERENCES public.families(id) ON DELETE CASCADE;
+
 -- Safe backfill for legacy gift lists where family scope can be resolved
 WITH family_candidates AS (
   SELECT gl.id, fm.family_id
@@ -13,7 +16,7 @@ WITH family_candidates AS (
   WHERE gl.family_id IS NULL
 ),
 unambiguous_candidates AS (
-  SELECT id, min(family_id) AS family_id
+  SELECT id, min(family_id::text)::uuid AS family_id
   FROM family_candidates
   GROUP BY id
   HAVING count(DISTINCT family_id) = 1

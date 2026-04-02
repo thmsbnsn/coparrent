@@ -2,9 +2,9 @@
 
 Last updated: 2026-04-02
 
-This document explains how the shared game system is set up today, what is working, what is blocked, and what the next path should be.
+This document explains how the shared game system is set up today, what is working, what remains unfinished, and what the next path should be.
 
-It is intentionally grounded in the current repo and the current deployment state. It distinguishes between what is now in production and what is still unresolved about staging/bootstrap posture.
+It is intentionally grounded in the current repo and the current deployment state. It distinguishes between what is now in production, what is verified in staging, and what is still unfinished at the product level.
 
 ## 1. System Intent
 
@@ -40,6 +40,8 @@ The registry is the shared source of truth for:
 - display name
 - launcher path
 - play path
+- availability and shared-dashboard copy
+- upcoming-game overview content
 - whether the game supports multiplayer
 
 Current registered game slugs:
@@ -49,7 +51,7 @@ Current registered game slugs:
 - `star-hopper`
 - `pirate-harbor`
 
-Only `flappy-plane` is currently implemented as a real game. The others are placeholders for future work.
+Only `flappy-plane` is currently implemented as a real playable game. The others now have dedicated overview routes, but they are still future-work entries rather than playable games.
 
 ### Shared Client Session Layer
 
@@ -103,6 +105,7 @@ Current route shape:
 
 - `/dashboard/games`
 - `/dashboard/games/flappy-plane`
+- `/dashboard/games/:gameSlug` for registry-backed future game overviews
 - `/dashboard/games/flappy-plane/lobby`
 - `/dashboard/games/flappy-plane/lobby/:sessionId`
 
@@ -130,6 +133,7 @@ Current game runtime supports:
 - local best score
 - shared session result reporting
 - fullscreen and sideways/orientation helpers in the shared shell
+- richer post-race results summaries, placement spotlighting, and rematch guidance
 
 ## 4. Current Database Model
 
@@ -196,30 +200,32 @@ Operationally confirmed on 2026-04-02:
 
 That means the production environment now contains the shared-game RPC layer that had previously been missing.
 
-## 7. What Is Still Not Fully Closed
+## 7. What Recently Closed
 
-The live production blocker that originally removed the family-lobby path is now addressed, but there are still important incomplete pieces:
+The live production blocker that originally removed the family-lobby path is now addressed.
 
-- the first real two-user multiplayer verification pass still needs to run against a dedicated same-family setup
-- a brand-new staging project still cannot be rebuilt from the local migration chain alone
-- the frontend maintenance fallbacks remain valuable protection for partial or older environments, even though production now has the targeted game RPC bundle
+Recently completed:
 
-## 8. Current Environment Blocker
+- the first real two-user multiplayer verification pass has been completed against the dedicated staging same-family setup
+- the staging project has been repaired to the current schema and can now serve as the safe multiplayer proof environment
+- the frontend maintenance fallbacks remain in place as protection for genuinely partial or older environments, even though production now has the targeted game RPC bundle
 
-The blocker is no longer the production game RPC rollout.
+## 8. Current Environment State
 
-The blocker is reproducible staging/bootstrap posture.
+The blocker is no longer the production game RPC rollout or staging bootstrap posture.
 
 What is currently true:
 
-- a brand-new staging project does not reach the shared-game schema by replaying local migrations alone
-- the first clean replay blocker is [../../supabase/migrations/20260315205438_expand_audit_logging.sql](../../supabase/migrations/20260315205438_expand_audit_logging.sql), which referenced `public.calendar_events` too early
-- even after hardening that file, later replay steps show that the repo’s local migration history still assumes older baseline schema such as `public.families`
+- the staging project now reaches the current shared-game schema
+- the repo contains the explicit-family bridge migration that was missing during earlier replay attempts:
+  - [../../supabase/migrations/20260324000000_add_explicit_family_scope_baseline.sql](../../supabase/migrations/20260324000000_add_explicit_family_scope_baseline.sql)
+- the March/April 2026 replay defects found during staging repair were corrected directly in the tracked migrations
+- local development can target staging explicitly, and the dedicated family-game verifier now succeeds there end to end
 
 Because of that:
 
-- staging is not yet a clean-room proof environment
-- local development can target staging explicitly, but staging still needs either a production-derived baseline or missing historical migrations added back into local history
+- staging is now the trustworthy proof environment for shared games
+- production and staging both have the shared-game/session/presence backend layer
 
 ## 9. What Is Not Finished Yet
 
@@ -227,22 +233,20 @@ The game system is still incomplete in several important ways.
 
 ### Backend / rollout
 
-- the migration chain still needs a reproducible staging/bootstrap answer
-- staging needs a trustworthy baseline before it can serve as the clean proof environment
-- the real two-user multiplayer verifier still needs to run against a dedicated test family
+- the migration chain repair should be kept healthy as later DB changes land
+- the staging family-game seed + verifier flow should be rerun after meaningful multiplayer/backend changes
 
 ### Product / gameplay
 
 - only one real game is implemented
 - the current multiplayer model is synchronized parallel racing, not full real-time multiplayer
-- future games in the registry are placeholders only
+- future games in the registry have overview routes, but they are not playable yet
 - async challenges are not built yet
 - the shared games backend is generic, but only Toy Plane Dash is currently wired through it
 
 ### UX polish
 
-- results and leaderboard flow have improved, but can still be polished further
-- richer animation/reveal flow is still open
+- results and leaderboard flow have materially improved, but richer animation/reveal polish is still open
 - broader post-race session loops and challenge surfaces are still open
 - mobile behavior needs real-device verification after recent layout fixes
 
@@ -262,22 +266,11 @@ This is still useful even after the production RPC rollout, because staging or o
 
 The safest and cleanest next sequence is:
 
-1. Decide the staging/bootstrap path:
-   - either backfill the missing historical Supabase baseline into local migrations
-   - or formalize a production-derived staging bootstrap
-2. Get the staging Supabase project to a trustworthy baseline.
-3. Seed one dedicated test family and two real test users in staging.
-4. Run the family-game verifier end to end:
-   - create/open session
-   - join second player
-   - ready both
-   - start session
-   - confirm shared seed
-   - confirm synchronized start time
-   - report results
-   - confirm winner resolution
-5. Re-verify the shared games experience live after the production DB rollout.
-6. Continue with next game-platform work:
+1. Keep the staging verifier path healthy:
+   - `npm run seed:family-games:staging`
+   - `npm run verify:family-games`
+2. Re-verify the shared games experience live after meaningful game/backend releases.
+3. Continue with next game-platform work:
    - stronger results/leaderboard animation flow
    - rematch/post-race refinement
    - async family challenges
@@ -293,19 +286,20 @@ What is true today:
 - the game registry and shared session model exist
 - Toy Plane Dash is the first working game consumer
 - the production frontend is deployed
+- staging is wired and verified for the same family-game backend path
 
 What is also true today:
 
 - the production shared-games backend bundle is now applied
-- staging still cannot reach the same state cleanly because the repo migration history is not a full baseline
-- live two-user verification is still pending
+- the staging multiplayer fixture is seeded and the dedicated family-game verifier passes there
+- live same-family UI verification on real devices is still worth doing after future releases
 
 So the game system is best described as:
 
 - architecturally in place
 - locally verified
 - production-deployed
-- staging-bootstrap-blocked
+- staging-verified
 
 ## Related Docs
 

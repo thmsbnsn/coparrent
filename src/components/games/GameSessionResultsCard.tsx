@@ -9,11 +9,14 @@ import { cn } from "@/lib/utils";
 
 interface GameSessionResultsCardProps {
   actions?: ReactNode;
+  currentPlacement?: number | null;
   currentProfileId: string | null;
   headline: string;
+  nextStepLabel?: string | null;
   results: FamilyGameSessionResult[];
   sessionStatus: FamilyGameSessionStatus;
   subcopy: string;
+  totalMembers?: number | null;
 }
 
 const PODIUM_ORDER = [1, 0, 2] as const;
@@ -74,17 +77,26 @@ const getRankBadgeTone = (placement: number) => {
 
 export const GameSessionResultsCard = ({
   actions,
+  currentPlacement = null,
   currentProfileId,
   headline,
+  nextStepLabel = null,
   results,
   sessionStatus,
   subcopy,
+  totalMembers = null,
 }: GameSessionResultsCardProps) => {
   const [skipAnimations, setSkipAnimations] = useState(false);
 
   const sortedResults = useMemo(() => sortResults(results), [results]);
   const podiumResults = sortedResults.slice(0, 3);
+  const winner = sortedResults.find((result) => result.isWinner) ?? sortedResults[0] ?? null;
+  const currentResult = sortedResults.find((result) => result.profileId === currentProfileId) ?? null;
   const shouldAnimate = !skipAnimations;
+  const reportedCount = sortedResults.length;
+  const standingsLabel = totalMembers && totalMembers > reportedCount
+    ? `${reportedCount}/${totalMembers} finished`
+    : `${reportedCount} final${reportedCount === 1 ? " result" : " results"}`;
 
   if (sortedResults.length === 0) {
     return (
@@ -145,6 +157,61 @@ export const GameSessionResultsCard = ({
       </div>
 
       <div className="space-y-6 p-5 sm:p-6">
+        <div className="grid gap-3 lg:grid-cols-3">
+          <div className="rounded-[1.5rem] border border-border/70 bg-background/85 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Your finish
+            </p>
+            <p className="mt-2 text-lg font-display font-semibold text-slate-950 dark:text-white">
+              {currentPlacement === null
+                ? currentResult
+                  ? "Awaiting placement"
+                  : "Watching standings"
+                : currentResult?.isWinner
+                  ? "1st place"
+                  : getPlacementLabel(currentPlacement)}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {currentResult
+                ? `Score ${currentResult.score} and distance ${currentResult.distance}.`
+                : "Your finish will appear here as soon as the server records it."}
+            </p>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-border/70 bg-background/85 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Winner spotlight
+            </p>
+            <p className="mt-2 text-lg font-display font-semibold text-slate-950 dark:text-white">
+              {winner
+                ? winner.profileId === currentProfileId
+                  ? "You took the win"
+                  : winner.displayName
+                : "Winner pending"}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {winner
+                ? `${winner.score} points across ${winner.distance} distance units.`
+                : "The winner locks in after the family-scoped results finish reporting."}
+            </p>
+          </div>
+
+          <div className="rounded-[1.5rem] border border-border/70 bg-background/85 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Next step
+            </p>
+            <p className="mt-2 text-lg font-display font-semibold text-slate-950 dark:text-white">
+              {sessionStatus === "finished" ? standingsLabel : "Standings still moving"}
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              {nextStepLabel ??
+                (sessionStatus === "finished"
+                  ? "Head back to the lobby when the family is ready for another run."
+                  : "Wait for the rest of the family to finish so the final order can lock in.")}
+            </p>
+          </div>
+        </div>
+
         <div className="grid gap-3 lg:grid-cols-3">
           {PODIUM_ORDER.map((placement, index) => {
             const result = podiumResults[placement];

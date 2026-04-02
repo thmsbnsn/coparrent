@@ -194,6 +194,16 @@ describe("GameDashboard", () => {
     expect(launchLinks.length).toBeGreaterThan(0);
     expect(launchLinks[0]?.getAttribute("href")).toBe("/dashboard/games/flappy-plane/lobby");
     expect(rendered.textContent).toContain("Solo preview");
+
+    const plannedGameLinks = Array.from(rendered.querySelectorAll("a")).filter(
+      (anchor) => anchor.textContent?.includes("See game plan"),
+    );
+
+    expect(plannedGameLinks.map((anchor) => anchor.getAttribute("href"))).toEqual([
+      "/dashboard/games/family-raceway",
+      "/dashboard/games/pirate-harbor",
+      "/dashboard/games/star-hopper",
+    ]);
   });
 
   it("fails closed with an explicit error when active family scope is missing", async () => {
