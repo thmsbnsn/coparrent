@@ -175,8 +175,8 @@ const ChatMessage = ({ message, onShare }: ChatMessageProps) => {
         <div
           className={`max-w-[80%] md:max-w-[70%] rounded-2xl px-4 py-3 ${
             isUser
-              ? "bg-primary text-primary-foreground rounded-br-md"
-              : "bg-muted rounded-bl-md"
+              ? "bg-gradient-accent text-primary-foreground rounded-br-md shadow-[0_18px_30px_-24px_hsl(var(--primary)/0.8)]"
+              : "border border-border/70 bg-card/92 rounded-bl-md shadow-[0_16px_30px_-26px_rgba(8,21,47,0.24)]"
           }`}
         >
           <div className="text-sm whitespace-pre-wrap">
@@ -271,8 +271,8 @@ const ThreadSidebar = ({
                 key={thread.id}
                 className={`group flex items-center gap-2 p-3 rounded-lg cursor-pointer transition-colors ${
                   currentThreadId === thread.id
-                    ? "bg-primary/10 border border-primary/20"
-                    : "hover:bg-muted"
+                    ? "border border-primary/20 bg-[linear-gradient(135deg,rgba(15,79,216,0.12),rgba(15,159,152,0.1))] shadow-[0_12px_28px_-24px_rgba(8,21,47,0.4)]"
+                    : "hover:bg-muted/70"
                 }`}
                 onClick={() => onSelectThread(thread)}
               >
@@ -489,7 +489,7 @@ const NurseNancyContent = () => {
       </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between border-b border-border/70 bg-[linear-gradient(135deg,hsl(var(--primary)/0.08),transparent_42%,hsl(var(--accent)/0.55)_100%)] p-4">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -499,8 +499,8 @@ const NurseNancyContent = () => {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex items-center gap-2">
-            <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-              <Stethoscope className="h-5 w-5 text-primary" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/15 bg-gradient-accent shadow-[0_16px_28px_-22px_hsl(var(--primary)/0.72)]">
+              <Stethoscope className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
               <h1 className="text-xl font-semibold">Nurse Nancy</h1>
@@ -552,7 +552,7 @@ const NurseNancyContent = () => {
       {/* Main Content */}
       <div className="flex flex-1 p-4 gap-4 overflow-hidden">
         {/* Sidebar - Desktop */}
-        <div className="hidden md:block w-64 border rounded-lg bg-card shrink-0">
+        <div className="hidden w-64 shrink-0 rounded-[1.5rem] border border-border/70 bg-card/92 shadow-[0_22px_44px_-32px_rgba(8,21,47,0.32)] md:block">
           <ThreadSidebar
             threads={filteredThreads}
             currentThreadId={currentThread?.id || null}
@@ -568,12 +568,12 @@ const NurseNancyContent = () => {
         </div>
 
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col border rounded-lg bg-card overflow-hidden">
+        <div className="flex flex-1 flex-col overflow-hidden rounded-[1.75rem] border border-border/70 bg-card/94 shadow-[0_24px_48px_-34px_rgba(8,21,47,0.34)]">
           {!currentThread ? (
             // Empty state
             <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-                <Stethoscope className="h-8 w-8 text-primary" />
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-primary/15 bg-gradient-accent shadow-[0_20px_38px_-28px_hsl(var(--primary)/0.7)]">
+                <Stethoscope className="h-8 w-8 text-primary-foreground" />
               </div>
               <h2 className="text-xl font-semibold mb-2">Welcome to Nurse Nancy</h2>
               <p className="text-muted-foreground mb-6 max-w-md">
@@ -585,7 +585,7 @@ const NurseNancyContent = () => {
               </Button>
 
               <div className="mt-6 grid w-full max-w-3xl gap-3 text-left md:grid-cols-2">
-                <Card className="border-dashed bg-muted/30">
+                <Card className="border-dashed border-border/70 bg-muted/35">
                   <CardContent className="p-4">
                     <p className="text-sm font-medium">A good fit for Nurse Nancy</p>
                     <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
@@ -727,7 +727,7 @@ const NurseNancyContent = () => {
               </ScrollArea>
 
               {/* Input */}
-              <div className="p-4 border-t bg-background">
+              <div className="border-t border-border/70 bg-[linear-gradient(180deg,hsl(var(--background)/0.76),hsl(var(--muted)/0.3))] p-4">
                 <div className="mb-3 flex flex-wrap gap-2">
                   {NURSE_NANCY_QUICK_PROMPTS.slice(0, 2).map((prompt) => (
                     <Button

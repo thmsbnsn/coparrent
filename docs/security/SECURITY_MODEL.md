@@ -200,6 +200,7 @@ Repo-confirmed controls include:
 - server-set synchronized `start_time`
 - `family_game_session_results` stored per family-scoped session member
 - server-side winner resolution from shared session results
+- internal session-status and winner-resolution helpers are not client-callable paths
 - family presence updates for lobby and in-game states using explicit `family_id`
 
 Important boundaries:

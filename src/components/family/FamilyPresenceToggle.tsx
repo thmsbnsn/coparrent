@@ -29,10 +29,10 @@ export const FamilyPresenceToggle = ({
           type="button"
           variant="outline"
           className={cn(
-            "h-11 rounded-full border-border/70 px-4 shadow-sm",
+            "h-11 rounded-full border-border/70 px-4 shadow-[0_14px_28px_-24px_rgba(8,21,47,0.35)]",
             tone === "kids"
-              ? "bg-white/85 hover:bg-white"
-              : "bg-background/90 hover:bg-background",
+              ? "bg-white/88 hover:bg-white"
+              : "bg-background/88 hover:bg-background/96",
             className,
           )}
         >
@@ -42,15 +42,15 @@ export const FamilyPresenceToggle = ({
             className={cn(
               "inline-flex min-w-8 items-center justify-center rounded-full px-2 py-0.5 text-xs font-semibold",
               activeCount > 0
-                ? "bg-emerald-100 text-emerald-700"
-                : "bg-slate-100 text-slate-500",
+                ? "bg-primary/12 text-primary"
+                : "bg-muted text-muted-foreground",
             )}
           >
             {activeCount}
           </span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="rounded-[1.75rem] border border-border/70 bg-white/97 p-4 shadow-xl">
+      <PopoverContent align="end" className="rounded-[1.75rem] border border-border/70 bg-background/97 p-4 shadow-[0_24px_48px_-28px_rgba(8,21,47,0.4)] backdrop-blur-xl">
         <FamilyPresencePanel
           activeCount={activeCount}
           loading={loading}

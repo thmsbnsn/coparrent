@@ -24,7 +24,7 @@ import { useCallSessions } from "@/hooks/useCallSessions";
 import { useCallableFamilyMembers, type CallableFamilyMember } from "@/hooks/useCallableFamilyMembers";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { useRealtimeChildren } from "@/hooks/useRealtimeChildren";
-import { DashboardCallWidget } from "@/components/calls/DashboardCallWidget";
+import { DashboardCallLauncher } from "@/components/calls/DashboardCallLauncher";
 import { BlogDashboardCard } from "@/components/dashboard/BlogDashboardCard";
 import { resolveSenderName } from "@/lib/displayResolver";
 import { fetchFamilyParentProfiles, type FamilyParentProfile } from "@/lib/familyScope";
@@ -350,7 +350,18 @@ const Dashboard = () => {
   ];
 
   return (
-    <DashboardLayout>
+    <DashboardLayout
+      headerActions={
+        isParent ? (
+          <DashboardCallLauncher
+            contacts={callableMembers}
+            disabled={Boolean(incomingSession || dashboardOutgoingSession || activeSession)}
+            loading={callableMembersLoading}
+            onStartCall={handleStartDashboardCall}
+          />
+        ) : null
+      }
+    >
       <div className="space-y-8 lg:space-y-10">
         {/* Subscription Status Banner */}
         <div className="relative isolate overflow-hidden rounded-[30px] border border-primary/15 bg-gradient-to-r from-primary/10 via-background to-accent/10 p-[1px] shadow-[0_18px_40px_-28px_rgba(15,23,42,0.8)]">
@@ -482,18 +493,6 @@ const Dashboard = () => {
             </div>
           </div>
         </motion.div>
-
-        {isParent && (
-          <div className="relative isolate">
-            <div className="absolute inset-x-10 top-6 h-24 rounded-full bg-emerald-500/10 blur-3xl" />
-            <DashboardCallWidget
-              contacts={callableMembers}
-              disabled={Boolean(incomingSession || dashboardOutgoingSession || activeSession)}
-              loading={callableMembersLoading}
-              onStartCall={handleStartDashboardCall}
-            />
-          </div>
-        )}
 
         {/* Today's Schedule Card */}
         <motion.div

@@ -32,9 +32,9 @@ export const GameDashboardHero = ({
       : "Family arcade";
 
   return (
-    <section className="relative isolate overflow-hidden rounded-[2.4rem] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(34,197,94,0.12),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(56,189,248,0.18),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.98),rgba(30,41,59,0.95))] p-6 shadow-[0_32px_80px_-42px_rgba(15,23,42,0.95)] sm:p-7 lg:p-8">
-      <div className="absolute inset-y-0 right-6 w-40 rounded-full bg-amber-300/18 blur-3xl" />
-      <div className="absolute left-8 top-8 h-28 w-28 rounded-full bg-sky-400/18 blur-3xl" />
+    <section className="relative isolate overflow-hidden rounded-[2.4rem] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(15,79,216,0.2),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(15,159,152,0.18),transparent_34%),linear-gradient(135deg,rgba(8,21,47,0.98),rgba(16,36,70,0.95))] p-6 shadow-[0_32px_80px_-42px_rgba(8,21,47,0.95)] sm:p-7 lg:p-8">
+      <div className="absolute inset-y-0 right-6 w-40 rounded-full bg-primary/18 blur-3xl" />
+      <div className="absolute left-8 top-8 h-28 w-28 rounded-full bg-accent/18 blur-3xl" />
 
       <div className="relative flex flex-col gap-7 xl:flex-row xl:items-end xl:justify-between">
         <div className="max-w-3xl space-y-4">
@@ -53,10 +53,7 @@ export const GameDashboardHero = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-4">
-            <Button
-              asChild
-              className="h-12 rounded-full bg-white px-6 text-slate-950 hover:bg-slate-100"
-            >
+            <Button asChild className="h-12 rounded-full px-6">
               <Link to={featuredGameHref}>
                 <Gamepad2 className="mr-2 h-4 w-4" />
                 Open {featuredGameName} lobby
@@ -69,7 +66,7 @@ export const GameDashboardHero = ({
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-white/12 bg-white/10 p-4 backdrop-blur-sm">
+        <div className="rounded-[2rem] border border-white/12 bg-white/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-200/75">
             Family players
           </p>

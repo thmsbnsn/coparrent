@@ -15,19 +15,19 @@ export const FamilyGameActivityPanel = ({
   members,
   scopeError = null,
 }: FamilyGameActivityPanelProps) => (
-  <section className="rounded-[2rem] border border-border/70 bg-card/85 p-5 shadow-sm">
+  <section className="rounded-[2rem] border border-border/70 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--muted)/0.4))] p-5 shadow-[0_22px_42px_-32px_rgba(8,21,47,0.38)]">
     <div className="flex items-start justify-between gap-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
           Family activity
         </p>
-        <h2 className="mt-1 text-2xl font-display font-semibold text-slate-950">Who is playing now?</h2>
+        <h2 className="mt-1 text-2xl font-display font-semibold text-foreground">Who is playing now?</h2>
         <p className="mt-2 text-sm leading-6 text-muted-foreground">
           Live presence stays scoped to the active family and shows whether someone is on the
           dashboard, in a game lobby, or already inside a game.
         </p>
       </div>
-      <div className="rounded-full bg-slate-950 px-3 py-1 text-xs font-semibold text-white">
+      <div className="rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
         {activeCount} active
       </div>
     </div>

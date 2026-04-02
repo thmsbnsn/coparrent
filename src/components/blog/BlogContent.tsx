@@ -68,6 +68,7 @@ export const BlogContent = ({ content }: BlogContentProps) => {
   const nodes: JSX.Element[] = [];
 
   let index = 0;
+  let paragraphCount = 0;
 
   const nextNonEmptyLine = (start: number) => {
     let cursor = start;
@@ -85,19 +86,36 @@ export const BlogContent = ({ content }: BlogContentProps) => {
       continue;
     }
 
+    if (/^---+$/.test(line)) {
+      nodes.push(
+        <div key={`divider-${index}`} className="py-3">
+          <div className="h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
+        </div>,
+      );
+
+      index += 1;
+      continue;
+    }
+
     if (line.startsWith("#")) {
       const level = line.match(/^#+/)?.[0].length ?? 1;
       const text = line.replace(/^#+\s*/, "");
 
       if (level <= 2) {
         nodes.push(
-          <h2 key={`heading-${index}`} className="text-2xl font-display font-semibold text-foreground mt-10 mb-4">
+          <h2
+            key={`heading-${index}`}
+            className="mt-12 border-t border-border/60 pt-8 text-[1.9rem] font-display font-semibold tracking-tight text-foreground first:mt-0 first:border-t-0 first:pt-0"
+          >
             {text}
           </h2>
         );
       } else {
         nodes.push(
-          <h3 key={`heading-${index}`} className="text-xl font-display font-semibold text-foreground mt-8 mb-3">
+          <h3
+            key={`heading-${index}`}
+            className="mt-10 text-[1.35rem] font-display font-semibold tracking-tight text-foreground"
+          >
             {text}
           </h3>
         );
@@ -177,22 +195,88 @@ export const BlogContent = ({ content }: BlogContentProps) => {
       continue;
     }
 
+    if (line.startsWith(">")) {
+      const quoteLines: string[] = [];
+
+      while (index < lines.length) {
+        const current = lines[index].trim();
+        if (!current) {
+          index += 1;
+          break;
+        }
+
+        if (!current.startsWith(">")) {
+          break;
+        }
+
+        quoteLines.push(current.replace(/^>\s?/, ""));
+        index += 1;
+      }
+
+      nodes.push(
+        <blockquote
+          key={`quote-${index}`}
+          className="my-8 rounded-[1.75rem] border border-primary/15 bg-[linear-gradient(135deg,rgba(37,99,235,0.08),rgba(20,184,166,0.08))] px-5 py-4 text-[1.02rem] font-medium leading-8 text-foreground/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:px-6"
+        >
+          {renderInline(quoteLines.join(" "))}
+        </blockquote>
+      );
+
+      continue;
+    }
+
     const paragraphLines: string[] = [];
     while (index < lines.length) {
       const current = lines[index].trim();
-      if (!current || current.startsWith("#") || /^\d+\.\s+/.test(current) || /^[-*]\s+/.test(current)) {
+      if (
+        !current ||
+        current.startsWith("#") ||
+        current.startsWith(">") ||
+        /^---+$/.test(current) ||
+        /^\d+\.\s+/.test(current) ||
+        /^[-*]\s+/.test(current)
+      ) {
         break;
       }
       paragraphLines.push(current);
       index += 1;
     }
 
+    const paragraphText = paragraphLines.join(" ");
+    const calloutMatch = paragraphText.match(/^(Note|Tip|Reminder|Key takeaway):\s*(.+)$/i);
+
+    if (calloutMatch) {
+      nodes.push(
+        <div
+          key={`callout-${index}`}
+          className="my-8 rounded-[1.75rem] border border-accent/20 bg-accent/10 px-5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:px-6"
+        >
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-foreground/80">
+            {calloutMatch[1]}
+          </p>
+          <p className="mt-2 text-[1.01rem] leading-8 text-foreground/88">
+            {renderInline(calloutMatch[2])}
+          </p>
+        </div>,
+      );
+
+      continue;
+    }
+
+    paragraphCount += 1;
     nodes.push(
-      <p key={`paragraph-${index}`} className="text-base leading-8 text-foreground/90">
-        {renderInline(paragraphLines.join(" "))}
+      <p
+        key={`paragraph-${index}`}
+        className={
+          paragraphCount === 1
+            ? "text-[1.16rem] leading-8 text-foreground/92 sm:text-[1.22rem]"
+            : "text-[1.02rem] leading-8 text-foreground/88"
+        }
+      >
+        {renderInline(paragraphText)}
       </p>
     );
   }
 
-  return <div className="space-y-1">{nodes}</div>;
+  return <div className="space-y-5">{nodes}</div>;
 };

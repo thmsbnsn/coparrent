@@ -146,8 +146,8 @@ export const useNotifications = () => {
     try {
       const notification = new Notification(title, {
         body,
-        icon: "/favicon.ico",
-        badge: "/favicon.ico",
+        icon: "/icons/icon-192.png",
+        badge: "/icons/icon-192.png",
         ...options,
       });
 

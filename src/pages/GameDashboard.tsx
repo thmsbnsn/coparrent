@@ -159,8 +159,8 @@ export default function GameDashboard() {
                   <GameCard key={game.title} {...game} className="min-h-[20rem]" />
                 ))
               ) : (
-                <section className="rounded-[2rem] border border-border/70 bg-card/85 p-6 shadow-sm">
-                  <h2 className="text-2xl font-display font-semibold text-slate-950">
+                <section className="rounded-[2rem] border border-border/70 bg-card/88 p-6 shadow-[0_22px_42px_-32px_rgba(8,21,47,0.3)]">
+                  <h2 className="text-2xl font-display font-semibold text-foreground">
                     Games are unavailable for this child account right now.
                   </h2>
                   <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -174,10 +174,10 @@ export default function GameDashboard() {
             <section className="rounded-[2rem] border border-border/70 bg-card/85 p-5 shadow-sm">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                     Available now
                   </p>
-                  <h2 className="mt-1 text-2xl font-display font-semibold text-slate-950">
+                  <h2 className="mt-1 text-2xl font-display font-semibold text-foreground">
                     Start a quick round
                   </h2>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -185,15 +185,15 @@ export default function GameDashboard() {
                     synchronized seeded race begins.
                   </p>
                 </div>
-                <div className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <div className="rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
                   1 live game
                 </div>
               </div>
 
-              <div className="mt-5 rounded-[1.75rem] border border-border/70 bg-muted/30 p-4">
+              <div className="mt-5 rounded-[1.75rem] border border-border/70 bg-[linear-gradient(135deg,hsl(var(--muted)/0.65),hsl(var(--accent)/0.24))] p-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                       Family lobby
                     </p>
                     {isChildAccount && !multiplayer_enabled ? (
@@ -221,14 +221,14 @@ export default function GameDashboard() {
 
                   <div className="flex flex-wrap gap-3">
                     {availableGames.length > 0 && (
-                      <Button asChild className="rounded-full bg-sky-600 text-white hover:bg-sky-500">
+                      <Button asChild className="rounded-full">
                         <Link to={isChildAccount && !multiplayer_enabled ? featuredGame.playPath : featuredGame.launcherPath}>
                           {featuredActionLabel}
                         </Link>
                       </Button>
                     )}
                     {childCanPlayFlappy && (
-                      <Button asChild variant="outline" className="rounded-full bg-white">
+                      <Button asChild variant="outline" className="rounded-full bg-background/85">
                         <Link to={featuredGame.playPath}>Solo preview</Link>
                       </Button>
                     )}
@@ -245,10 +245,10 @@ export default function GameDashboard() {
 
             <section className="rounded-[2rem] border border-border/70 bg-card/85 p-5 shadow-sm">
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                   Coming soon
                 </p>
-                <h2 className="text-2xl font-display font-semibold text-slate-950">
+                <h2 className="text-2xl font-display font-semibold text-foreground">
                   Next up for family play
                 </h2>
                 <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
@@ -273,11 +273,11 @@ export default function GameDashboard() {
               scopeError={scopeError}
             />
 
-            <section className="rounded-[2rem] border border-border/70 bg-card/85 p-5 shadow-sm">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+            <section className="rounded-[2rem] border border-border/70 bg-card/88 p-5 shadow-[0_22px_42px_-32px_rgba(8,21,47,0.3)]">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                 Multiplayer lane
               </p>
-              <h2 className="mt-1 text-2xl font-display font-semibold text-slate-950">
+              <h2 className="mt-1 text-2xl font-display font-semibold text-foreground">
                 Built for shared family play
               </h2>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">

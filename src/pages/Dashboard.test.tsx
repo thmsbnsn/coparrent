@@ -167,7 +167,18 @@ vi.mock("@/lib/familyScope", () => ({
 }));
 
 vi.mock("@/components/dashboard/DashboardLayout", () => ({
-  DashboardLayout: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  DashboardLayout: ({
+    children,
+    headerActions,
+  }: {
+    children?: ReactNode;
+    headerActions?: ReactNode;
+  }) => (
+    <div>
+      {headerActions}
+      {children}
+    </div>
+  ),
 }));
 
 vi.mock("@/components/ui/button", () => ({
@@ -187,8 +198,8 @@ vi.mock("@/components/dashboard/SubscriptionBanner", () => ({
   SubscriptionBanner: () => <div>subscription-banner</div>,
 }));
 
-vi.mock("@/components/calls/DashboardCallWidget", () => ({
-  DashboardCallWidget: () => <div>dashboard-call-widget</div>,
+vi.mock("@/components/calls/DashboardCallLauncher", () => ({
+  DashboardCallLauncher: () => <div>dashboard-call-launcher</div>,
 }));
 
 vi.mock("@/components/dashboard/BlogDashboardCard", () => ({
@@ -349,6 +360,7 @@ describe("Dashboard family scoping", () => {
     expect(rendered.textContent).toContain("Other parent/guardian: Taylor Parent");
     expect(rendered.textContent).toContain("Family A update");
     expect(rendered.textContent).toContain("Alex");
+    expect(rendered.textContent).toContain("dashboard-call-launcher");
     expect(rendered.textContent).not.toContain("Family B update");
     expect(rendered.textContent).not.toContain("Jordan");
   });
@@ -406,5 +418,6 @@ describe("Dashboard family scoping", () => {
     expect(rendered.querySelector('a[href="/dashboard/expenses"]')).toBeNull();
     expect(rendered.querySelector('a[href="/dashboard/settings"]')).toBeNull();
     expect(rendered.textContent).not.toContain("Manage Child Info");
+    expect(rendered.textContent).not.toContain("dashboard-call-launcher");
   });
 });

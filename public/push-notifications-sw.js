@@ -39,7 +39,7 @@ const buildNotificationOptions = (payload, overrides = {}) => ({
       title: "Dismiss",
     },
   ],
-  badge: "/pwa-192x192.png",
+  badge: "/icons/icon-192.png",
   body: resolveNotificationBody(payload),
   data: {
     dateOfArrival: Date.now(),
@@ -47,7 +47,7 @@ const buildNotificationOptions = (payload, overrides = {}) => ({
       typeof payload?.id === "string" && payload.id.trim().length > 0 ? payload.id.trim() : "notification",
     url: resolveNotificationUrl(payload),
   },
-  icon: "/pwa-192x192.png",
+  icon: "/icons/icon-192.png",
   renotify: true,
   silent: Boolean(payload?.silent),
   tag: resolveNotificationTag(payload),
@@ -139,8 +139,8 @@ self.addEventListener("message", (event) => {
       resolveNotificationTitle(event.data.title),
       buildNotificationOptions(payload, {
         ...event.data.options,
-        badge: event.data.options?.badge ?? "/pwa-192x192.png",
-        icon: event.data.options?.icon ?? "/pwa-192x192.png",
+        badge: event.data.options?.badge ?? "/icons/icon-192.png",
+        icon: event.data.options?.icon ?? "/icons/icon-192.png",
       }),
     ),
   );

@@ -81,8 +81,8 @@ export const useNotificationService = () => {
 
     return sendLocalNotification(title, {
       body,
-      icon: '/pwa-192x192.png',
-      badge: '/pwa-192x192.png',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-192.png',
       tag: `coparrent-${Date.now()}`,
       ...options,
     });

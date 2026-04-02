@@ -56,10 +56,10 @@ const ToolCard = ({
       whileHover={{ scale: canUse ? 1.02 : 1 }}
       whileTap={{ scale: canUse ? 0.98 : 1 }}
     >
-      <Card className={`h-full transition-all ${!canUse ? 'opacity-60' : 'hover:shadow-lg'}`}>
+      <Card className={`h-full transition-all ${!canUse ? 'opacity-60' : 'hover:-translate-y-1 hover:shadow-[0_24px_46px_-30px_rgba(8,21,47,0.35)]'}`}>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between">
-            <div className="p-3 rounded-xl bg-gradient-to-br from-primary/10 to-accent/10">
+            <div className="rounded-2xl border border-primary/15 bg-[linear-gradient(135deg,hsl(var(--primary)/0.14),hsl(var(--accent)/0.55))] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
               <Icon className="w-6 h-6 text-primary" />
             </div>
             {premiumRequired && (
@@ -176,10 +176,10 @@ const KidCenterPage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
         >
-          <div className="rounded-3xl border border-border bg-gradient-to-br from-primary/10 via-background to-accent/10 p-5 sm:p-6">
+          <div className="rounded-3xl border border-border/70 bg-[linear-gradient(135deg,hsl(var(--primary)/0.12),hsl(var(--background))_46%,hsl(var(--accent)/0.42)_100%)] p-5 shadow-[0_24px_48px_-34px_rgba(8,21,47,0.32)] sm:p-6">
             <div className="flex flex-col gap-5">
               <div className="flex items-start gap-3">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-accent">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-primary/15 bg-gradient-accent shadow-[0_18px_34px_-24px_hsl(var(--primary)/0.72)]">
                   <Sparkles className="w-6 h-6 text-white" />
                 </div>
                 <div className="min-w-0">
@@ -195,15 +195,15 @@ const KidCenterPage = () => {
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-2xl border bg-card/70 p-4">
+                <div className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Best for</p>
                   <p className="mt-2 text-sm font-medium">Rainy days, bored moments, and last-minute plan changes</p>
                 </div>
-                <div className="rounded-2xl border bg-card/70 p-4">
+                <div className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Tools</p>
                   <p className="mt-2 text-sm font-medium">Activities, kitchen prompts, and arts-and-crafts ideas</p>
                 </div>
-                <div className="rounded-2xl border bg-card/70 p-4">
+                <div className="rounded-2xl border border-border/70 bg-card/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
                   <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Also available</p>
                   <p className="mt-2 text-sm font-medium">Coloring pages, saved creations, and Nurse Nancy in Kids Hub</p>
                 </div>
@@ -218,15 +218,15 @@ const KidCenterPage = () => {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="rounded-2xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30"
+            className="rounded-2xl border border-primary/15 bg-[linear-gradient(135deg,hsl(var(--primary)/0.1),hsl(var(--accent)/0.55))] p-4"
           >
             <div className="flex items-center gap-3">
-              <Sparkles className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              <Sparkles className="w-5 h-5 text-primary" />
               <div>
-                <p className="font-medium text-amber-800 dark:text-amber-200">
+                <p className="font-medium text-foreground">
                   Premium Feature
                 </p>
-                <p className="text-sm text-amber-700 dark:text-amber-300">
+                <p className="text-sm text-muted-foreground">
                   Upgrade to Power to generate activities, recipes, and crafts from this screen.
                 </p>
               </div>
@@ -241,7 +241,7 @@ const KidCenterPage = () => {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
           >
-            <Card className="border-border shadow-sm">
+            <Card className="border-border/70 shadow-[0_20px_40px_-34px_rgba(8,21,47,0.34)]">
               <CardHeader className="pb-3">
                 <CardTitle className="text-lg">Start with quick context</CardTitle>
                 <CardDescription>
@@ -329,7 +329,7 @@ const KidCenterPage = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.35 }}
         >
-          <Card className="border-border shadow-sm">
+            <Card className="border-border/70 shadow-[0_20px_40px_-34px_rgba(8,21,47,0.34)]">
             <CardHeader className="pb-3">
               <div className="flex items-start justify-between">
                 <div className="p-3 rounded-xl bg-gradient-to-br from-primary/10 to-accent/10">
@@ -358,7 +358,7 @@ const KidCenterPage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4 }}
-          className="rounded-2xl border bg-muted/40 p-5 sm:p-6"
+          className="rounded-2xl border border-border/70 bg-[linear-gradient(135deg,hsl(var(--muted)/0.7),hsl(var(--accent)/0.32))] p-5 shadow-[0_18px_38px_-30px_rgba(8,21,47,0.24)] sm:p-6"
         >
           <h3 className="font-semibold mb-2">How to use this well</h3>
           <p className="text-sm text-muted-foreground leading-relaxed">

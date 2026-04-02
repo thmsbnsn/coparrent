@@ -151,6 +151,27 @@ const quickPaths = [
   },
 ];
 
+const supportExpectations = [
+  "Setup, navigation, billing, exports, and account access questions",
+  "Guidance on where records, messages, and documents live in CoParrent",
+  "Clear routing when you need product help instead of searching across the app",
+];
+
+const trustGuidance = [
+  {
+    title: "Product help, not legal advice",
+    description: "We explain how CoParrent works and where records live, but we do not replace legal counsel or personal judgment.",
+  },
+  {
+    title: "Records and exports stay explicit",
+    description: "If you are looking for messages, documents, or court-ready exports, we point you to the exact product surface instead of vague summaries.",
+  },
+  {
+    title: "Support should feel predictable",
+    description: "This page is meant to reduce guesswork so setup, billing, privacy, and record questions have a clear first stop.",
+  },
+];
+
 const HelpCenter = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -201,14 +222,26 @@ const HelpCenter = () => {
       <main className="pt-24 lg:pt-32 pb-20">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           {/* Hero - Clear Purpose */}
-          <div className="max-w-2xl mx-auto text-center mb-12 lg:mb-14">
+          <div className="max-w-3xl mx-auto text-center mb-12 lg:mb-14">
             <motion.div
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-5"
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium mb-3"
             >
               <BookOpen className="w-4 h-4" />
               Help Center
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 }}
+              className="mb-5"
+            >
+              <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-3 py-1 text-xs font-medium text-muted-foreground">
+                <Shield className="h-3.5 w-3.5 text-primary" />
+                Updated April 2026
+              </span>
             </motion.div>
             
             <motion.h1
@@ -390,8 +423,54 @@ const HelpCenter = () => {
                   ))}
                 </div>
               </motion.section>
+
+              <motion.section
+                initial={{ opacity: 0, y: 24 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.46 }}
+                className="max-w-5xl mx-auto mb-16 lg:mb-20"
+              >
+                <div className="rounded-[2rem] border border-border/70 bg-card/85 p-6 shadow-[0_24px_48px_-36px_rgba(8,21,47,0.4)] lg:p-8">
+                  <div className="max-w-2xl">
+                    <h2 className="text-xl font-display font-semibold">What to expect from support</h2>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      CoParrent support is here to make product setup, records, exports, billing, and account access easier to understand. This page is meant to give you a calm first stop before you need to reach out.
+                    </p>
+                  </div>
+
+                  <div className="mt-6 grid gap-3 md:grid-cols-3">
+                    {supportExpectations.map((item) => (
+                      <div
+                        key={item}
+                        className="rounded-[1.5rem] border border-border/70 bg-background/70 p-4"
+                      >
+                        <p className="text-sm leading-6 text-foreground/88">{item}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.section>
             </>
           )}
+
+          <motion.section
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.48 }}
+            className="max-w-5xl mx-auto mb-16 lg:mb-20"
+          >
+            <div className="grid gap-4 md:grid-cols-3">
+              {trustGuidance.map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-[1.75rem] border border-border/70 bg-card/80 p-5 shadow-[0_20px_40px_-34px_rgba(8,21,47,0.35)]"
+                >
+                  <p className="text-sm font-display font-semibold">{item.title}</p>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.description}</p>
+                </div>
+              ))}
+            </div>
+          </motion.section>
 
           {/* Contact - Calm Escalation */}
           <motion.section
@@ -407,8 +486,11 @@ const HelpCenter = () => {
               <h2 className="text-xl font-display font-bold mb-3">
                 Need more help?
               </h2>
-              <p className="text-muted-foreground text-sm mb-6 max-w-sm mx-auto">
-                Can't find what you're looking for? Our team typically responds within one business day.
+              <p className="text-muted-foreground text-sm mb-3 max-w-sm mx-auto">
+                Can't find what you're looking for? Our team typically responds within one business day for product, billing, and account questions.
+              </p>
+              <p className="text-xs text-muted-foreground/85 mb-6 max-w-md mx-auto leading-5">
+                If you are trying to understand records or exports for court use, include the exact product area you were using so support can point you to the right workflow faster.
               </p>
               <Button asChild size="lg" className="px-8">
                 <Link to="/help/contact">

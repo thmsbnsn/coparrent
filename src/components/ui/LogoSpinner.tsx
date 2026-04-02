@@ -1,5 +1,4 @@
 import { cn } from "@/lib/utils";
-import logoMark from "@/assets/coparrent-mark.svg";
 
 interface LogoSpinnerProps {
   size?: number;
@@ -60,7 +59,7 @@ export const LogoSpinner = ({
         
         {/* Static centered logo */}
         <img
-          src={logoMark}
+          src="/icons/logo.svg"
           alt="CoParrent"
           className="absolute"
           style={{

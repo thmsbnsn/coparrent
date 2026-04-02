@@ -4,15 +4,15 @@ CoParrent is a Vite/React + Supabase web application for co-parenting operations
 
 ## Current Repo Status
 
-Last reviewed: 2026-04-01
+Last reviewed: 2026-04-02
 
 This README is intentionally limited to repo-confirmed statements plus clearly labeled historical evidence.
 
 - The current mainline codebase has been reviewed locally on 2026-04-01.
 - `npm run lint` passes locally.
 - `npm run build` passes locally.
-- `npm run test -- --run` passes locally with 60 test files and 241 tests.
-- The repo includes verification helpers for preview smoke, Stripe, invites, Daily calling, AI runtime, Messaging Hub, and push/PWA checks.
+- `npm run test -- --run` passes locally with 88 test files and 343 tests.
+- The repo includes verification helpers for preview smoke, Stripe, invites, Daily calling, shared family game flow, AI runtime, Messaging Hub, and push/PWA checks.
 - Historical live verification artifacts from March 2026 exist in [docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md).
 - Those external checks were not rerun as part of this documentation cleanup. Treat them as evidence on file, not as a fresh guarantee.
 
@@ -101,6 +101,7 @@ Additional repo helpers:
 npm run verify-preview-smoke
 npm run verify-stripe
 npm run verify-daily-calls
+npm run verify-family-games
 npm run verify-push-pwa
 ```
 

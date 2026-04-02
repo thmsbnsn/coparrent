@@ -87,11 +87,11 @@ const LawOfficeLogin = () => {
               <Logo size="lg" />
             </Link>
 
-            <div className="flex items-center gap-2 mb-6">
-              <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-                <Scale className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            <div className="mb-6 flex items-center gap-2">
+              <div className="rounded-xl border border-primary/15 bg-gradient-accent p-2 shadow-[0_16px_30px_-24px_hsl(var(--primary)/0.65)]">
+                <Scale className="w-5 h-5 text-white" />
               </div>
-              <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+              <span className="text-sm font-medium text-primary">
                 Law Office Portal
               </span>
             </div>
@@ -117,7 +117,7 @@ const LawOfficeLogin = () => {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="password">Password</Label>
-                  <Link to="/forgot-password" className="text-xs text-amber-600 hover:underline">
+                  <Link to="/forgot-password" className="text-xs text-primary hover:underline">
                     Forgot password?
                   </Link>
                 </div>
@@ -140,7 +140,7 @@ const LawOfficeLogin = () => {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full bg-amber-600 hover:bg-amber-700" disabled={isLoading}>
+              <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Signing in..." : "Sign In"}
                 {!isLoading && <ArrowRight className="ml-2 w-4 h-4" />}
               </Button>
@@ -148,7 +148,7 @@ const LawOfficeLogin = () => {
 
             <p className="mt-6 text-center text-sm text-muted-foreground">
               Don't have an account?{" "}
-              <Link to="/law-office/signup" className="text-amber-600 hover:underline font-medium">
+              <Link to="/law-office/signup" className="text-primary hover:underline font-medium">
                 Create account
               </Link>
             </p>
@@ -164,7 +164,7 @@ const LawOfficeLogin = () => {
       </div>
 
       {/* Right Panel - Decorative (Law Office themed) */}
-      <div className="hidden lg:flex flex-1 bg-gradient-to-br from-amber-600 via-amber-700 to-amber-800 items-center justify-center p-12">
+      <div className="hidden flex-1 items-center justify-center bg-[radial-gradient(circle_at_top_right,rgba(45,212,191,0.16),transparent_30%),linear-gradient(135deg,rgba(8,21,47,0.98),rgba(16,36,70,0.95))] p-12 lg:flex">
         <div className="max-w-md text-center text-white">
           <motion.h2
             initial={{ opacity: 0, y: 20 }}

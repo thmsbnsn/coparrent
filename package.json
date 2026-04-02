@@ -16,6 +16,7 @@
     "verify:stripe": "node --experimental-strip-types scripts/verify-stripe.ts",
     "verify:ai-runtime": "node --experimental-strip-types scripts/verify-ai-runtime.ts",
     "verify:daily-calls": "node --experimental-strip-types scripts/verify-daily-calls.ts",
+    "verify:family-games": "node --experimental-strip-types scripts/verify-family-game-multiplayer.ts",
     "verify:push-pwa": "node --experimental-strip-types scripts/verify-push-pwa.ts",
     "verify:preview-smoke": "node --experimental-strip-types scripts/verify-preview-smoke.ts",
     "verify": "npm run lint && npm run test && npm run build"

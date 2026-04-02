@@ -42,6 +42,7 @@ const GlobalCallManager = lazy(() =>
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
+  headerActions?: React.ReactNode;
   userRole?: "parent" | "lawoffice";
 }
 
@@ -75,7 +76,7 @@ const lawOfficeNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/law-office/dashboard", id: "nav-law-office-dashboard" },
 ];
 
-export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayoutProps) => {
+export const DashboardLayout = ({ children, headerActions, userRole = "parent" }: DashboardLayoutProps) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [userInitials, setUserInitials] = useState("");
@@ -170,10 +171,10 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
               id={item.id}
               to={item.href}
               className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors",
+                "flex items-center gap-3 rounded-2xl border px-3 py-2.5 transition-all duration-200",
                 isActive
-                  ? "bg-sidebar-accent text-sidebar-primary"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                  ? "border-sidebar-primary/20 bg-[linear-gradient(135deg,rgba(18,84,214,0.42),rgba(17,127,191,0.2))] text-sidebar-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_30px_-24px_rgba(13,148,136,0.6)]"
+                  : "border-transparent text-sidebar-foreground/72 hover:border-white/10 hover:bg-white/[0.05] hover:text-sidebar-foreground"
               )}
             >
               <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -189,7 +190,7 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
       <div className="p-3 border-t border-sidebar-border space-y-1 shrink-0" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}>
         <button
           onClick={handleSignOut}
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg w-full text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+          className="flex w-full items-center gap-3 rounded-2xl border border-transparent px-3 py-2.5 text-sidebar-foreground/72 transition-all duration-200 hover:border-white/10 hover:bg-white/[0.05] hover:text-sidebar-foreground"
         >
           <LogOut className="w-5 h-5" />
           {!sidebarCollapsed && <span className="text-sm font-medium">Sign Out</span>}
@@ -199,17 +200,17 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
   );
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--background))_70%,hsl(var(--muted)/0.28)_100%)] flex">
       {/* Desktop Sidebar */}
       <motion.aside
         initial={false}
         animate={{ width: sidebarCollapsed ? 72 : 256 }}
-        className="hidden lg:flex flex-col bg-sidebar border-r border-sidebar-border fixed left-0 top-0 bottom-0 z-40"
+        className="hidden fixed left-0 top-0 bottom-0 z-40 flex-col border-r border-sidebar-border/80 bg-[linear-gradient(180deg,hsl(var(--sidebar-background))_0%,hsl(221_62%_8%)_100%)] shadow-[18px_0_40px_-28px_rgba(8,21,47,0.85)] lg:flex"
       >
         <SidebarContent />
         <button
           onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute -right-3 top-20 w-6 h-6 rounded-full bg-sidebar border border-sidebar-border flex items-center justify-center text-sidebar-foreground hover:bg-sidebar-accent transition-colors"
+          className="absolute -right-3 top-20 flex h-6 w-6 items-center justify-center rounded-full border border-sidebar-border bg-[linear-gradient(180deg,hsl(var(--sidebar-background)),hsl(var(--sidebar-accent)))] text-sidebar-foreground shadow-lg transition-colors hover:bg-sidebar-accent"
         >
           <ChevronLeft className={cn("w-4 h-4 transition-transform", sidebarCollapsed && "rotate-180")} />
         </button>
@@ -230,7 +231,7 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
               initial={{ x: -280 }}
               animate={{ x: 0 }}
               exit={{ x: -280 }}
-              className="fixed left-0 top-0 bottom-0 w-[280px] bg-sidebar z-50 flex flex-col lg:hidden"
+              className="fixed left-0 top-0 bottom-0 z-50 flex w-[280px] flex-col border-r border-sidebar-border/80 bg-[linear-gradient(180deg,hsl(var(--sidebar-background))_0%,hsl(221_62%_8%)_100%)] shadow-[18px_0_40px_-28px_rgba(8,21,47,0.85)] lg:hidden"
             >
               <SidebarContent />
             </motion.aside>
@@ -242,7 +243,7 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
       <div className={cn("flex-1 flex flex-col min-h-screen", sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-[256px]")}>
         {/* Top Bar with safe area support - consistent across all pages */}
         <header 
-          className="bg-card border-b border-border flex items-center justify-between px-4 lg:px-6 sticky top-0 z-30"
+          className="sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-background/78 px-4 shadow-[0_16px_34px_-30px_rgba(8,21,47,0.5)] backdrop-blur-xl lg:px-6"
           style={{ 
             paddingTop: 'env(safe-area-inset-top, 0)', 
             minHeight: '4rem',
@@ -250,7 +251,7 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
           }}
         >
           <button
-            className="lg:hidden p-2 rounded-lg hover:bg-muted mt-auto mb-auto"
+            className="lg:hidden mt-auto mb-auto rounded-xl border border-transparent p-2 transition-colors hover:border-border/70 hover:bg-muted/70"
             onClick={() => setMobileSidebarOpen(true)}
           >
             <Menu className="w-5 h-5" />
@@ -259,10 +260,11 @@ export const DashboardLayout = ({ children, userRole = "parent" }: DashboardLayo
           <div className="flex-1" />
 
           <div className="flex items-center gap-3">
+            {headerActions}
             {shouldShowFamilyPresence && <FamilyPresenceToggle />}
             <ThemeToggle />
             <NotificationDropdown />
-            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium">
+            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-primary/15 bg-gradient-accent text-primary-foreground shadow-[0_14px_28px_-22px_hsl(var(--primary)/0.7)]">
               {userInitials || "U"}
             </div>
           </div>

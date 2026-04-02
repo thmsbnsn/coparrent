@@ -142,6 +142,7 @@ describe("DashboardLayout", () => {
   const renderLayout = async (
     initialPath = "/dashboard",
     userRole: "parent" | "lawoffice" = "parent",
+    headerActions?: ReactNode,
   ) => {
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -150,7 +151,7 @@ describe("DashboardLayout", () => {
     await act(async () => {
       root?.render(
         <MemoryRouter initialEntries={[initialPath]}>
-          <DashboardLayout userRole={userRole}>
+          <DashboardLayout userRole={userRole} headerActions={headerActions}>
             <div>layout-content</div>
           </DashboardLayout>
         </MemoryRouter>,
@@ -236,5 +237,11 @@ describe("DashboardLayout", () => {
     expect(rendered.textContent).not.toContain("onboarding-overlay");
     expect(rendered.textContent).not.toContain("global-call-manager");
     expect(rendered.textContent).not.toContain("family-presence-toggle");
+  });
+
+  it("renders page-level header actions when provided", async () => {
+    const rendered = await renderLayout("/dashboard", "parent", <button>header-call</button>);
+
+    expect(rendered.textContent).toContain("header-call");
   });
 });

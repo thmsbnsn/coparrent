@@ -145,13 +145,13 @@ const CourtRecordsPage = () => {
       <Navbar />
 
       <main className="flex-1">
-        <section className="py-20 lg:py-24 bg-gradient-to-b from-muted/30 via-background to-background border-b border-border/60">
+        <section className="border-b border-border/60 bg-[linear-gradient(180deg,hsl(var(--primary)/0.08),transparent_34%,hsl(var(--background))_100%)] py-20 lg:py-24">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="max-w-4xl mx-auto text-center">
               <motion.span
                 initial={{ opacity: 0, y: 16 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-2 text-sm font-medium text-primary mb-6"
+                className="mb-6 inline-flex items-center gap-2 rounded-full border border-primary/15 bg-primary/10 px-4 py-2 text-sm font-medium text-primary shadow-[0_16px_32px_-26px_hsl(var(--primary)/0.42)]"
               >
                 <Scale className="h-4 w-4" />
                 Court Records and Legal Review
@@ -183,7 +183,7 @@ const CourtRecordsPage = () => {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.16 + index * 0.06 }}
-                  className="rounded-2xl border border-border bg-card p-5 text-left"
+                  className="rounded-2xl border border-border/70 bg-card/92 p-5 text-left shadow-[0_20px_40px_-32px_rgba(8,21,47,0.24)]"
                 >
                   <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 mb-4">
                     <item.icon className="h-5 w-5 text-primary" />
@@ -238,7 +238,7 @@ const CourtRecordsPage = () => {
           </div>
         </section>
 
-        <section className="py-16 lg:py-20 bg-muted/20 border-y border-border/60">
+        <section className="border-y border-border/60 bg-[linear-gradient(180deg,hsl(var(--muted)/0.48),hsl(var(--background))_100%)] py-16 lg:py-20">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-1 lg:grid-cols-[0.95fr_1.05fr] gap-12 lg:gap-16 items-start max-w-6xl mx-auto">
               <div>
@@ -264,7 +264,7 @@ const CourtRecordsPage = () => {
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true }}
                     transition={{ delay: index * 0.05 }}
-                    className="rounded-2xl border border-border bg-card p-5"
+                  className="rounded-2xl border border-border/70 bg-card/94 p-5 shadow-[0_18px_36px_-30px_rgba(8,21,47,0.2)]"
                   >
                     <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">
                       Included section
@@ -301,7 +301,7 @@ const CourtRecordsPage = () => {
           </div>
         </section>
 
-        <section className="py-16 lg:py-20 bg-primary text-primary-foreground">
+        <section className="bg-gradient-hero py-16 text-primary-foreground lg:py-20">
           <div className="container mx-auto px-4 sm:px-6 lg:px-8">
             <div className="max-w-3xl mx-auto text-center">
               <h2 className="text-3xl font-display font-bold text-white mb-4">
