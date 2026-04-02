@@ -49,6 +49,7 @@ These are dated operational notes from 2026-04-02, not just repo assumptions:
 - The production frontend was redeployed and aliased to `https://coparrent.com`.
 - A targeted production database bundle for child portal controls, family presence, shared game lobbies, race sync/results, and rematch flow was applied on 2026-04-02.
 - The production database now includes the previously missing shared-game and family-presence RPC layer.
+- A direct production RPC probe now returns `Authentication required` for the shared game/presence RPC endpoints instead of the earlier missing-function schema-cache error.
 - A separate staging Supabase project exists and local development can target it explicitly.
 - A clean replay into a brand-new staging project still does not work from local migrations alone because older baseline schema is missing from local migration history.
 - The first clean-replay blocker was [../../supabase/migrations/20260315205438_expand_audit_logging.sql](../../supabase/migrations/20260315205438_expand_audit_logging.sql), and a later replay step also proved that a fresh project is missing the older `public.families` baseline assumed by March/April 2026 migrations.

@@ -280,13 +280,14 @@ export const ProblemReportProvider = ({ children }: { children: ReactNode }) => 
           data-testid="problem-report-floating-launcher"
         >
           <Button
-            className="pointer-events-auto h-12 rounded-full px-4 shadow-[0_18px_36px_-18px_rgba(15,23,42,0.88)]"
+            aria-label="Report a problem"
+            className="pointer-events-auto h-12 rounded-full px-3 shadow-[0_18px_36px_-18px_rgba(15,23,42,0.88)] sm:px-4"
             onClick={() => openReportModal("manual")}
             size="sm"
             type="button"
           >
-            <Bug className="mr-2 h-4 w-4" />
-            Report a problem
+            <Bug className="h-4 w-4 sm:mr-2" />
+            <span className="sr-only sm:not-sr-only">Report a problem</span>
           </Button>
         </div>
       )}

@@ -1,56 +1,85 @@
 # CoParrent Prioritized Remaining Checklist
 
-_Last updated: 2026-03-30_
+_Last updated: 2026-04-02_
 
-This is the shortest honest list still left for launch readiness after the completed family-scope/runtime Tickets 1 through 5.
+This is the shortest honest list still left after the current production frontend deploy, the targeted shared-games database rollout, and the latest local green verification run.
 
-## 1. Validate push notifications and PWA behavior on real devices
+## 1. Make Staging Reproducible
+
+Status: **Open**
+
+- A brand-new staging Supabase project still does not reach the current schema by replaying the tracked migrations alone.
+- The repo now captures the first clean-replay blocker and the later missing baseline-table issue, but staging still needs a durable bootstrap path.
+- Do not call staging "ready" until a clean-room rebuild path exists.
+
+Why this stays first:
+Production now has the targeted game and family-presence backend bundle. The biggest remaining infrastructure risk is staging/bootstrap integrity.
+
+## 2. Run The First Real Same-Family Multiplayer Verification
+
+Status: **Waiting on user-assisted test setup**
+
+- Use one dedicated family and two real accounts in that same family.
+- Run the family-game verification flow from session creation through winner resolution.
+- Save the outcome as dated evidence instead of leaving the multiplayer story repo-only.
+
+Why this stays near the top:
+The shared-game backend is deployed, but the first real two-user proof still has not been captured.
+
+## 3. Validate Shared Games On Real Mobile Devices
+
+Status: **Waiting on device access**
+
+- Verify the latest mobile safe-area/layout adjustments on iPhone and Android.
+- Confirm the Game Dashboard no longer clips at the right edge.
+- Confirm fullscreen/orientation controls behave sensibly for Toy Plane Dash.
+
+## 4. Reproduce And Fix The Authenticated Pricing Banner Error If Still Present
+
+Status: **Open**
+
+- The public `/pricing` route currently loads normally in a live anonymous check.
+- The reported `See Plans` flow from the dashboard still needs a focused authenticated repro if it remains visible to users.
+- Do not mark this closed until the exact failing path is identified or disproven.
+
+## 5. Validate Push Notifications And PWA Behavior On Real Devices
 
 Status: **Waiting on user / device access**
 
-- Validate desktop browser registration and delivery
-- Validate Android install flow and push delivery
-- Validate iOS add-to-home-screen and push behavior
-- Follow `docs/project/PUSH_PWA_DEVICE_VALIDATION_CHECKLIST.md` and save the finished screenshots plus matching verifier artifacts once the physical-device pass is complete
+- Validate desktop browser registration and delivery.
+- Validate Android install flow and push delivery.
+- Validate iOS add-to-home-screen and push behavior.
+- Follow `docs/project/PUSH_PWA_DEVICE_VALIDATION_CHECKLIST.md` and save evidence.
 
-Why this stays first:
-The backend plumbing now exists and the repo is verified locally. The remaining gap is real device proof.
+## 6. Confirm Deployed Auth Posture
 
-## 2. Confirm the canonical public host
+Status: **User-assisted**
+
+- Reconfirm captcha behavior in the deployed environment.
+- Reconfirm localhost-origin posture and keep docs aligned to the real rule set.
+- Follow `docs/project/DEPLOYMENT_AUTH_CONFIRMATION_CHECKLIST.md`.
+
+## 7. Confirm Canonical Host Posture
 
 Status: **Mixed**
 
-- `https://www.coparrent.com` is the honest public URL today
-- Reconfirm the apex `https://coparrent.com` host from multiple networks until TLS and redirects are fully settled
-- Keep `www` canonical until the apex behaves cleanly everywhere
-- Follow `docs/project/DEPLOYMENT_AUTH_CONFIRMATION_CHECKLIST.md` and save `curl` output plus browser evidence before closing this blocker
+- `https://coparrent.com` is now the live aliased production host.
+- Reconfirm redirects, TLS, and consistency from multiple networks before calling host posture fully closed.
 
-## 3. Confirm deployed auth posture
+## 8. Decide The Final Passkey Posture
 
 Status: **User-assisted**
 
-- Keep hCaptcha configured in the deployed auth environment
-- Confirm the tightened localhost-origin defaults are the intended permanent production posture
-- Record the final production rule set once that decision is made
-- Follow `docs/project/DEPLOYMENT_AUTH_CONFIRMATION_CHECKLIST.md` and keep the blocker open until captcha, localhost-origin posture, and evidence are all confirmed
+- Decide whether passkeys remain hidden, partial, or a tracked blocker.
+- Keep launch messaging aligned with actual deployed support.
 
-## 4. Decide the passkey posture
+## Already Closed
 
-Status: **User-assisted**
+These are no longer part of the highest-priority remaining list:
 
-- Hosted Supabase for this project still does not expose WebAuthn/passkey enrollment
-- Decide whether passkeys stay hidden from launch messaging or whether launch waits on that support
-- Record the final decision through `docs/project/DEPLOYMENT_AUTH_CONFIRMATION_CHECKLIST.md`
-
-## Already closed
-
-These are no longer part of the remaining launch-readiness list:
-
-- legacy messaging removal and runtime `co_parent_id` removal
-- default-deny route access and route/nav consistency
-- Gift Lists and Creations family-scope migration
-- Chore Chart removal from the live app until a real backend version exists
-- stale duplicate env cleanup: `_(2).env` removed from the active workflow, `.env.example` remains the repo template, and local `scripts/verify-*.ts` helpers are documented as QA-only tooling
-- production smoke verification on `https://www.coparrent.com`
-- Stripe, invite acceptance, and AI runtime live verification
-- local lint, build, and test pipeline health
+- production shared-games and family-presence RPC rollout for the current frontend
+- default-deny route access and nav consistency for the current dashboard/game surfaces
+- family-scoped game dashboard, shared lobby, synchronized Toy Plane Dash result model, and rematch loop
+- graceful frontend fallback when partial environments are missing game or presence RPCs
+- local lint, build, and full test-suite health
+- current docs refresh for status, completion, security posture, and game-system status

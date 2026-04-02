@@ -192,6 +192,7 @@ Operationally confirmed on 2026-04-02:
   - race sync/results
   - family game rematch
   was applied successfully
+- a direct production RPC probe now returns `Authentication required` for the shared game and family-presence endpoints instead of the earlier missing-function schema-cache error
 
 That means the production environment now contains the shared-game RPC layer that had previously been missing.
 

@@ -1,76 +1,98 @@
 # CoParrent Next 10 Tasks
 
-Last updated: 2026-04-01
+Last updated: 2026-04-02
 
-Ranked by immediate value after the docs cleanup and current green local verification baseline.
+Ranked by highest product and operational value after the current production deploy, the targeted shared-games database rollout, and the latest local green verification baseline.
 
-## 1. Complete Real-Device Push/PWA Validation
+## 1. Build A Reproducible Staging Baseline
+
+Owner: Mixed
+
+- A brand-new Supabase staging project still does not rebuild cleanly from the tracked migration chain alone.
+- The repo now documents the first known replay blocker and the later missing `public.families` baseline issue, but the environment still needs a formal answer:
+  - either backfill the missing historical baseline into local migrations
+  - or formalize a production-derived bootstrap path for staging
+
+Why this is first:
+The production game backend is now deployed, but staging is still the main environment risk.
+
+## 2. Run The First Real Two-User Multiplayer Verification Pass
+
+Owner: User-assisted
+
+- Use one dedicated same-family test setup with two real accounts.
+- Run the family game verifier end to end:
+  - create/open session
+  - join second player
+  - ready both
+  - start session
+  - confirm shared seed
+  - confirm synchronized start
+  - submit results
+  - confirm winner resolution
+
+Why this is second:
+The code and targeted production RPC layer are now in place. The missing proof is a real shared-family run.
+
+## 3. Recheck Shared Games On Real Mobile Devices
+
+Owner: User-assisted
+
+- Verify Game Dashboard layout on iPhone and Android after the recent safe-area and overflow fixes.
+- Confirm fullscreen/orientation controls behave well for Toy Plane Dash on supported devices.
+- Capture a short dated record of what still needs mobile polish.
+
+## 4. Investigate The Authenticated Pricing / Trial Banner Path
+
+Owner: Mixed
+
+- The public `/pricing` page itself currently loads normally.
+- The reported dashboard `See Plans` / trial-ending flow still needs a focused authenticated repro so the exact failing path can be identified and fixed if it is still happening.
+
+## 5. Complete Real-Device Push/PWA Validation
 
 Owner: User-assisted
 
 - Test install and push behavior on iOS, Android, and desktop.
-- Save dated evidence instead of summarizing expected behavior from code alone.
+- Save dated evidence instead of relying on repo-only assumptions.
 
-## 2. Confirm Deployed Auth And Origin Posture
+## 6. Confirm Deployed Auth And Origin Posture
 
 Owner: User-assisted
 
-- Confirm captcha remains correctly configured in deployed auth flows.
-- Confirm localhost-origin allowances are limited to the intended environments.
-- Treat this as a deployment check, not a repo-complete item.
+- Reconfirm hCaptcha and the final localhost-origin posture in the deployed environment.
+- Keep deployment docs tied to actual observed configuration, not just repo defaults.
 
-## 3. Decide The Final Passkey Posture
-
-Owner: Mixed
-
-- Decide whether passkeys stay hidden, remain partial, or become a tracked launch blocker.
-- Keep launch messaging aligned with actual deployment support.
-
-## 4. Refresh Live Evidence After Any Meaningful Deploy
+## 7. Decide The Final Passkey Posture
 
 Owner: Mixed
 
-- Re-run the relevant smoke and workflow verifiers after material production-facing changes.
-- Keep the evidence log current so the project story stays tied to actual proof.
+- Decide whether passkeys remain hidden, remain partial, or become a tracked launch blocker.
+- Keep buyer-facing messaging aligned with actual deployed support.
 
-## 5. Verify The Deployed Object-Lock Export Path
-
-Owner: Mixed
-
-- Run create, download, and verify flows against the deployed export functions after the new storage path is released.
-- Capture dated evidence for S3 object versioning and retention metadata instead of relying on repo-only claims.
-
-## 6. Decide The Legacy Export Artifact Policy
+## 8. Refresh Live Evidence After Material Deploys
 
 Owner: Mixed
 
-- Decide whether pre-cutover export artifacts remain readable legacy records or are migrated into the newer immutable-storage posture.
-- Keep buyer and operator docs explicit about the difference until that decision is closed.
+- Re-run the relevant smoke and workflow verifiers after meaningful production-facing changes.
+- Keep the evidence trail current so the status story stays defensible.
 
-## 7. Decide The Call-Evidence Expansion Boundary
-
-Owner: Mixed
-
-- Decide whether call evidence remains session/event history only or grows into a dedicated media export/reporting surface.
-- Do not let product copy imply call recording or transcripts unless they are actually built.
-
-## 8. Prepare A Stable Buyer Demo Target
+## 9. Polish The Toy Plane Dash Post-Race Experience Further
 
 Owner: Mixed
 
-- Keep one clean demo family and a short walkthrough path ready.
-- Avoid depending on ad hoc test accounts or fragile setup steps during a demo.
+- The results and rematch loop are materially better, but the reveal flow can still be stronger.
+- Continue with:
+  - richer leaderboard/podium reveal
+  - cleaner rematch readiness feedback
+  - stronger shared-family celebration without clutter
 
-## 9. Capture Buyer Demo Assets
-
-Owner: Mixed
-
-- Capture current screenshots from the strongest public and in-app surfaces.
-- Record a short walkthrough that matches the current repo and evidence log.
-
-## 10. Tighten The Buyer Package
+## 10. Expand The Shared Game Platform Deliberately
 
 Owner: Mixed
 
-- Keep the package concise.
-- Remove duplicated status language and stale claims whenever the repo changes.
+- Keep the next game-platform work on the reusable session foundation instead of building one-off systems.
+- The most likely next slices are:
+  - async family challenges
+  - a second real multiplayer-capable game consumer
+  - broader game restrictions and child-safe multiplayer posture refinement
