@@ -15,7 +15,7 @@ export const FamilyGameActivityPanel = ({
   members,
   scopeError = null,
 }: FamilyGameActivityPanelProps) => (
-  <section className="rounded-[2rem] border border-border/70 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--muted)/0.4))] p-5 shadow-[0_22px_42px_-32px_rgba(8,21,47,0.38)]">
+  <section className="min-w-0 rounded-[2rem] border border-border/70 bg-[linear-gradient(180deg,hsl(var(--card)/0.98),hsl(var(--muted)/0.4))] p-5 shadow-[0_22px_42px_-32px_rgba(8,21,47,0.38)]">
     <div className="flex items-start justify-between gap-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">

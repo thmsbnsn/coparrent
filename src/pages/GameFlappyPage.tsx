@@ -4,6 +4,7 @@ import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { GameSessionResultsCard } from "@/components/games/GameSessionResultsCard";
 import { FlappyPlaneGame, type FlappyRoundSummary } from "@/components/kids/games/FlappyPlaneGame";
 import { GameShell } from "@/components/kids/games/GameShell";
+import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFamily } from "@/contexts/FamilyContext";
@@ -34,7 +35,9 @@ export default function GameFlappyPage() {
   const sessionId = searchParams.get("sessionId");
   const {
     currentResult,
+    isCreator,
     loading: lobbyLoading,
+    prepareRematch,
     reportResult,
     results,
     scopeError: lobbyScopeError,
@@ -144,6 +147,23 @@ export default function GameFlappyPage() {
     };
   }, [localRoundResult, session, sessionId]);
 
+  useEffect(() => {
+    if (!sessionId || !session) {
+      return;
+    }
+
+    if (session.status !== "waiting" && session.status !== "ready") {
+      return;
+    }
+
+    reportedResultRef.current = false;
+    setLocalRoundResult(null);
+    setCountdownLabel(null);
+    setRaceStarted(false);
+
+    navigate(`${game.launcherPath}/${session.id}`, { replace: true });
+  }, [game.launcherPath, navigate, session, sessionId]);
+
   const handleRoundEnd = useCallback(
     async (summary: FlappyRoundSummary) => {
       setLocalRoundResult(summary);
@@ -241,6 +261,24 @@ export default function GameFlappyPage() {
   const gameOverDescription = currentPlayerResult
     ? `Score ${currentPlayerResult.score}. Distance ${currentPlayerResult.distance}.`
     : undefined;
+
+  const handlePrepareRematch = useCallback(async () => {
+    if (!sessionId || !session) {
+      return;
+    }
+
+    const prepared = await prepareRematch();
+    if (!prepared) {
+      return;
+    }
+
+    reportedResultRef.current = false;
+    setLocalRoundResult(null);
+    setCountdownLabel(null);
+    setRaceStarted(false);
+
+    navigate(`${game.launcherPath}/${session.id}`, { replace: true });
+  }, [game.launcherPath, navigate, prepareRematch, session, sessionId]);
 
   const resolvedScopeError = scopeError ?? lobbyScopeError ?? null;
   const isLoading = authLoading || childLoading || portalLoading || (Boolean(sessionId) && lobbyLoading);
@@ -357,6 +395,39 @@ export default function GameFlappyPage() {
 
         {(sessionId || localRoundResult) ? (
           <GameSessionResultsCard
+            actions={(
+              <div className="flex flex-wrap gap-3">
+                {sessionId && session?.status === "finished" && isCreator ? (
+                  <Button
+                    type="button"
+                    className="rounded-full"
+                    onClick={() => {
+                      void handlePrepareRematch();
+                    }}
+                  >
+                    Set up rematch
+                  </Button>
+                ) : null}
+                {sessionId ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-full"
+                    onClick={() => navigate(`${game.launcherPath}/${session?.id ?? sessionId}`)}
+                  >
+                    Back to Lobby
+                  </Button>
+                ) : null}
+                <Button
+                  type="button"
+                  variant={sessionId ? "ghost" : "outline"}
+                  className="rounded-full"
+                  onClick={() => navigate("/dashboard/games")}
+                >
+                  Back to Games
+                </Button>
+              </div>
+            )}
             currentProfileId={profileId}
             headline={resultsHeadline}
             results={displayedResults}

@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "supabase:link:staging": "supabase link --project-ref dcdailweczrhkbbezjjc",
+    "supabase:link:production": "supabase link --project-ref jnxtskcpwzuxyxjzqrkv",
     "verify:messaging-hub": "node --experimental-strip-types scripts/verify-messaging-hub.ts",
     "verify:invites": "node --experimental-strip-types scripts/verify-invites.ts",
     "verify:stripe": "node --experimental-strip-types scripts/verify-stripe.ts",

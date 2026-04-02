@@ -179,4 +179,20 @@ describe("useFamilyPresence", () => {
 
     expect(rendered.querySelector('[data-testid="scope-error"]')?.textContent).toContain("family_id is required");
   });
+
+  it("replaces missing-function errors with a friendlier availability message", async () => {
+    rpcMock.mockResolvedValueOnce({
+      data: null,
+      error: {
+        message:
+          "Could not find the function public.get_family_presence_overview(p_family_id) in the schema cache",
+      },
+    });
+
+    const rendered = await renderHarness();
+
+    expect(rendered.querySelector('[data-testid="scope-error"]')?.textContent).toContain(
+      "Live family activity is still being enabled on this server",
+    );
+  });
 });

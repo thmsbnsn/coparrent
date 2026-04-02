@@ -7,11 +7,14 @@ import { GameComingSoonCard } from "@/components/games/GameComingSoonCard";
 import { GameDashboardHero } from "@/components/games/GameDashboardHero";
 import { FLAPPY_ASSETS } from "@/assets/games/flappy";
 import { Button } from "@/components/ui/button";
+import { ParentHeaderCallAction } from "@/components/calls/ParentHeaderCallAction";
 import { useFamily } from "@/contexts/FamilyContext";
 import { useChildAccount } from "@/hooks/useChildAccount";
 import { useFamilyPresence } from "@/hooks/useFamilyPresence";
 import { useGameSessions } from "@/hooks/useGameSessions";
+import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { isChildGameAllowed } from "@/lib/childAccess";
+import { isMissingSupabaseFunctionError } from "@/lib/featureAvailabilityErrors";
 import { FAMILY_GAMES } from "@/lib/gameRegistry";
 
 const AVAILABLE_GAMES = [
@@ -55,6 +58,7 @@ const COMING_SOON_GAMES = [
 export default function GameDashboard() {
   const featuredGame = FAMILY_GAMES.flappyPlane;
   const { activeFamily, activeFamilyId, loading: familyLoading, profileId } = useFamily();
+  const { activeFamilyId: roleFamilyId, isLawOffice, isParent, isThirdParty } = useFamilyRole();
   const {
     allowed_game_slugs,
     games_enabled,
@@ -79,6 +83,10 @@ export default function GameDashboard() {
   });
 
   const viewerName = members.find((member) => member.profileId === profileId)?.displayName ?? null;
+  const familyLobbyUpdating = isMissingSupabaseFunctionError(sessionsScopeError, [
+    "get_family_game_sessions_overview",
+    "rpc_create_family_game_session",
+  ]);
   const childCanPlayFlappy = !isChildAccount || isChildGameAllowed(
     {
       allowed_game_slugs,
@@ -89,16 +97,30 @@ export default function GameDashboard() {
   const featuredActionLabel =
     isChildAccount && !multiplayer_enabled
       ? "Play solo"
+      : familyLobbyUpdating
+        ? "Solo preview"
       : openSession
         ? "Join lobby"
         : "Open family lobby";
+  const featuredActionHref =
+    isChildAccount && !multiplayer_enabled
+      ? featuredGame.playPath
+      : familyLobbyUpdating
+        ? featuredGame.playPath
+        : featuredGame.launcherPath;
+  const featuredHeroActionLabel =
+    isChildAccount && !multiplayer_enabled
+      ? `Open ${featuredGame.displayName} preview`
+      : familyLobbyUpdating
+        ? `Open ${featuredGame.displayName} preview`
+        : `Open ${featuredGame.displayName} lobby`;
   const availableGames = AVAILABLE_GAMES.map((game) => ({
     ...game,
     actionLabel: featuredActionLabel,
-    to: isChildAccount && !multiplayer_enabled
-      ? featuredGame.playPath
-      : featuredGame.launcherPath,
+    to: featuredActionHref,
   })).filter(() => childCanPlayFlappy);
+  const showCallLauncher =
+    Boolean(roleFamilyId) && isParent && !isThirdParty && !isLawOffice && !isChildAccount;
 
   if (familyLoading || childLoading) {
     return (
@@ -137,19 +159,25 @@ export default function GameDashboard() {
   }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-8">
+    <DashboardLayout
+      headerActions={
+        showCallLauncher ? <ParentHeaderCallAction /> : null
+      }
+      showFamilyPresenceToggle={false}
+    >
+      <div className="mx-auto max-w-[1400px] min-w-0 space-y-8">
         <GameDashboardHero
           activeCount={activeCount}
           familyName={activeFamily?.display_name ?? null}
-          featuredGameHref={featuredGame.launcherPath}
+          featuredActionLabel={featuredHeroActionLabel}
+          featuredGameHref={featuredActionHref}
           featuredGameName={featuredGame.displayName}
           members={members}
           viewerName={viewerName}
         />
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <section className="space-y-6">
+        <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+          <section className="min-w-0 space-y-6">
             <div className="space-y-3">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Featured game
@@ -200,6 +228,11 @@ export default function GameDashboard() {
                       <p className="text-sm text-muted-foreground">
                         Multiplayer is off for this child account, so shared lobbies stay hidden.
                       </p>
+                    ) : familyLobbyUpdating ? (
+                      <p className="text-sm text-muted-foreground">
+                        Family lobbies are still being enabled on this server. Solo preview is
+                        available while we finish the update.
+                      </p>
                     ) : sessionsScopeError ? (
                       <p className="text-sm text-rose-700">{sessionsScopeError}</p>
                     ) : sessionsLoading ? (
@@ -222,7 +255,7 @@ export default function GameDashboard() {
                   <div className="flex flex-wrap gap-3">
                     {availableGames.length > 0 && (
                       <Button asChild className="rounded-full">
-                        <Link to={isChildAccount && !multiplayer_enabled ? featuredGame.playPath : featuredGame.launcherPath}>
+                        <Link to={featuredActionHref}>
                           {featuredActionLabel}
                         </Link>
                       </Button>
@@ -265,7 +298,7 @@ export default function GameDashboard() {
             </section>
           </section>
 
-          <div className="space-y-6">
+          <div className="min-w-0 space-y-6">
             <FamilyGameActivityPanel
               activeCount={activeCount}
               loading={presenceLoading}

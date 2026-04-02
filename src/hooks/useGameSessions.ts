@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFamily } from "@/contexts/FamilyContext";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeFeatureAvailabilityError } from "@/lib/featureAvailabilityErrors";
 import {
   type FamilyGameSessionOverviewRow,
   type FamilyGameSessionSummary,
@@ -18,6 +19,8 @@ export const useGameSessions = ({
   gameSlug,
   maxPlayers = 4,
 }: UseGameSessionsOptions) => {
+  const maintenanceMessage =
+    "Shared family lobbies are still being enabled on this server. Solo preview is available while we finish the update.";
   const { activeFamilyId, loading: familyLoading } = useFamily();
   const [sessions, setSessions] = useState<FamilyGameSessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -45,7 +48,13 @@ export const useGameSessions = ({
     if (error) {
       console.error("Error loading family game sessions:", error);
       setSessions([]);
-      setScopeError(error.message || "Unable to load family game sessions.");
+      setScopeError(
+        normalizeFeatureAvailabilityError(
+          error.message,
+          maintenanceMessage,
+          ["get_family_game_sessions_overview"],
+        ),
+      );
       setLoading(false);
       return;
     }
@@ -116,7 +125,13 @@ export const useGameSessions = ({
 
     if (error) {
       console.error("Error creating family game session:", error);
-      setScopeError(error.message || "Unable to create a family game session.");
+      setScopeError(
+        normalizeFeatureAvailabilityError(
+          error.message,
+          maintenanceMessage,
+          ["rpc_create_family_game_session"],
+        ),
+      );
       return null;
     }
 

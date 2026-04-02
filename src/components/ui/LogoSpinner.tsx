@@ -58,18 +58,22 @@ export const LogoSpinner = ({
         </svg>
         
         {/* Static centered logo */}
-        <img
-          src="/icons/logo.svg"
-          alt="CoParrent"
-          className="absolute"
+        <div
+          className="absolute overflow-hidden rounded-[22%]"
           style={{
             width: size,
             height: size,
-            top: '50%',
-            left: '50%',
-            transform: 'translate(-50%, -50%)'
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
           }}
-        />
+        >
+          <img
+            src="/icons/icon-192.png"
+            alt="CoParrent"
+            className="absolute inset-0 h-full w-full object-cover scale-[1.4]"
+          />
+        </div>
       </div>
       
       {label && (

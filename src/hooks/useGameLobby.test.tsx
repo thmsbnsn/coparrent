@@ -96,6 +96,7 @@ const Harness = ({ sessionId = "session-1" }: { sessionId?: string | null }) => 
     currentMember,
     currentResult,
     joinLobby,
+    prepareRematch,
     reportResult,
     results,
     scopeError,
@@ -128,6 +129,14 @@ const Harness = ({ sessionId = "session-1" }: { sessionId?: string | null }) => 
         }}
       >
         report
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          void prepareRematch().then((value) => setReportStatus(`rematch:${value}`));
+        }}
+      >
+        rematch
       </button>
       <div data-testid="scope-error">{scopeError ?? ""}</div>
       <div data-testid="session-id">{session?.id ?? ""}</div>
@@ -264,6 +273,54 @@ describe("useGameLobby", () => {
     );
   });
 
+  it("prepares a family-scoped rematch with explicit family_id", async () => {
+    rpcMock
+      .mockResolvedValueOnce({
+        data: {
+          ...lobbyPayload,
+          session: {
+            ...lobbyPayload.session,
+            ended_at: "2026-04-01T13:05:00.000Z",
+            status: "finished",
+          },
+        },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: { ok: true },
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        data: {
+          ...lobbyPayload,
+          results: [],
+          session: {
+            ...lobbyPayload.session,
+            ended_at: null,
+            start_time: null,
+            started_at: null,
+            status: "waiting",
+            winner_profile_id: null,
+          },
+        },
+        error: null,
+      });
+
+    const rendered = await renderHarness();
+
+    const rematchButton = rendered.querySelectorAll("button")[2];
+    await act(async () => {
+      rematchButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(rpcMock).toHaveBeenCalledWith("rpc_prepare_family_game_session_rematch", {
+      p_family_id: "family-1",
+      p_session_id: "session-1",
+    });
+    expect(rendered.querySelector('[data-testid="report-result"]')?.textContent).toBe("rematch:true");
+  });
+
   it("surfaces explicit server-side family_id errors", async () => {
     rpcMock.mockResolvedValueOnce({
       data: null,
@@ -276,6 +333,22 @@ describe("useGameLobby", () => {
 
     expect(rendered.querySelector('[data-testid="scope-error"]')?.textContent).toContain(
       "family_id is required",
+    );
+  });
+
+  it("replaces missing-function lobby errors with a friendlier multiplayer message", async () => {
+    rpcMock.mockResolvedValueOnce({
+      data: null,
+      error: {
+        message:
+          "Could not find the function public.get_family_game_lobby(p_family_id, p_session_id) in the schema cache",
+      },
+    });
+
+    const rendered = await renderHarness();
+
+    expect(rendered.querySelector('[data-testid="scope-error"]')?.textContent).toContain(
+      "Family multiplayer is still being enabled on this server",
     );
   });
 });

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFamily } from "@/contexts/FamilyContext";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeFeatureAvailabilityError } from "@/lib/featureAvailabilityErrors";
 import {
   type FamilyGameLobbyPayload,
   mapFamilyGameLobby,
@@ -21,6 +22,8 @@ export const useGameLobby = ({
   gameSlug = null,
   sessionId,
 }: UseGameLobbyOptions) => {
+  const maintenanceMessage =
+    "Family multiplayer is still being enabled on this server. Use solo preview for now while we finish the update.";
   const { activeFamilyId, loading: familyLoading, profileId } = useFamily();
   const [loading, setLoading] = useState(true);
   const [lobby, setLobby] = useState(() => mapFamilyGameLobby(null));
@@ -55,7 +58,13 @@ export const useGameLobby = ({
     if (error) {
       console.error("Error loading game lobby:", error);
       setLobby(null);
-      setScopeError(error.message || "Unable to load the game lobby.");
+      setScopeError(
+        normalizeFeatureAvailabilityError(
+          error.message,
+          maintenanceMessage,
+          ["get_family_game_lobby"],
+        ),
+      );
       setLoading(false);
       return;
     }
@@ -145,7 +154,13 @@ export const useGameLobby = ({
 
     if (error) {
       console.error("Error joining game lobby:", error);
-      setScopeError(error.message || "Unable to join the game lobby.");
+      setScopeError(
+        normalizeFeatureAvailabilityError(
+          error.message,
+          maintenanceMessage,
+          ["rpc_join_family_game_session"],
+        ),
+      );
       return false;
     }
 
@@ -174,7 +189,13 @@ export const useGameLobby = ({
 
       if (error) {
         console.error("Error updating lobby ready state:", error);
-        setScopeError(error.message || "Unable to update lobby ready state.");
+        setScopeError(
+          normalizeFeatureAvailabilityError(
+            error.message,
+            maintenanceMessage,
+            ["rpc_set_family_game_session_ready"],
+          ),
+        );
         return false;
       }
 
@@ -203,7 +224,13 @@ export const useGameLobby = ({
 
     if (error) {
       console.error("Error starting family game session:", error);
-      setScopeError(error.message || "Unable to start the family game session.");
+      setScopeError(
+        normalizeFeatureAvailabilityError(
+          error.message,
+          maintenanceMessage,
+          ["rpc_start_family_game_session"],
+        ),
+      );
       return false;
     }
 
@@ -234,7 +261,13 @@ export const useGameLobby = ({
 
       if (error) {
         console.error("Error reporting family game result:", error);
-        setScopeError(error.message || "Unable to report the game result.");
+        setScopeError(
+          normalizeFeatureAvailabilityError(
+            error.message,
+            maintenanceMessage,
+            ["rpc_report_family_game_session_result"],
+          ),
+        );
         return false;
       }
 
@@ -244,6 +277,39 @@ export const useGameLobby = ({
     },
     [activeFamilyId, fetchLobby, sessionId],
   );
+
+  const prepareRematch = useCallback(async () => {
+    if (!sessionId) {
+      setScopeError("A game session is required before preparing a rematch.");
+      return false;
+    }
+
+    if (!activeFamilyId) {
+      setScopeError("An active family is required before preparing a rematch.");
+      return false;
+    }
+
+    const { error } = await supabase.rpc("rpc_prepare_family_game_session_rematch", {
+      p_family_id: activeFamilyId,
+      p_session_id: sessionId,
+    });
+
+    if (error) {
+      console.error("Error preparing family game rematch:", error);
+      setScopeError(
+        normalizeFeatureAvailabilityError(
+          error.message,
+          maintenanceMessage,
+          ["rpc_prepare_family_game_session_rematch"],
+        ),
+      );
+      return false;
+    }
+
+    await fetchLobby();
+    setScopeError(null);
+    return true;
+  }, [activeFamilyId, fetchLobby, sessionId]);
 
   const currentMember = useMemo(
     () => lobby?.members.find((member) => member.profileId === profileId) ?? null,
@@ -264,6 +330,7 @@ export const useGameLobby = ({
     loading: loading || familyLoading,
     lobby,
     members: lobby?.members ?? [],
+    prepareRematch,
     refresh: fetchLobby,
     reportResult,
     results: lobby?.results ?? [],

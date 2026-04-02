@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useFamily } from "@/contexts/FamilyContext";
 import { useChildAccount } from "@/hooks/useChildAccount";
 import { useFamilyPresence } from "@/hooks/useFamilyPresence";
+import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { useGameSessions } from "@/hooks/useGameSessions";
 import GameDashboard from "@/pages/GameDashboard";
 
@@ -16,6 +17,10 @@ vi.mock("@/hooks/useChildAccount", () => ({
   useChildAccount: vi.fn(),
 }));
 
+vi.mock("@/hooks/useFamilyRole", () => ({
+  useFamilyRole: vi.fn(),
+}));
+
 vi.mock("@/hooks/useFamilyPresence", () => ({
   useFamilyPresence: vi.fn(),
 }));
@@ -25,10 +30,26 @@ vi.mock("@/hooks/useGameSessions", () => ({
 }));
 
 vi.mock("@/components/dashboard/DashboardLayout", () => ({
-  DashboardLayout: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  DashboardLayout: ({
+    children,
+    headerActions,
+  }: {
+    children?: ReactNode;
+    headerActions?: ReactNode;
+  }) => (
+    <div>
+      <div>{headerActions}</div>
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock("@/components/calls/ParentHeaderCallAction", () => ({
+  ParentHeaderCallAction: () => <div>parent-header-call-action</div>,
 }));
 
 const mockedUseFamily = vi.mocked(useFamily);
+const mockedUseFamilyRole = vi.mocked(useFamilyRole);
 const mockedUseChildAccount = vi.mocked(useChildAccount);
 const mockedUseFamilyPresence = vi.mocked(useFamilyPresence);
 const mockedUseGameSessions = vi.mocked(useGameSessions);
@@ -68,6 +89,14 @@ describe("GameDashboard", () => {
       loading: false,
       multiplayer_enabled: true,
       scopeError: null,
+    } as never);
+
+    mockedUseFamilyRole.mockReturnValue({
+      activeFamilyId: "family-1",
+      isLawOffice: false,
+      isParent: true,
+      isThirdParty: false,
+      profileId: "profile-1",
     } as never);
 
     mockedUseFamilyPresence.mockReturnValue({
@@ -150,6 +179,7 @@ describe("GameDashboard", () => {
     expect(rendered.textContent).toContain("Family Raceway");
     expect(rendered.textContent).toContain("Star Hopper");
     expect(rendered.textContent).toContain("Pirate Harbor");
+    expect(rendered.textContent).toContain("parent-header-call-action");
 
     const playLink = Array.from(rendered.querySelectorAll("a")).find(
       (anchor) => anchor.textContent?.includes("Open Toy Plane Dash lobby"),
@@ -193,5 +223,27 @@ describe("GameDashboard", () => {
     const rendered = await renderPage();
 
     expect(rendered.textContent).toContain("Games are unavailable for this child account right now");
+  });
+
+  it("falls back to solo preview when family lobbies are not available on the current server", async () => {
+    mockedUseGameSessions.mockReturnValue({
+      ensureSession: vi.fn().mockResolvedValue(null),
+      loading: false,
+      openSession: null,
+      refresh: vi.fn(),
+      scopeError:
+        "Shared family lobbies are still being enabled on this server. Solo preview is available while we finish the update.",
+      sessions: [],
+    } as never);
+
+    const rendered = await renderPage();
+
+    expect(rendered.textContent).toContain("Shared family lobbies are still being enabled on this server");
+
+    const previewLinks = Array.from(rendered.querySelectorAll("a")).filter(
+      (anchor) => anchor.getAttribute("href") === "/dashboard/games/flappy-plane",
+    );
+
+    expect(previewLinks.length).toBeGreaterThan(0);
   });
 });

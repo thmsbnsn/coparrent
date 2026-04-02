@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Loader2, Play, Rocket, Users } from "lucide-react";
+import { Loader2, Play, Rocket, RotateCcw, Users } from "lucide-react";
 import { GameLobbyMemberRow } from "@/components/games/GameLobbyMemberRow";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -17,9 +17,11 @@ interface GameLobbyCardProps {
   joining?: boolean;
   members: FamilyGameLobbyMember[];
   onJoin: () => Promise<void> | void;
+  onPrepareRematch?: () => Promise<void> | void;
   onSetReady: (isReady: boolean) => Promise<void> | void;
   onStart: () => Promise<void> | void;
   readyUpdating?: boolean;
+  rematchPending?: boolean;
   session: FamilyGameSessionSummary;
   starting?: boolean;
 }
@@ -29,9 +31,11 @@ export const GameLobbyCard = ({
   joining = false,
   members,
   onJoin,
+  onPrepareRematch,
   onSetReady,
   onStart,
   readyUpdating = false,
+  rematchPending = false,
   session,
   starting = false,
 }: GameLobbyCardProps) => {
@@ -39,6 +43,7 @@ export const GameLobbyCard = ({
   const currentMember = members.find((member) => member.profileId === currentProfileId) ?? null;
   const canStart = isFamilyGameSessionStartable(session) && Boolean(currentMember?.isCreator);
   const isSessionActive = session.status === "active";
+  const isSessionFinished = session.status === "finished";
   const statusLabel = getFamilyGameSessionStatusLabel(session.status);
   const readyLabel = `${session.readyCount}/${session.memberCount} ready`;
 
@@ -124,12 +129,40 @@ export const GameLobbyCard = ({
 
           <div className="mt-4 space-y-4">
             <p className="text-sm leading-6 text-slate-200/86">
-              Everyone can join this family lobby. Ready status is tracked server-side, the host
-              starts the shared countdown, and the game page uses the same family-scoped session
-              state for the race seed and results.
+              {isSessionFinished
+                ? "This race is complete. The host can reset the same family-scoped room with a fresh shared seed, then everyone readies up again for the next launch."
+                : "Everyone can join this family lobby. Ready status is tracked server-side, the host starts the shared countdown, and the game page uses the same family-scoped session state for the race seed and results."}
             </p>
 
-            {!currentMember ? (
+            {isSessionFinished ? (
+              currentMember?.isCreator ? (
+                <Button
+                  type="button"
+                  className="h-12 w-full rounded-full bg-white text-slate-950 hover:bg-slate-100"
+                  disabled={rematchPending}
+                  onClick={() => {
+                    void onPrepareRematch?.();
+                  }}
+                >
+                  {rematchPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      Set up rematch
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  className="h-12 w-full rounded-full bg-white/12 text-white hover:bg-white/12"
+                  disabled
+                >
+                  Waiting for host reset
+                </Button>
+              )
+            ) : !currentMember ? (
               <Button
                 type="button"
                 className="h-12 w-full rounded-full bg-white text-slate-950 hover:bg-slate-100"
@@ -177,13 +210,15 @@ export const GameLobbyCard = ({
             <Button
               type="button"
               className="h-12 w-full rounded-full bg-sky-500 text-white hover:bg-sky-400"
-              disabled={!canStart || starting}
+              disabled={isSessionFinished || !canStart || starting}
                 onClick={() => {
                   void onStart();
                 }}
               >
               {starting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
+              ) : isSessionFinished ? (
+                "Reset the room first"
               ) : isSessionActive ? (
                 "Race is live"
               ) : (

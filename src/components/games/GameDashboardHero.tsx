@@ -8,6 +8,7 @@ import {
 } from "@/lib/familyPresence";
 
 interface GameDashboardHeroProps {
+  featuredActionLabel?: string;
   activeCount: number;
   familyName: string | null;
   featuredGameHref: string;
@@ -19,6 +20,7 @@ interface GameDashboardHeroProps {
 export const GameDashboardHero = ({
   activeCount,
   familyName,
+  featuredActionLabel,
   featuredGameHref,
   featuredGameName,
   members,
@@ -32,11 +34,11 @@ export const GameDashboardHero = ({
       : "Family arcade";
 
   return (
-    <section className="relative isolate overflow-hidden rounded-[2.4rem] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(15,79,216,0.2),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(15,159,152,0.18),transparent_34%),linear-gradient(135deg,rgba(8,21,47,0.98),rgba(16,36,70,0.95))] p-6 shadow-[0_32px_80px_-42px_rgba(8,21,47,0.95)] sm:p-7 lg:p-8">
+    <section className="relative isolate min-w-0 overflow-hidden rounded-[2.4rem] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(15,79,216,0.2),transparent_28%),radial-gradient(circle_at_bottom_right,rgba(15,159,152,0.18),transparent_34%),linear-gradient(135deg,rgba(8,21,47,0.98),rgba(16,36,70,0.95))] p-5 shadow-[0_32px_80px_-42px_rgba(8,21,47,0.95)] sm:p-6 lg:p-8">
       <div className="absolute inset-y-0 right-6 w-40 rounded-full bg-primary/18 blur-3xl" />
       <div className="absolute left-8 top-8 h-28 w-28 rounded-full bg-accent/18 blur-3xl" />
 
-      <div className="relative flex flex-col gap-7 xl:flex-row xl:items-end xl:justify-between">
+      <div className="relative flex min-w-0 flex-col gap-7 xl:flex-row xl:items-end xl:justify-between">
         <div className="max-w-3xl space-y-4">
           <div className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-white/80 backdrop-blur">
             <Sparkles className="h-3.5 w-3.5" />
@@ -56,7 +58,7 @@ export const GameDashboardHero = ({
             <Button asChild className="h-12 rounded-full px-6">
               <Link to={featuredGameHref}>
                 <Gamepad2 className="mr-2 h-4 w-4" />
-                Open {featuredGameName} lobby
+                {featuredActionLabel ?? `Open ${featuredGameName} lobby`}
               </Link>
             </Button>
 
@@ -66,7 +68,7 @@ export const GameDashboardHero = ({
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-white/12 bg-white/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm">
+        <div className="max-w-full rounded-[2rem] border border-white/12 bg-white/10 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm xl:max-w-[360px]">
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-200/75">
             Family players
           </p>

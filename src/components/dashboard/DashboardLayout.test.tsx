@@ -244,4 +244,23 @@ describe("DashboardLayout", () => {
 
     expect(rendered.textContent).toContain("header-call");
   });
+
+  it("can hide the family presence toggle when a page opts out", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MemoryRouter initialEntries={["/dashboard/games"]}>
+          <DashboardLayout showFamilyPresenceToggle={false}>
+            <div>layout-content</div>
+          </DashboardLayout>
+        </MemoryRouter>,
+      );
+      await flushPromises();
+    });
+
+    expect(container.textContent).not.toContain("family-presence-toggle");
+  });
 });

@@ -8,7 +8,7 @@
  * LAW 2: Summary cards answer "what's happening today" before detail
  * LAW 3: Ownership uses parent-a semantic tokens for user distinction
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Calendar, MessageSquare, Users, ArrowRight, Clock, BookHeart, DollarSign } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -20,11 +20,9 @@ import { ExchangeCheckin } from "@/components/exchange/ExchangeCheckin";
 import { SubscriptionBanner } from "@/components/dashboard/SubscriptionBanner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useCallSessions } from "@/hooks/useCallSessions";
-import { useCallableFamilyMembers, type CallableFamilyMember } from "@/hooks/useCallableFamilyMembers";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { useRealtimeChildren } from "@/hooks/useRealtimeChildren";
-import { DashboardCallLauncher } from "@/components/calls/DashboardCallLauncher";
+import { ParentHeaderCallAction } from "@/components/calls/ParentHeaderCallAction";
 import { BlogDashboardCard } from "@/components/dashboard/BlogDashboardCard";
 import { resolveSenderName } from "@/lib/displayResolver";
 import { fetchFamilyParentProfiles, type FamilyParentProfile } from "@/lib/familyScope";
@@ -48,13 +46,6 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { isParent, isThirdParty, profileId: activeProfileId, activeFamilyId } = useFamilyRole();
   const { children: realtimeChildren } = useRealtimeChildren();
-  const { loading: callableMembersLoading, members: callableMembers } = useCallableFamilyMembers();
-  const {
-    activeSession,
-    createCall,
-    incomingSession,
-    sessions,
-  } = useCallSessions(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [otherParent, setOtherParent] = useState<FamilyParentProfile | null>(null);
   const [messages, setMessages] = useState<RecentMessage[]>([]);
@@ -239,32 +230,6 @@ const Dashboard = () => {
     return format(date, "MMM d");
   };
 
-  const dashboardOutgoingSession = useMemo(() => {
-    if (!activeProfileId) {
-      return null;
-    }
-
-    return (
-      sessions.find(
-        (session) =>
-          session.status === "ringing" &&
-          session.initiator_profile_id === activeProfileId &&
-          session.source === "dashboard",
-      ) ?? null
-    );
-  }, [activeProfileId, sessions]);
-
-  const handleStartDashboardCall = useCallback(
-    async (contact: CallableFamilyMember, callType: "audio" | "video") => {
-      await createCall({
-        callType,
-        calleeProfileId: contact.profileId,
-        source: "dashboard",
-      });
-    },
-    [createCall],
-  );
-
   const canAccessRoute = useCallback(
     (pathname: string) =>
       canAccessProtectedRoute(pathname, {
@@ -352,14 +317,7 @@ const Dashboard = () => {
   return (
     <DashboardLayout
       headerActions={
-        isParent ? (
-          <DashboardCallLauncher
-            contacts={callableMembers}
-            disabled={Boolean(incomingSession || dashboardOutgoingSession || activeSession)}
-            loading={callableMembersLoading}
-            onStartCall={handleStartDashboardCall}
-          />
-        ) : null
+        isParent ? <ParentHeaderCallAction /> : null
       }
     >
       <div className="space-y-8 lg:space-y-10">

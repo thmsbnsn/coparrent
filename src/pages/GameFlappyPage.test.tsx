@@ -1,6 +1,6 @@
 import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFamily } from "@/contexts/FamilyContext";
@@ -78,6 +78,11 @@ const mockedUseGameLobby = vi.mocked(useGameLobby);
 const mockedUseKidPortalAccess = vi.mocked(useKidPortalAccess);
 const mockedUsePresenceHeartbeat = vi.mocked(usePresenceHeartbeat);
 
+const LocationDisplay = () => {
+  const location = useLocation();
+  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
+};
+
 describe("GameFlappyPage", () => {
   let container: HTMLDivElement | null = null;
   let root: Root | null = null;
@@ -90,9 +95,11 @@ describe("GameFlappyPage", () => {
     await act(async () => {
       root?.render(
         <MemoryRouter initialEntries={[initialEntry]}>
+          <LocationDisplay />
           <Routes>
             <Route path="/kids/portal" element={<div>kids-portal-page</div>} />
             <Route path="/login" element={<div>login-page</div>} />
+            <Route path="/dashboard/games/flappy-plane/lobby/:sessionId" element={<div>lobby-page</div>} />
             <Route path="/dashboard/games/flappy-plane" element={<GameFlappyPage />} />
           </Routes>
         </MemoryRouter>,
@@ -144,6 +151,7 @@ describe("GameFlappyPage", () => {
       loading: false,
       lobby: null,
       members: [],
+      prepareRematch: vi.fn().mockResolvedValue(true),
       refresh: vi.fn(),
       reportResult: vi.fn().mockResolvedValue(true),
       results: [],
@@ -195,6 +203,7 @@ describe("GameFlappyPage", () => {
       loading: false,
       lobby: null,
       members: [],
+      prepareRematch: vi.fn().mockResolvedValue(true),
       refresh: vi.fn(),
       reportResult: vi.fn().mockResolvedValue(true),
       results: [],
@@ -240,6 +249,126 @@ describe("GameFlappyPage", () => {
 
     expect(rendered.querySelector('[data-testid="flappy-auto-start"]')?.textContent).toBe("1");
     vi.useRealTimers();
+  });
+
+  it("returns finished session hosts to the lobby rematch flow", async () => {
+    const prepareRematch = vi.fn().mockResolvedValue(true);
+
+    mockedUseGameLobby.mockReturnValue({
+      currentMember: null,
+      currentResult: {
+        avatarUrl: "https://example.com/alice.png",
+        displayName: "Alice Parent",
+        distance: 512,
+        isWinner: true,
+        profileId: "profile-1",
+        reportedAt: "2026-04-01T13:04:30.000Z",
+        score: 8,
+      },
+      isCreator: true,
+      isJoined: true,
+      joinLobby: vi.fn(),
+      loading: false,
+      lobby: null,
+      members: [],
+      prepareRematch,
+      refresh: vi.fn(),
+      reportResult: vi.fn().mockResolvedValue(true),
+      results: [
+        {
+          avatarUrl: "https://example.com/alice.png",
+          displayName: "Alice Parent",
+          distance: 512,
+          isWinner: true,
+          profileId: "profile-1",
+          reportedAt: "2026-04-01T13:04:30.000Z",
+          score: 8,
+        },
+      ],
+      scopeError: null,
+      session: {
+        createdAt: "2026-04-01T13:00:00.000Z",
+        createdByDisplayName: "Alice Parent",
+        createdByProfileId: "profile-1",
+        endedAt: "2026-04-01T13:05:00.000Z",
+        familyId: "family-1",
+        gameDisplayName: "Toy Plane Dash",
+        gameSlug: "flappy-plane",
+        id: "session-1",
+        maxPlayers: 4,
+        memberCount: 2,
+        readyCount: 0,
+        seed: 48271,
+        startedAt: "2026-04-01T13:02:57.000Z",
+        startTime: "2026-04-01T13:03:00.000Z",
+        status: "finished",
+        updatedAt: "2026-04-01T13:05:00.000Z",
+        winnerProfileId: "profile-1",
+      },
+      setReady: vi.fn(),
+      startSession: vi.fn(),
+    } as never);
+
+    const rendered = await renderPage("/dashboard/games/flappy-plane?sessionId=session-1");
+
+    const rematchButton = Array.from(rendered.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Set up rematch"),
+    );
+
+    await act(async () => {
+      rematchButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(prepareRematch).toHaveBeenCalled();
+    expect(rendered.querySelector('[data-testid="location"]')?.textContent).toBe(
+      "/dashboard/games/flappy-plane/lobby/session-1",
+    );
+  });
+
+  it("redirects waiting synchronized sessions back to the lobby instead of staying on the race page", async () => {
+    mockedUseGameLobby.mockReturnValue({
+      currentMember: null,
+      currentResult: null,
+      isCreator: false,
+      isJoined: true,
+      joinLobby: vi.fn(),
+      loading: false,
+      lobby: null,
+      members: [],
+      prepareRematch: vi.fn().mockResolvedValue(true),
+      refresh: vi.fn(),
+      reportResult: vi.fn().mockResolvedValue(true),
+      results: [],
+      scopeError: null,
+      session: {
+        createdAt: "2026-04-01T13:00:00.000Z",
+        createdByDisplayName: "Alice Parent",
+        createdByProfileId: "profile-1",
+        endedAt: null,
+        familyId: "family-1",
+        gameDisplayName: "Toy Plane Dash",
+        gameSlug: "flappy-plane",
+        id: "session-1",
+        maxPlayers: 4,
+        memberCount: 2,
+        readyCount: 1,
+        seed: 48271,
+        startedAt: null,
+        startTime: null,
+        status: "waiting",
+        updatedAt: "2026-04-01T13:02:57.000Z",
+        winnerProfileId: null,
+      },
+      setReady: vi.fn(),
+      startSession: vi.fn(),
+    } as never);
+
+    const rendered = await renderPage("/dashboard/games/flappy-plane?sessionId=session-1");
+
+    expect(rendered.querySelector('[data-testid="location"]')?.textContent).toBe(
+      "/dashboard/games/flappy-plane/lobby/session-1",
+    );
   });
 
   it("keeps under-6 child accounts behind the approval gate", async () => {

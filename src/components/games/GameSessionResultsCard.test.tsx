@@ -28,7 +28,7 @@ describe("GameSessionResultsCard", () => {
     root = null;
   });
 
-  it("renders winner and fallback identity rows for shared results", async () => {
+  it("renders a podium, leaderboard, and current-player highlight for shared results", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -36,9 +36,19 @@ describe("GameSessionResultsCard", () => {
     await act(async () => {
       root?.render(
         <GameSessionResultsCard
-          currentProfileId="profile-1"
-          headline="You win"
+          actions={<div>race-actions</div>}
+          currentProfileId="profile-2"
+          headline="You lost"
           results={[
+            {
+              avatarUrl: null,
+              displayName: "Milo Pilot",
+              distance: 412,
+              isWinner: false,
+              profileId: "profile-2",
+              reportedAt: "2026-04-01T13:03:30.000Z",
+              score: 7,
+            },
             {
               avatarUrl: "https://example.com/alice.png",
               displayName: "Alice Parent",
@@ -50,12 +60,12 @@ describe("GameSessionResultsCard", () => {
             },
             {
               avatarUrl: null,
-              displayName: "Milo Pilot",
-              distance: 412,
+              displayName: "Jordan Judge",
+              distance: 301,
               isWinner: false,
-              profileId: "profile-2",
-              reportedAt: "2026-04-01T13:03:30.000Z",
-              score: 7,
+              profileId: "profile-3",
+              reportedAt: "2026-04-01T13:05:10.000Z",
+              score: 5,
             },
           ]}
           sessionStatus="finished"
@@ -67,10 +77,16 @@ describe("GameSessionResultsCard", () => {
     expect(container.querySelector('img[alt="Alice Parent"]')?.getAttribute("src")).toBe(
       "https://example.com/alice.png",
     );
+    expect(container.textContent).toContain("Leaderboard");
+    expect(container.textContent).toContain("1st");
+    expect(container.textContent).toContain("2nd");
+    expect(container.textContent).toContain("3rd");
     expect(container.textContent).toContain("Winner");
     expect(container.textContent).toContain("You");
     expect(container.textContent).toContain("MP");
-    expect(container.textContent).toContain("Score 8");
-    expect(container.textContent).toContain("Distance 512");
+    expect(container.textContent).toContain("Score");
+    expect(container.textContent).toContain("Distance");
+    expect(container.textContent).toContain("Skip reveal");
+    expect(container.textContent).toContain("race-actions");
   });
 });

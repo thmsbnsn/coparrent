@@ -43,6 +43,7 @@ const GlobalCallManager = lazy(() =>
 interface DashboardLayoutProps {
   children: React.ReactNode;
   headerActions?: React.ReactNode;
+  showFamilyPresenceToggle?: boolean;
   userRole?: "parent" | "lawoffice";
 }
 
@@ -76,7 +77,12 @@ const lawOfficeNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/law-office/dashboard", id: "nav-law-office-dashboard" },
 ];
 
-export const DashboardLayout = ({ children, headerActions, userRole = "parent" }: DashboardLayoutProps) => {
+export const DashboardLayout = ({
+  children,
+  headerActions,
+  showFamilyPresenceToggle = true,
+  userRole = "parent",
+}: DashboardLayoutProps) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [userInitials, setUserInitials] = useState("");
@@ -87,11 +93,12 @@ export const DashboardLayout = ({ children, headerActions, userRole = "parent" }
   const { isChildAccount, loading: childLoading } = useChildAccount();
   const { toast } = useToast();
   const isLawOfficeLayout = userRole === "lawoffice";
-  const shouldShowFamilyPresence = !isLawOfficeLayout && Boolean(activeFamilyId);
+  const hasFamilyPresenceScope = !isLawOfficeLayout && Boolean(activeFamilyId);
+  const shouldShowFamilyPresence = hasFamilyPresenceScope && showFamilyPresenceToggle;
   const isDashboardGameRoute = location.pathname.startsWith("/dashboard/games/");
 
   usePresenceHeartbeat({
-    enabled: shouldShowFamilyPresence && !isDashboardGameRoute,
+    enabled: hasFamilyPresenceScope && !isDashboardGameRoute,
     locationType: "dashboard",
   });
 
@@ -200,7 +207,7 @@ export const DashboardLayout = ({ children, headerActions, userRole = "parent" }
   );
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--background))_70%,hsl(var(--muted)/0.28)_100%)] flex">
+    <div className="flex min-h-screen overflow-x-clip bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--background))_70%,hsl(var(--muted)/0.28)_100%)]">
       {/* Desktop Sidebar */}
       <motion.aside
         initial={false}
@@ -240,10 +247,10 @@ export const DashboardLayout = ({ children, headerActions, userRole = "parent" }
       </AnimatePresence>
 
       {/* Main Content */}
-      <div className={cn("flex-1 flex flex-col min-h-screen", sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-[256px]")}>
+      <div className={cn("flex min-w-0 flex-1 flex-col min-h-screen", sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-[256px]")}>
         {/* Top Bar with safe area support - consistent across all pages */}
         <header 
-          className="sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-background/78 px-4 shadow-[0_16px_34px_-30px_rgba(8,21,47,0.5)] backdrop-blur-xl lg:px-6"
+          className="sticky top-0 z-30 flex min-w-0 items-center justify-between overflow-x-clip border-b border-border/70 bg-background/78 px-4 shadow-[0_16px_34px_-30px_rgba(8,21,47,0.5)] backdrop-blur-xl lg:px-6"
           style={{ 
             paddingTop: 'env(safe-area-inset-top, 0)', 
             minHeight: '4rem',
@@ -259,7 +266,7 @@ export const DashboardLayout = ({ children, headerActions, userRole = "parent" }
 
           <div className="flex-1" />
 
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             {headerActions}
             {shouldShowFamilyPresence && <FamilyPresenceToggle />}
             <ThemeToggle />
@@ -271,7 +278,7 @@ export const DashboardLayout = ({ children, headerActions, userRole = "parent" }
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 p-4 lg:p-6">
+        <main className="flex-1 min-w-0 overflow-x-clip p-4 lg:p-6">
           {children}
         </main>
       </div>

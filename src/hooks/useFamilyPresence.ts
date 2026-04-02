@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFamily } from "@/contexts/FamilyContext";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeFeatureAvailabilityError } from "@/lib/featureAvailabilityErrors";
 import type {
   FamilyPresenceMember,
   FamilyPresenceOverviewRow,
@@ -22,6 +23,8 @@ const mapPresenceRows = (rows: FamilyPresenceOverviewRow[] | null): FamilyPresen
   }));
 
 export const useFamilyPresence = () => {
+  const maintenanceMessage =
+    "Live family activity is still being enabled on this server. It will appear here after the update finishes.";
   const { activeFamilyId, loading: familyLoading } = useFamily();
   const [members, setMembers] = useState<FamilyPresenceMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +51,13 @@ export const useFamilyPresence = () => {
     if (error) {
       console.error("Error loading family presence:", error);
       setMembers([]);
-      setScopeError(error.message || "Unable to load live family presence.");
+      setScopeError(
+        normalizeFeatureAvailabilityError(
+          error.message,
+          maintenanceMessage,
+          ["get_family_presence_overview"],
+        ),
+      );
       setLoading(false);
       return;
     }

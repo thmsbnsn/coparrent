@@ -193,6 +193,7 @@ describe("GameLobbyPage", () => {
               },
             ]
           : [],
+        prepareRematch: vi.fn().mockResolvedValue(true),
         refresh: vi.fn(),
         reportResult: vi.fn().mockResolvedValue(true),
         results: [],
@@ -293,7 +294,21 @@ describe("GameLobbyPage", () => {
         results: [],
         session: {},
       },
-      members: [],
+      members: [
+        {
+          avatarUrl: "https://example.com/alice.png",
+          displayName: "Alice Parent",
+          isCreator: true,
+          joinedAt: "2026-04-01T13:00:00.000Z",
+          profileId: "profile-1",
+          readyAt: "2026-04-01T13:01:00.000Z",
+          relationshipLabel: "parent",
+          role: "parent",
+          seatOrder: 1,
+          status: "ready",
+        },
+      ],
+      prepareRematch: vi.fn().mockResolvedValue(true),
       refresh: vi.fn(),
       reportResult: vi.fn().mockResolvedValue(true),
       results: [],
@@ -375,6 +390,7 @@ describe("GameLobbyPage", () => {
       loading: false,
       lobby: null,
       members: [],
+      prepareRematch: vi.fn(),
       refresh: vi.fn(),
       reportResult: vi.fn(),
       results: [],
@@ -405,5 +421,76 @@ describe("GameLobbyPage", () => {
 
     expect(rendered.textContent).toContain("Multiplayer unavailable");
     expect(rendered.textContent).toContain("enable multiplayer");
+  });
+
+  it("shows finished-lobby rematch guidance for the host", async () => {
+    mockedUseGameLobby.mockReturnValue({
+      currentMember: {
+        avatarUrl: "https://example.com/alice.png",
+        displayName: "Alice Parent",
+        isCreator: true,
+        joinedAt: "2026-04-01T13:00:00.000Z",
+        profileId: "profile-1",
+        readyAt: "2026-04-01T13:01:00.000Z",
+        relationshipLabel: "parent",
+        role: "parent",
+        seatOrder: 1,
+        status: "ready",
+      },
+      currentResult: null,
+      isCreator: true,
+      isJoined: true,
+      joinLobby: vi.fn().mockResolvedValue(true),
+      loading: false,
+      lobby: {
+        members: [],
+        results: [],
+        session: {},
+      },
+      members: [
+        {
+          avatarUrl: "https://example.com/alice.png",
+          displayName: "Alice Parent",
+          isCreator: true,
+          joinedAt: "2026-04-01T13:00:00.000Z",
+          profileId: "profile-1",
+          readyAt: "2026-04-01T13:01:00.000Z",
+          relationshipLabel: "parent",
+          role: "parent",
+          seatOrder: 1,
+          status: "ready",
+        },
+      ],
+      prepareRematch: vi.fn().mockResolvedValue(true),
+      refresh: vi.fn(),
+      reportResult: vi.fn().mockResolvedValue(true),
+      results: [],
+      scopeError: null,
+      session: {
+        createdAt: "2026-04-01T13:00:00.000Z",
+        createdByDisplayName: "Alice Parent",
+        createdByProfileId: "profile-1",
+        endedAt: "2026-04-01T13:05:00.000Z",
+        familyId: "family-1",
+        gameDisplayName: "Toy Plane Dash",
+        gameSlug: "flappy-plane",
+        id: "session-1",
+        maxPlayers: 4,
+        memberCount: 2,
+        readyCount: 0,
+        seed: 48271,
+        startedAt: "2026-04-01T13:02:57.000Z",
+        startTime: "2026-04-01T13:03:00.000Z",
+        status: "finished",
+        updatedAt: "2026-04-01T13:05:00.000Z",
+        winnerProfileId: "profile-1",
+      },
+      setReady: vi.fn().mockResolvedValue(true),
+      startSession: vi.fn().mockResolvedValue(true),
+    } as never);
+
+    const rendered = await renderPage();
+    expect(rendered.textContent).toContain("Set up rematch");
+    expect(rendered.textContent).toContain("reset the same family-scoped room");
   });
 });

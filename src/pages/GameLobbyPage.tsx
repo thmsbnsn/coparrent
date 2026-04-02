@@ -50,6 +50,7 @@ export default function GameLobbyPage() {
     joinLobby,
     loading: lobbyLoading,
     members,
+    prepareRematch,
     scopeError: lobbyScopeError,
     session,
     setReady,
@@ -59,7 +60,7 @@ export default function GameLobbyPage() {
     sessionId: sessionId ?? null,
   });
   const [launchingLobby, setLaunchingLobby] = useState(false);
-  const [actionPending, setActionPending] = useState<"join" | "ready" | "start" | null>(null);
+  const [actionPending, setActionPending] = useState<"join" | "ready" | "start" | "rematch" | null>(null);
   const launcherAttemptRef = useRef<string | null>(null);
   const childCanUseLobby = !isChildAccount || (
     isChildGameAllowed(
@@ -212,6 +213,15 @@ export default function GameLobbyPage() {
     }
   };
 
+  const handlePrepareRematch = async () => {
+    setActionPending("rematch");
+    try {
+      await prepareRematch();
+    } finally {
+      setActionPending(null);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -354,9 +364,11 @@ export default function GameLobbyPage() {
           joining={actionPending === "join"}
           members={members}
           onJoin={handleJoin}
+          onPrepareRematch={handlePrepareRematch}
           onSetReady={handleSetReady}
           onStart={handleStart}
           readyUpdating={actionPending === "ready"}
+          rematchPending={actionPending === "rematch"}
           session={session}
           starting={actionPending === "start"}
         />

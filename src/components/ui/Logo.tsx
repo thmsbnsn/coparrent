@@ -8,9 +8,9 @@ interface LogoProps {
 
 export const Logo = ({ className, showText = true, size = "md" }: LogoProps) => {
   const sizes = {
-    sm: { icon: "w-6 h-6", text: "text-lg" },
-    md: { icon: "w-8 h-8", text: "text-xl" },
-    lg: { icon: "w-12 h-12", text: "text-3xl" },
+    sm: { frame: "h-6 w-6", image: "scale-[1.42]", text: "text-lg" },
+    md: { frame: "h-8 w-8", image: "scale-[1.4]", text: "text-xl" },
+    lg: { frame: "h-12 w-12", image: "scale-[1.38]", text: "text-3xl" },
   };
 
   return (
@@ -18,12 +18,14 @@ export const Logo = ({ className, showText = true, size = "md" }: LogoProps) => 
       className={cn("flex items-center gap-2", className)}
       aria-label={showText ? undefined : "CoParrent"}
     >
-      <img
-        src="/icons/logo.svg"
-        alt={showText ? "" : "CoParrent"}
-        aria-hidden={showText}
-        className={cn("shrink-0 object-contain", sizes[size].icon)}
-      />
+      <span className={cn("relative shrink-0 overflow-hidden rounded-[22%]", sizes[size].frame)}>
+        <img
+          src="/icons/icon-192.png"
+          alt={showText ? "" : "CoParrent"}
+          aria-hidden={showText}
+          className={cn("absolute inset-0 h-full w-full object-cover", sizes[size].image)}
+        />
+      </span>
       {showText && (
         <span className={cn("font-display font-bold tracking-tight text-foreground", sizes[size].text)}>
           CoParrent
