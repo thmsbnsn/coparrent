@@ -3,39 +3,65 @@
  * @summary-pattern Custody calendar with parenting time visualization
  * @ownership Parent A (blue) vs Parent B (green) via semantic tokens
  * @court-view Print export and calendar export dialog for legal documentation
- * 
+ *
  * LAW 1: Hybrid Overview (calendar view) + Action (wizard setup)
  * LAW 3: Uses parent-a/parent-b semantic classes for ownership distinction
  * LAW 5: Colors are purely semantic - blue=you, green=co-parent
  * LAW 6: Export dialog provides court-ready schedule documentation
  */
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Printer, Download, Settings2, ArrowRightLeft, Loader2, Calendar, Trophy, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  AlertTriangle,
+  ArrowRightLeft,
+  Calendar,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Loader2,
+  Lock,
+  Printer,
+  Settings2,
+  ShieldCheck,
+  Trophy,
+  X,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { format } from "date-fns";
+import { toast } from "sonner";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
-import { Button } from "@/components/ui/button";
-import { CalendarWizard, ScheduleConfig } from "@/components/calendar/CalendarWizard";
 import { CalendarExportDialog } from "@/components/calendar/CalendarExportDialog";
+import { CalendarWizard, ScheduleConfig } from "@/components/calendar/CalendarWizard";
 import { ScheduleChangeRequest, ScheduleChangeRequestData } from "@/components/calendar/ScheduleChangeRequest";
 import { SportsEventDetail } from "@/components/calendar/SportsEventDetail";
 import { SportsEventListPopup } from "@/components/calendar/SportsEventListPopup";
-import { useScheduleRequests } from "@/hooks/useScheduleRequests";
-import { useSchedulePersistence } from "@/hooks/useSchedulePersistence";
-import { usePermissions } from "@/hooks/usePermissions";
-import { useSportsEvents, CalendarSportsEvent } from "@/hooks/useSportsEvents";
+import { ViewOnlyBadge } from "@/components/ui/ViewOnlyBadge";
+import { Button } from "@/components/ui/button";
 import { useFamily } from "@/contexts/FamilyContext";
+import { usePermissions } from "@/hooks/usePermissions";
+import { useSchedulePersistence } from "@/hooks/useSchedulePersistence";
+import { useScheduleRequests } from "@/hooks/useScheduleRequests";
+import { useSportsEvents, CalendarSportsEvent } from "@/hooks/useSportsEvents";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import { ViewOnlyBadge } from "@/components/ui/ViewOnlyBadge";
-import { toast } from "sonner";
+
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December"
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
-// Pattern definitions for different schedule types
 const PATTERN_DEFINITIONS: Record<string, number[]> = {
   "alternating-weeks": [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1],
   "2-2-3": [0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1],
@@ -44,35 +70,47 @@ const PATTERN_DEFINITIONS: Record<string, number[]> = {
   "every-other-weekend": [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 };
 
-const getParentForDate = (date: Date, config: ScheduleConfig | null): "A" | "B" => {
-  if (!config) {
-    // Default alternating weeks
-    const weekNumber = Math.floor(date.getTime() / (7 * 24 * 60 * 60 * 1000));
-    return weekNumber % 2 === 0 ? "A" : "B";
-  }
-
+const getParentForDate = (date: Date, config: ScheduleConfig): "A" | "B" => {
   const pattern = config.customPattern || PATTERN_DEFINITIONS[config.pattern] || PATTERN_DEFINITIONS["alternating-weeks"];
   const startDate = new Date(config.startDate);
   startDate.setHours(0, 0, 0, 0);
-  
+
   const diffTime = date.getTime() - startDate.getTime();
   const diffDays = Math.floor(diffTime / (24 * 60 * 60 * 1000));
   const patternIndex = ((diffDays % pattern.length) + pattern.length) % pattern.length;
-  
+
   const parentFromPattern = pattern[patternIndex] === 0 ? "A" : "B";
-  
-  // Flip if starting parent is B
+
   if (config.startingParent === "B") {
     return parentFromPattern === "A" ? "B" : "A";
   }
-  
+
   return parentFromPattern;
+};
+
+const getPatternName = (scheduleConfig: ScheduleConfig) => {
+  const patterns: Record<string, string> = {
+    "alternating-weeks": "Alternating weeks",
+    "2-2-3": "2-2-3 rotation",
+    "2-2-5-5": "2-2-5-5 rotation",
+    "3-4-4-3": "3-4-4-3 rotation",
+    "every-other-weekend": "Every other weekend",
+    custom: "Custom pattern",
+  };
+
+  return patterns[scheduleConfig.pattern] || scheduleConfig.pattern;
 };
 
 const CalendarPage = () => {
   const navigate = useNavigate();
-  const { activeFamilyId, loading: familyLoading, profileId } = useFamily();
-  const { permissions, isThirdParty, isChildAccount } = usePermissions();
+  const {
+    activeFamily,
+    activeFamilyId,
+    loading: familyLoading,
+    memberships = [],
+    profileId,
+  } = useFamily();
+  const { permissions, isChildAccount, isThirdParty } = usePermissions();
   const { createRequest } = useScheduleRequests();
   const { scheduleConfig, loading: scheduleLoading, saving, saveSchedule } = useSchedulePersistence();
   const { getEventsForDate, hasEventsOnDate } = useSportsEvents();
@@ -151,25 +189,31 @@ const CalendarPage = () => {
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
-
   const firstDayOfMonth = new Date(year, month, 1);
   const lastDayOfMonth = new Date(year, month + 1, 0);
   const startingDayOfWeek = firstDayOfMonth.getDay();
   const daysInMonth = lastDayOfMonth.getDate();
+  const hasFamilyScope = Boolean(activeFamilyId);
+
+  const days: (Date | null)[] = useMemo(() => {
+    const nextDays: (Date | null)[] = [];
+    for (let index = 0; index < startingDayOfWeek; index += 1) {
+      nextDays.push(null);
+    }
+    for (let day = 1; day <= daysInMonth; day += 1) {
+      nextDays.push(new Date(year, month, day));
+    }
+    return nextDays;
+  }, [daysInMonth, month, startingDayOfWeek, year]);
+
+  const today = useMemo(() => {
+    const nextToday = new Date();
+    nextToday.setHours(0, 0, 0, 0);
+    return nextToday;
+  }, []);
 
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
-
-  const days: (Date | null)[] = [];
-  for (let i = 0; i < startingDayOfWeek; i++) {
-    days.push(null);
-  }
-  for (let day = 1; day <= daysInMonth; day++) {
-    days.push(new Date(year, month, day));
-  }
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
 
   const handleWizardComplete = async (config: ScheduleConfig) => {
     const success = await saveSchedule(config);
@@ -179,6 +223,10 @@ const CalendarPage = () => {
   };
 
   const handleDateClick = (date: Date) => {
+    if (!scheduleConfig || isThirdParty) {
+      return;
+    }
+
     setSelectedDate(date);
     setShowChangeRequest(true);
   };
@@ -194,18 +242,22 @@ const CalendarPage = () => {
       return;
     }
 
+    if (!scheduleConfig) {
+      toast.error("Save a parenting schedule for the active family before syncing the calendar.");
+      return;
+    }
+
     setShowExportDialog(true);
   };
 
   const handleScheduleChangeRequest = async (
-    request: Omit<ScheduleChangeRequestData, "id" | "status" | "createdAt" | "fromParent">
+    request: Omit<ScheduleChangeRequestData, "id" | "status" | "createdAt" | "fromParent">,
   ) => {
-    // Store in database using the hook
     const result = await createRequest({
-      request_type: request.type,
       original_date: request.originalDate,
       proposed_date: request.proposedDate,
       reason: request.reason,
+      request_type: request.type,
     });
 
     if (result) {
@@ -214,379 +266,613 @@ const CalendarPage = () => {
     }
   };
 
-  const getPatternName = () => {
-    if (!scheduleConfig) return "Alternating Weeks (Default)";
-    const patterns: Record<string, string> = {
-      "alternating-weeks": "Alternating Weeks",
-      "2-2-3": "2-2-3 Rotation",
-      "2-2-5-5": "2-2-5-5 Rotation",
-      "3-4-4-3": "3-4-4-3 Rotation",
-      "every-other-weekend": "Every Other Weekend",
-      "custom": "Custom Pattern",
-    };
-    return patterns[scheduleConfig.pattern] || scheduleConfig.pattern;
-  };
+  const activeFamilyLabel = activeFamily?.display_name || (hasFamilyScope ? "Selected family" : "No family selected");
+  const scopeDescription = hasFamilyScope
+    ? "Everything on this page is scoped to the selected family only."
+    : memberships.length > 0
+      ? "Select an active family before viewing, editing, or exporting a parenting schedule."
+      : "A family assignment is required before a parenting schedule can load.";
+  const accessLabel = permissions.isViewOnly
+    ? isChildAccount
+      ? "Child view"
+      : "View-only family member"
+    : "Parent or guardian";
+  const scheduleStatusLabel = familyLoading
+    ? "Resolving family scope"
+    : !hasFamilyScope
+      ? "Family scope required"
+      : scheduleLoading
+        ? "Loading saved plan"
+        : scheduleConfig
+          ? "Saved schedule active"
+          : "No schedule saved";
+  const scheduleSummary = scheduleConfig
+    ? `${getPatternName(scheduleConfig)} with exchanges at ${scheduleConfig.exchangeTime || "not set yet"}`
+    : "No parenting-time plan is shown until one is explicitly saved for the active family.";
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4"
+          className="relative isolate overflow-hidden rounded-[30px] border border-primary/15 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.16),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(45,212,191,0.14),transparent_35%),linear-gradient(145deg,rgba(15,23,42,0.96),rgba(10,16,27,0.94))] p-5 text-white shadow-[0_28px_70px_-40px_rgba(15,23,42,0.95)] sm:p-6"
         >
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl lg:text-3xl font-display font-bold">Parenting Calendar</h1>
-              {permissions.isViewOnly && (
-                <ViewOnlyBadge reason={permissions.viewOnlyReason || undefined} />
-              )}
+          <div className="absolute inset-y-0 right-8 w-36 rounded-full bg-primary/15 blur-3xl" />
+          <div className="absolute left-6 top-5 h-28 w-28 rounded-full bg-accent/20 blur-3xl" />
+          <div className="relative flex flex-col gap-6">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-slate-100">
+                    <CalendarDays className="h-3.5 w-3.5" />
+                    Parenting calendar
+                  </div>
+                  <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-slate-200/80">
+                    {scheduleStatusLabel}
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h1 className="max-w-3xl text-3xl font-display font-bold tracking-tight text-white sm:text-4xl">
+                    Family schedule without guesswork
+                  </h1>
+                  <p className="max-w-2xl text-sm leading-6 text-slate-200/80 sm:text-base">
+                    Review parenting time, request changes, and export calendar details only inside the selected family.
+                    If family scope or a saved plan is missing, this page stops and says so explicitly.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 xl:w-[360px] xl:grid-cols-1">
+                <div className="rounded-[24px] border border-white/10 bg-white/6 p-4 backdrop-blur-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
+                    Active family
+                  </p>
+                  <p className="mt-3 text-lg font-semibold text-white">{activeFamilyLabel}</p>
+                  <p className="mt-1 text-sm text-slate-300/75">{scopeDescription}</p>
+                </div>
+                <div className="rounded-[24px] border border-white/10 bg-slate-950/35 p-4 backdrop-blur-sm">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
+                    Access
+                  </p>
+                  <p className="mt-3 text-lg font-semibold text-white">{accessLabel}</p>
+                  <p className="mt-1 text-sm text-slate-300/75">
+                    {permissions.isViewOnly
+                      ? "You can review the schedule here, but mutations stay restricted to parents or guardians in the active family."
+                      : "Edit, export, and change-request actions stay tied to the selected family only."}
+                  </p>
+                </div>
+              </div>
             </div>
-            <p className="text-muted-foreground mt-1">
-              {permissions.isViewOnly 
-                ? "View the family custody schedule" 
-                : "View and manage your custody schedule"}
-            </p>
+
+            <div className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
+              <div className="rounded-[24px] border border-white/10 bg-white/6 p-4 backdrop-blur-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
+                  Schedule state
+                </p>
+                <p className="mt-3 text-xl font-display font-semibold text-white">{scheduleStatusLabel}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-300/75">{scheduleSummary}</p>
+              </div>
+              <div className="rounded-[24px] border border-white/10 bg-white/6 p-4 backdrop-blur-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
+                  Family scope
+                </p>
+                <p className="mt-3 text-xl font-display font-semibold text-white">
+                  {hasFamilyScope ? "Explicitly selected" : "Missing"}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-slate-300/75">
+                  {hasFamilyScope
+                    ? `Family ID ${activeFamilyId}`
+                    : "Calendar details and exports remain hidden until a family is selected."}
+                </p>
+              </div>
+              <div className="rounded-[24px] border border-white/10 bg-white/6 p-4 backdrop-blur-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
+                  Quick actions
+                </p>
+                <div className="mt-3 flex flex-col gap-2">
+                  {permissions.canEditCalendar ? (
+                    <Button
+                      size="sm"
+                      className="justify-start rounded-full bg-white text-slate-950 hover:bg-slate-100"
+                      disabled={familyLoading || !hasFamilyScope || saving}
+                      onClick={() => setShowWizard(true)}
+                    >
+                      <Settings2 className="mr-2 h-4 w-4" />
+                      {scheduleConfig ? "Edit saved schedule" : "Set up schedule"}
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="justify-start rounded-full border-white/15 bg-white/6 text-white hover:bg-white/10"
+                    disabled={familyLoading || !hasFamilyScope || !scheduleConfig}
+                    onClick={handleOpenExportDialog}
+                  >
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Sync calendar
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
-          {permissions.canEditCalendar && (
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button variant="outline" size="sm" onClick={() => setShowChangeRequest(true)}>
-                <ArrowRightLeft className="w-4 h-4 mr-2" />
-                Request Change
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => window.print()}>
-                <Printer className="w-4 h-4 mr-2" />
-                Print
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleOpenExportDialog}>
-                <Calendar className="w-4 h-4 mr-2" />
-                Sync Calendar
-              </Button>
-              <Button size="sm" onClick={() => setShowWizard(true)} disabled={saving}>
-                {saving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Settings2 className="w-4 h-4 mr-2" />
-                )}
-                {scheduleConfig ? "Edit Schedule" : "Setup Schedule"}
-              </Button>
-            </div>
-          )}
         </motion.div>
 
-        {/* Read-only notice for view-only users */}
-        {permissions.isViewOnly && (
+        {permissions.isViewOnly && hasFamilyScope && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.05 }}
-            className="p-4 rounded-xl bg-muted/50 border border-border"
+            className="rounded-[24px] border border-border/70 bg-card/90 p-4 shadow-[0_20px_40px_-32px_rgba(15,23,42,0.8)]"
           >
             <div className="flex items-start gap-3">
-              <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center shrink-0">
-                <Calendar className="w-4 h-4 text-muted-foreground" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/70 bg-muted/60 text-muted-foreground">
+                <Lock className="h-5 w-5" />
               </div>
-              <div>
-                <p className="font-medium">Read-Only Access</p>
-                <p className="text-sm text-muted-foreground">
-                  {isChildAccount 
-                    ? "You can view the schedule but only parents can make changes."
-                    : "As a family member, you can view the custody schedule but cannot make changes. Contact the parents if you need schedule modifications."}
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-foreground">Read-only access</p>
+                  <ViewOnlyBadge reason={permissions.viewOnlyReason || undefined} />
+                </div>
+                <p className="text-sm leading-6 text-muted-foreground">
+                  {isChildAccount
+                    ? "You can review the family schedule, but only parents or guardians can save changes or send schedule requests."
+                    : "You can review this family's schedule, but change requests and schedule edits stay limited to parents or guardians."}
                 </p>
               </div>
             </div>
           </motion.div>
         )}
 
-        {/* Loading State */}
-        {scheduleLoading && (
+        {familyLoading ? (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex items-center justify-center py-12"
+            className="flex items-center justify-center rounded-[30px] border border-border/70 bg-card/90 px-6 py-16 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.85)]"
           >
-            <Loader2 className="w-8 h-8 animate-spin text-primary" />
-            <span className="ml-3 text-muted-foreground">Loading schedule...</span>
+            <div className="text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+              <p className="mt-4 text-sm font-semibold text-foreground">Resolving family scope</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                The calendar waits for an explicit active family before it shows parenting-time details.
+              </p>
+            </div>
           </motion.div>
-        )}
-
-        {/* Current Schedule Info */}
-        {!scheduleLoading && scheduleConfig && (
+        ) : !hasFamilyScope ? (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="p-4 rounded-xl bg-primary/5 border border-primary/20"
+            className="rounded-[30px] border border-warning/30 bg-gradient-to-br from-warning/10 via-card to-card p-6 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.85)]"
           >
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-              <div>
-                <span className="text-muted-foreground">Pattern:</span>{" "}
-                <span className="font-medium">{getPatternName()}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Exchange:</span>{" "}
-                <span className="font-medium">{scheduleConfig.exchangeTime}</span>
-              </div>
-              {scheduleConfig.exchangeLocation && (
-                <div>
-                  <span className="text-muted-foreground">Location:</span>{" "}
-                  <span className="font-medium">{scheduleConfig.exchangeLocation}</span>
+            <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+              <div className="flex gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-warning/35 bg-warning/10 text-warning">
+                  <AlertTriangle className="h-6 w-6" />
                 </div>
-              )}
-              <div>
-                <span className="text-muted-foreground">Holidays:</span>{" "}
-                <span className="font-medium">{scheduleConfig.holidays.length} configured</span>
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-warning">
+                    Fail-closed family scope
+                  </p>
+                  <h2 className="text-2xl font-display font-semibold text-foreground">Family scope required</h2>
+                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                    {memberships.length > 0
+                      ? "Select an active family before viewing, printing, or exporting the parenting calendar. This page does not infer which family you mean."
+                      : "No family assignment is available for this account yet, so the parenting calendar stays unavailable until scope is explicit."}
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-[22px] border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+                {memberships.length > 0
+                  ? "Use the family switcher in the sidebar to choose the family you want."
+                  : "Complete family setup or accept an invitation before returning here."}
               </div>
             </div>
           </motion.div>
-        )}
-
-        {/* View Toggle */}
-        {!scheduleLoading && (
+        ) : scheduleLoading ? (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            className="flex gap-2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex items-center justify-center rounded-[30px] border border-border/70 bg-card/90 px-6 py-16 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.85)]"
           >
-            <Button
-              variant={viewMode === "calendar" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setViewMode("calendar")}
-            >
-              Calendar View
-            </Button>
-            <Button
-              variant={viewMode === "court" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setViewMode("court")}
-            >
-              Court View
-            </Button>
-          </motion.div>
-        )}
-
-        {/* Legend */}
-        {!scheduleLoading && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-          className="flex flex-wrap items-center gap-6"
-        >
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-parent-a" />
-            <span className="text-sm">Your Time (Parent A)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-parent-b" />
-            <span className="text-sm">Co-Parent's Time (Parent B)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-amber-500" />
-            <span className="text-sm">Sports/Activity Event</span>
-          </div>
-        </motion.div>
-        )}
-
-        {!scheduleLoading && viewMode === "calendar" ? (
-          /* Calendar View */
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="rounded-2xl border border-border bg-card overflow-hidden"
-          >
-            {/* Calendar Header */}
-            <div className="flex items-center justify-between p-4 border-b border-border">
-              <button
-                onClick={prevMonth}
-                className="p-2 rounded-lg hover:bg-muted transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <h2 className="text-lg font-display font-semibold">
-                {MONTHS[month]} {year}
-              </h2>
-              <button
-                onClick={nextMonth}
-                className="p-2 rounded-lg hover:bg-muted transition-colors"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
+            <div className="text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+              <p className="mt-4 text-sm font-semibold text-foreground">Loading saved schedule</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                We are loading the parenting plan for {activeFamilyLabel.toLowerCase()} before showing calendar details.
+              </p>
             </div>
-
-            {/* Day Headers */}
-            <div className="grid grid-cols-7 border-b border-border">
-              {DAYS.map((day) => (
-                <div
-                  key={day}
-                  className="py-3 text-center text-sm font-medium text-muted-foreground"
+          </motion.div>
+        ) : !scheduleConfig ? (
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="rounded-[30px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/20 p-6 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.85)]"
+          >
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+                  <ShieldCheck className="h-6 w-6" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-primary">
+                    Explicit schedule required
+                  </p>
+                  <h2 className="text-2xl font-display font-semibold text-foreground">
+                    No parenting plan saved for this family
+                  </h2>
+                  <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
+                    The calendar will not assume an alternating pattern or generate a court summary on its own.
+                    Save a schedule for {activeFamilyLabel.toLowerCase()} first, then the day-by-day calendar and
+                    export tools will unlock.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {permissions.canEditCalendar ? (
+                  <Button className="rounded-full" onClick={() => setShowWizard(true)} disabled={saving}>
+                    {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Settings2 className="mr-2 h-4 w-4" />}
+                    Set up schedule
+                  </Button>
+                ) : null}
+                <Button
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={handleOpenExportDialog}
+                  disabled
                 >
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar Grid */}
-            <div className="grid grid-cols-7">
-              {days.map((date, index) => {
-                if (!date) {
-                  return <div key={`empty-${index}`} className="aspect-square border-b border-r border-border bg-muted/20" />;
-                }
-
-                const parent = getParentForDate(date, scheduleConfig);
-                const isToday = date.getTime() === today.getTime();
-                const hasSportsEvents = hasEventsOnDate(date);
-                const dateSportsEvents = getEventsForDate(date);
-
-                return (
-                  <div
-                    key={date.toISOString()}
-                    onClick={() => !isThirdParty && handleDateClick(date)}
-                    className={cn(
-                      "aspect-square p-2 border-b border-r border-border relative transition-colors",
-                      parent === "A" ? "bg-parent-a-light" : "bg-parent-b-light",
-                      !isThirdParty && "cursor-pointer group hover:bg-parent-a/20 hover:bg-parent-b/20",
-                      !isThirdParty && parent === "A" && "hover:bg-parent-a/20",
-                      !isThirdParty && parent === "B" && "hover:bg-parent-b/20"
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "inline-flex items-center justify-center w-7 h-7 rounded-full text-sm font-medium",
-                        isToday && "bg-primary text-primary-foreground"
-                      )}
-                    >
-                      {date.getDate()}
-                    </span>
-                    <div className={cn(
-                      "absolute bottom-1 right-1 w-2 h-2 rounded-full",
-                      parent === "A" ? "bg-parent-a" : "bg-parent-b"
-                    )} />
-                    {/* Sports event indicator */}
-                    {hasSportsEvents && (
-                      <div 
-                        className="absolute bottom-1 left-1 flex items-center gap-0.5 cursor-pointer z-10"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (dateSportsEvents.length === 1) {
-                            setSelectedSportsEvent(dateSportsEvents[0]);
-                          } else {
-                            // For multiple events, show the list popup
-                            setSportsEventListDate(date);
-                            setSportsEventListEvents(dateSportsEvents);
-                            setShowSportsEventList(true);
-                          }
-                        }}
-                      >
-                        <Trophy className="w-3 h-3 text-amber-500" />
-                        {dateSportsEvents.length > 1 && (
-                          <span className="text-[10px] font-medium text-amber-600">{dateSportsEvents.length}</span>
-                        )}
-                      </div>
-                    )}
-                    {!isThirdParty && !hasSportsEvents && (
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-background/60 rounded">
-                        <ArrowRightLeft className="w-4 h-4 text-muted-foreground" />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </motion.div>
-        ) : !scheduleLoading ? (
-          /* Court View */
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
-            className="rounded-2xl border border-border bg-card p-6"
-          >
-            <div className="text-center mb-8">
-              <h2 className="text-xl font-display font-bold mb-2">Parenting Time Schedule</h2>
-              <p className="text-sm text-muted-foreground">Court-Ready Summary Document</p>
-            </div>
-
-            <div className="max-w-2xl mx-auto space-y-6">
-              <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                <h3 className="font-semibold mb-2">Schedule Pattern</h3>
-                <p className="text-sm text-muted-foreground">
-                  {getPatternName()} between Parent A and Parent B
-                  {scheduleConfig?.exchangeTime && `, with exchanges occurring at ${scheduleConfig.exchangeTime}`}.
-                </p>
-              </div>
-
-              <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                <h3 className="font-semibold mb-2">Holiday Schedule</h3>
-                <div className="text-sm text-muted-foreground space-y-1">
-                  {scheduleConfig?.holidays && scheduleConfig.holidays.length > 0 ? (
-                    scheduleConfig.holidays.map((h) => (
-                      <p key={h.name}>
-                        • {h.name}:{" "}
-                        {h.rule === "alternate"
-                          ? "Alternating years (Parent A - Even years)"
-                          : h.rule === "split"
-                          ? "Split between parents"
-                          : h.rule === "fixed-a"
-                          ? "Always with Parent A"
-                          : "Always with Parent B"}
-                      </p>
-                    ))
-                  ) : (
-                    <>
-                      <p>• Thanksgiving: Alternating years (Parent A - Even years)</p>
-                      <p>• Christmas Eve/Day: Split (Eve to one parent, Day to other)</p>
-                      <p>• Summer Break: Two consecutive weeks each parent</p>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              <div className="p-4 rounded-lg bg-muted/30 border border-border">
-                <h3 className="font-semibold mb-2">Exchange Details</h3>
-                <div className="text-sm text-muted-foreground space-y-1">
-                  <p>• Primary Location: {scheduleConfig?.exchangeLocation || "School pickup/dropoff"}</p>
-                  <p>• Alternate Location: {scheduleConfig?.alternateLocation || "Public library"}</p>
-                  <p>• Standard Time: {scheduleConfig?.exchangeTime || "6:00 PM"}</p>
-                </div>
-              </div>
-
-              <div className="flex justify-center pt-4">
-                <Button variant="outline">
-                  <Download className="w-4 h-4 mr-2" />
-                  Export as PDF
+                  <Calendar className="mr-2 h-4 w-4" />
+                  Sync calendar
                 </Button>
               </div>
             </div>
           </motion.div>
-        ) : null}
-      </div>
+        ) : (
+          <>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 }}
+              className="grid gap-4 xl:grid-cols-[1.35fr_0.85fr]"
+            >
+              <div className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-5 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.85)]">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                        Saved plan
+                      </div>
+                      <div className="rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground">
+                        {getPatternName(scheduleConfig)}
+                      </div>
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-display font-semibold text-foreground">Current parenting plan</h2>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        Review the saved schedule for {activeFamilyLabel.toLowerCase()}, request changes when needed,
+                        and keep print and sync actions tied to the same explicit family.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                    {permissions.canEditCalendar ? (
+                      <Button variant="outline" className="rounded-full" onClick={() => setShowChangeRequest(true)}>
+                        <ArrowRightLeft className="mr-2 h-4 w-4" />
+                        Request change
+                      </Button>
+                    ) : null}
+                    <Button variant="outline" className="rounded-full" onClick={() => window.print()}>
+                      <Printer className="mr-2 h-4 w-4" />
+                      Print
+                    </Button>
+                    <Button variant="outline" className="rounded-full" onClick={handleOpenExportDialog}>
+                      <Calendar className="mr-2 h-4 w-4" />
+                      Sync calendar
+                    </Button>
+                    {permissions.canEditCalendar ? (
+                      <Button className="rounded-full" onClick={() => setShowWizard(true)} disabled={saving}>
+                        {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Settings2 className="mr-2 h-4 w-4" />}
+                        Edit schedule
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
 
-      {/* Calendar Wizard Modal */}
+              <div className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-5 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.85)]">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                  <div className="rounded-[22px] border border-border/70 bg-background/65 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Exchange time
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-foreground">{scheduleConfig.exchangeTime || "Not set"}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {scheduleConfig.exchangeLocation || "No primary exchange location saved yet."}
+                    </p>
+                  </div>
+                  <div className="rounded-[22px] border border-border/70 bg-background/65 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Holiday overrides
+                    </p>
+                    <p className="mt-2 text-lg font-semibold text-foreground">{scheduleConfig.holidays.length}</p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {scheduleConfig.holidays.length > 0
+                        ? "Custom holiday rules are saved for this family."
+                        : "No custom holiday overrides are saved yet."}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.08 }}
+              className="flex flex-col gap-4 rounded-[28px] border border-border/70 bg-card/90 p-5 shadow-[0_20px_45px_-34px_rgba(15,23,42,0.85)]"
+            >
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-sm font-medium text-foreground">
+                    <div className="h-3 w-3 rounded-full bg-parent-a" />
+                    Your parenting time
+                  </div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-sm font-medium text-foreground">
+                    <div className="h-3 w-3 rounded-full bg-parent-b" />
+                    Other parent or guardian
+                  </div>
+                  <div className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/80 px-3 py-1.5 text-sm font-medium text-foreground">
+                    <Trophy className="h-4 w-4 text-amber-500" />
+                    Sports or activity day
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant={viewMode === "calendar" ? "default" : "outline"}
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => setViewMode("calendar")}
+                  >
+                    Calendar view
+                  </Button>
+                  <Button
+                    variant={viewMode === "court" ? "default" : "outline"}
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => setViewMode("court")}
+                  >
+                    Court view
+                  </Button>
+                </div>
+              </div>
+
+              {exportScopeError ? (
+                <div className="rounded-[20px] border border-warning/30 bg-warning/5 px-4 py-3 text-sm text-muted-foreground">
+                  {exportScopeError}
+                </div>
+              ) : null}
+            </motion.div>
+
+            {viewMode === "calendar" ? (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.12 }}
+                className="overflow-hidden rounded-[30px] border border-border/70 bg-card shadow-[0_24px_50px_-36px_rgba(15,23,42,0.85)]"
+              >
+                <div className="flex items-center justify-between border-b border-border/70 px-4 py-4 sm:px-5">
+                  <button
+                    onClick={prevMonth}
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/70 bg-background/70 transition-colors hover:bg-muted"
+                    aria-label="Previous month"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <div className="text-center">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Saved family plan
+                    </p>
+                    <h2 className="mt-1 text-lg font-display font-semibold text-foreground">
+                      {MONTHS[month]} {year}
+                    </h2>
+                  </div>
+                  <button
+                    onClick={nextMonth}
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/70 bg-background/70 transition-colors hover:bg-muted"
+                    aria-label="Next month"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-7 border-b border-border/70 bg-muted/20">
+                  {DAYS.map((day) => (
+                    <div
+                      key={day}
+                      className="px-2 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground sm:text-xs"
+                    >
+                      {day}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7">
+                  {days.map((date, index) => {
+                    if (!date) {
+                      return (
+                        <div
+                          key={`empty-${index}`}
+                          className="aspect-square border-b border-r border-border/70 bg-muted/15"
+                        />
+                      );
+                    }
+
+                    const parent = getParentForDate(date, scheduleConfig);
+                    const isToday = date.getTime() === today.getTime();
+                    const hasSportsEvents = hasEventsOnDate(date);
+                    const dateSportsEvents = getEventsForDate(date);
+
+                    return (
+                      <div
+                        key={date.toISOString()}
+                        onClick={() => handleDateClick(date)}
+                        className={cn(
+                          "group relative aspect-square border-b border-r border-border/70 p-2 transition-colors",
+                          parent === "A" ? "bg-parent-a-light" : "bg-parent-b-light",
+                          permissions.canEditCalendar && "cursor-pointer hover:brightness-[0.98]",
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            "inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-medium",
+                            isToday && "bg-primary text-primary-foreground",
+                          )}
+                        >
+                          {date.getDate()}
+                        </span>
+                        <div
+                          className={cn(
+                            "absolute bottom-1.5 right-1.5 h-2.5 w-2.5 rounded-full shadow-sm",
+                            parent === "A" ? "bg-parent-a" : "bg-parent-b",
+                          )}
+                        />
+                        {hasSportsEvents ? (
+                          <div
+                            className="absolute bottom-1.5 left-1.5 z-10 flex items-center gap-0.5"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              if (dateSportsEvents.length === 1) {
+                                setSelectedSportsEvent(dateSportsEvents[0]);
+                              } else {
+                                setSportsEventListDate(date);
+                                setSportsEventListEvents(dateSportsEvents);
+                                setShowSportsEventList(true);
+                              }
+                            }}
+                          >
+                            <Trophy className="h-3 w-3 text-amber-500" />
+                            {dateSportsEvents.length > 1 ? (
+                              <span className="text-[10px] font-medium text-amber-600">{dateSportsEvents.length}</span>
+                            ) : null}
+                          </div>
+                        ) : permissions.canEditCalendar ? (
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+                            <div className="rounded-full border border-border/70 bg-background/75 p-2 text-muted-foreground shadow-sm">
+                              <ArrowRightLeft className="h-4 w-4" />
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.12 }}
+                className="rounded-[30px] border border-border/70 bg-card p-6 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.85)]"
+              >
+                <div className="mx-auto max-w-3xl space-y-6">
+                  <div className="text-center">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Court-ready summary
+                    </p>
+                    <h2 className="mt-2 text-2xl font-display font-bold text-foreground">Parenting time schedule</h2>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      Family-scoped summary for {activeFamilyLabel.toLowerCase()}. Export from this saved schedule only.
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-[24px] border border-border/70 bg-muted/25 p-5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        Schedule pattern
+                      </p>
+                      <p className="mt-3 text-xl font-display font-semibold text-foreground">
+                        {getPatternName(scheduleConfig)}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        Starting parent {scheduleConfig.startingParent}, beginning {format(scheduleConfig.startDate, "PPP")}.
+                      </p>
+                    </div>
+
+                    <div className="rounded-[24px] border border-border/70 bg-muted/25 p-5">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                        Exchange details
+                      </p>
+                      <p className="mt-3 text-xl font-display font-semibold text-foreground">
+                        {scheduleConfig.exchangeTime || "Not set"}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                        {scheduleConfig.exchangeLocation || "No exchange location saved."}
+                        {scheduleConfig.alternateLocation
+                          ? ` Alternate: ${scheduleConfig.alternateLocation}.`
+                          : ""}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[24px] border border-border/70 bg-muted/25 p-5">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Holiday schedule
+                    </p>
+                    <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+                      {scheduleConfig.holidays.length > 0 ? (
+                        scheduleConfig.holidays.map((holiday) => (
+                          <p key={holiday.name}>
+                            {holiday.name}:{" "}
+                            {holiday.rule === "alternate"
+                              ? "Alternating years (Parent A on even years)"
+                              : holiday.rule === "split"
+                                ? "Split between parents"
+                                : holiday.rule === "fixed-a"
+                                  ? "Always with Parent A"
+                                  : "Always with Parent B"}
+                          </p>
+                        ))
+                      ) : (
+                        <p>No custom holiday rules are saved for this family.</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <Button variant="outline" className="rounded-full" onClick={handleOpenExportDialog}>
+                      <Download className="mr-2 h-4 w-4" />
+                      Export from saved schedule
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </>
+        )}
+      </div>
       <AnimatePresence>
         {showWizard && (
           <CalendarWizard
-            onComplete={handleWizardComplete}
             onCancel={() => setShowWizard(false)}
+            onComplete={handleWizardComplete}
           />
         )}
       </AnimatePresence>
 
-      {/* Schedule Change Request Modal */}
       <AnimatePresence>
-        {showChangeRequest && (
+        {showChangeRequest && scheduleConfig && (
           <ScheduleChangeRequest
             selectedDate={selectedDate}
-            onSubmit={handleScheduleChangeRequest}
             onCancel={() => setShowChangeRequest(false)}
+            onSubmit={handleScheduleChangeRequest}
           />
         )}
       </AnimatePresence>
 
-      {/* Calendar Export Dialog */}
       <CalendarExportDialog
         open={showExportDialog}
         onOpenChange={setShowExportDialog}
@@ -595,7 +881,6 @@ const CalendarPage = () => {
         coParent={coParent}
       />
 
-      {/* Sports Event Detail Panel */}
       <AnimatePresence>
         {selectedSportsEvent && (
           <motion.div
@@ -609,16 +894,16 @@ const CalendarPage = () => {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-xl bg-background border border-border shadow-xl"
-              onClick={(e) => e.stopPropagation()}
+              className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-border bg-background shadow-xl"
+              onClick={(event) => event.stopPropagation()}
             >
               <Button
                 variant="ghost"
                 size="icon"
-                className="absolute top-2 right-2 z-10"
+                className="absolute right-2 top-2 z-10"
                 onClick={() => setSelectedSportsEvent(null)}
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </Button>
               <SportsEventDetail event={selectedSportsEvent} />
             </motion.div>
@@ -626,7 +911,6 @@ const CalendarPage = () => {
         )}
       </AnimatePresence>
 
-      {/* Sports Event List Popup for Multiple Events */}
       <SportsEventListPopup
         events={sportsEventListEvents}
         date={sportsEventListDate || new Date()}

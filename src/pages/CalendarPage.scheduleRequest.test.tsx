@@ -95,7 +95,16 @@ vi.mock("@/hooks/useScheduleRequests", () => ({
 
 vi.mock("@/hooks/useSchedulePersistence", () => ({
   useSchedulePersistence: () => ({
-    scheduleConfig: null,
+    scheduleConfig: {
+      alternateLocation: null,
+      customPattern: undefined,
+      exchangeLocation: "School office",
+      exchangeTime: "6:00 PM",
+      holidays: [],
+      pattern: "2-2-3",
+      startDate: new Date("2026-04-01T00:00:00.000Z"),
+      startingParent: "A",
+    },
     loading: false,
     saving: false,
     saveSchedule,
@@ -132,8 +141,13 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 vi.mock("@/contexts/FamilyContext", () => ({
   useFamily: () => ({
-    activeFamilyId: null,
+    activeFamily: {
+      display_name: "Morgan Family",
+      id: "family-1",
+    },
+    activeFamilyId: "family-1",
     loading: false,
+    memberships: [],
     profileId: null,
   }),
 }));
@@ -206,7 +220,7 @@ describe("CalendarPage schedule request navigation", () => {
     });
 
     await act(async () => {
-      getButtonByText(container!, "Request Change").click();
+      getButtonByText(container!, "Request change").click();
       await flushPromises();
     });
 
