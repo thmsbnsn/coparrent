@@ -18,12 +18,14 @@ The current repo state already includes:
 - shared family games frontend and server model:
   - reusable game registry
   - generic family-scoped sessions and lobbies
+  - generic family-scoped async challenge foundation keyed by `game_slug`
   - deterministic seeded Toy Plane Dash rounds
   - synchronized `start_time`
   - server-owned result rows and winner resolution
   - host-only rematch reset flow
   - family presence integration for dashboard, lobby, and in-game states
-- clean local verification status for lint, build, and the full Vitest suite
+  - dashboard subscription-banner pricing routing with explicit entry-source and intent handling
+  - clean local verification status for lint, build, and the full Vitest suite
 
 Important boundary on the recordkeeping and game story:
 
@@ -41,6 +43,11 @@ Confirmed on 2026-04-02:
 - the latest app-shell, branding, game-dashboard, fallback, and UI-polish changes are in production frontend code
 - the targeted production database bundle for child portal controls, family presence, shared game lobbies, race sync/results, and rematch flow was applied successfully
 
+Important deployment boundary:
+
+- the new async family challenge migration and its matching frontend route/hook surface now exist in the repo, but they were added after the confirmed 2026-04-02 production database bundle
+- the authenticated pricing-banner path fix is repo-complete and locally verified, but this document does not claim it has been live-reverified yet
+
 ## Not Fully Closed Yet
 
 The newer shared games and family presence backend stack is now applied in production, and the staging environment story is materially stronger than it was earlier on 2026-04-02.
@@ -49,7 +56,7 @@ What changed:
 
 - the migration chain defects discovered during staging replay were corrected in tracked source
 - [../../supabase/migrations/20260324000000_add_explicit_family_scope_baseline.sql](../../supabase/migrations/20260324000000_add_explicit_family_scope_baseline.sql) now restores the missing explicit-family baseline the later March/April migrations expected
-- the staging project now reaches the current schema head
+- the staging project reaches the last deployed shared-game schema head
 - the dedicated same-family multiplayer verifier completes successfully against staging
 
 Practical consequence:
@@ -58,6 +65,7 @@ Practical consequence:
 - local and verifier tooling can target the staging project explicitly
 - the staging proof environment is usable for the shared game flow
 - the first real same-family multiplayer verification pass is no longer just repo-theoretical; it now runs successfully against staging
+- the repo is one migration ahead of that deployed bundle because async family challenges have now landed locally
 
 ## Historically Verified Externally, But Not Rechecked In This Doc Pass
 
@@ -81,6 +89,7 @@ These should be described as evidence on file, not as freshly reconfirmed behavi
 
 - keep the repaired staging migration chain healthy as new schema work lands
 - rerun the multiplayer verifier after meaningful shared-game/backend changes
+- promote and verify the async family challenge migration and route flow in staging and production
 - real-device push/PWA validation
 - final deployed auth posture confirmation
 - final canonical-host confirmation
@@ -99,7 +108,7 @@ The current risk is now concentrated in:
 
 - ongoing discipline around the repaired migration chain
 - live/device validation after future releases
-- remaining signed-in UX defects such as the authenticated pricing-banner path if they still reproduce
+- deployment and proof work for the new async family challenge slice
 
 ## Related Docs
 

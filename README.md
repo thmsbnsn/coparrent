@@ -11,12 +11,13 @@ This README is intentionally limited to repo-confirmed statements plus clearly l
 - The current mainline codebase has been reviewed locally on 2026-04-02.
 - `npm run lint` passes locally.
 - `npm run build` passes locally.
-- `npm run test -- --run` passes locally with 94 test files and 363 tests.
+- `npm run test -- --run` passes locally with 101 test files and 388 tests.
 - The repo includes verification helpers for preview smoke, Stripe, invites, Daily calling, shared family game flow, AI runtime, Messaging Hub, and push/PWA checks.
 - The production frontend was redeployed on 2026-04-02 and aliased to `https://coparrent.com`.
 - The production shared-game and family-presence database bundle was applied on 2026-04-02, so the new family game RPCs now exist in production.
 - Local development can now target the staging Supabase project explicitly through `VITE_SUPABASE_TARGET=staging` plus the staging Vite env vars in [.env.example](.env.example).
-- The staging Supabase project was advanced to the current schema on 2026-04-02 after repairing the migration chain and adding the missing explicit-family baseline bridge migration.
+- The staging Supabase project was advanced to the last deployed shared-game schema on 2026-04-02 after repairing the migration chain and adding the missing explicit-family baseline bridge migration.
+- The local repo now includes an additional async family challenge migration and client surface that still need promotion to staging and production before those challenge features can be described as live.
 - Historical live verification artifacts from March 2026 exist in [docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md).
 - Those external checks were not rerun as part of this documentation cleanup. Treat them as evidence on file, not as a fresh guarantee.
 
@@ -25,7 +26,7 @@ This README is intentionally limited to repo-confirmed statements plus clearly l
 - Public site: marketing pages, pricing, help center, blog, court-record overview, and legal pages.
 - Auth and onboarding: email/password auth, Google OAuth, invite acceptance, onboarding, and family selection.
 - Family operations: dashboard, calendar, children, documents, expenses, sports, gift lists, journal, notifications, and child-oriented views.
-- Shared family games: Game Dashboard, family presence/activity UI, generic game-session/lobby model, and Toy Plane Dash as the first playable game.
+- Shared family games: Game Dashboard, family presence/activity UI, generic game-session/lobby model, async family challenge foundation, and Toy Plane Dash as the first playable game.
 - Messaging and calling: Messaging Hub, family/direct/group threads, message drafting aids, and Daily-backed calling flows with persisted session/event state.
 - Export and evidence flows: server-generated Messaging Hub evidence packages, server-generated family-wide court-record exports, verification-backed PDF and evidence-package downloads, and expense report generation.
 - Support and admin: admin dashboard, law-library management, problem reporting, and PWA diagnostics.
@@ -71,6 +72,8 @@ These are still open or require user-assisted confirmation:
 - Deciding whether call evidence remains timeline/status based or grows into a dedicated media export surface. The current repo does not include call recording or transcripts.
 - Keeping the repaired Supabase migration chain healthy as new schema work lands.
 - Re-running the staged family-game verifier after meaningful multiplayer/backend changes.
+- Promoting and verifying the new async family challenge migration and UI flow in staging and production.
+- Live verification of the authenticated dashboard subscription-banner pricing path after the explicit pricing-intent routing changes.
 
 See [docs/project/CURRENT_STATUS.md](docs/project/CURRENT_STATUS.md) and [docs/project/next-10-tasks.md](docs/project/next-10-tasks.md).
 

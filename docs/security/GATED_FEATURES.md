@@ -81,7 +81,7 @@ High-level summary:
 | AI schedule suggest | Parent/guardian flow with premium entitlement | `aiGuard` |
 | Messaging Hub access | Family-scoped route for permitted roles | route allowlist plus thread-level server access |
 | Child access settings, device restrictions, and guided setup wizard | Parent/guardian family-scoped settings flow | route allowlist plus child portal and child device-access RPCs requiring explicit `family_id` |
-| Shared Games dashboard, lobby, and game routes | Family-scoped route for explicitly permitted roles, including child-safe shared entry for `/dashboard/games` and lobby/session flow under `/dashboard/games/*` | route allowlist plus family-scoped presence, generic game-session RPCs, server-set session seeds/start times, server-owned result/winner resolution, and non-client-callable internal session helpers that fail closed without explicit scope |
+| Shared Games dashboard, lobby, challenge board, and game routes | Family-scoped route for explicitly permitted roles, including child-safe shared entry for `/dashboard/games` and nested game routes under `/dashboard/games/*` | route allowlist plus family-scoped presence, generic game-session RPCs, tracked async challenge RPCs, server-set session seeds/start times, server-owned result/winner resolution, best-score-only challenge submissions, and non-client-callable internal helpers that fail closed without explicit scope |
 | Messaging export receipts | Family-scoped thread export with Power entitlement | `messaging-thread-export` edge function requiring explicit `family_id`, thread access, server-side Power entitlement, and stored receipt verification |
 | Daily calling | Family-scoped parent/guardian/third-party flow | callable-member checks plus `call_sessions` and `call_events` access limited to participants |
 | Document export dialog | Parent/guardian family-wide export with Power entitlement | `PermissionButton` UX plus `court-record-export` edge function requiring explicit `family_id`, parent/guardian membership, server-side Power entitlement, immutable artifact storage, and stored receipt verification |
@@ -96,7 +96,8 @@ High-level summary:
 - Family-wide court-record exports include call session/event evidence only and document metadata/access history only. They do not include call media or raw document binaries.
 - Historical docs that claimed broader third-party route access than `routeAccess.ts` are outdated. The route allowlist file is the current source of truth.
 - Shared game routes now sit on a reusable family multiplayer foundation. Toy Plane Dash is the first consumer, but the session/lobby/result model is generic by `game_slug`, not a Flappy-only special case.
-- The shared games and family-presence gating model is repo-confirmed, and the targeted production database bundle for those features was applied on 2026-04-02. The frontend still keeps maintenance and solo-preview fallbacks for genuinely partial or older deployments, but staging itself is now on the current schema head and used as the multiplayer proof environment.
+- The repo now also contains a generic async family challenge layer on that same `game_slug` foundation. It is tracked in source and fails closed the same way, but it was added after the confirmed 2026-04-02 production database bundle and should not be described as live backend functionality until that migration is promoted.
+- The shared games and family-presence gating model is repo-confirmed, and the targeted production database bundle for sessions/presence/race sync/rematch was applied on 2026-04-02. The frontend still keeps maintenance and solo-preview fallbacks for genuinely partial or older deployments.
 
 ## Related Docs
 

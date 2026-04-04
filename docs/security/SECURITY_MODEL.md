@@ -77,6 +77,7 @@ Current server-side examples include:
 - `check-subscription` and `stripe-webhook` for billing state
 - child portal, child calling, and child device-access RPCs that require explicit `family_id`
 - family game session, lobby, synchronized start, and result RPCs that require explicit `family_id`
+- tracked async family challenge RPCs that require explicit `family_id`
 - `messaging-thread-export` for family-scoped export creation, download, and verification
 - invite and notification functions that validate family membership and ownership server-side
 
@@ -199,6 +200,8 @@ Repo-confirmed controls include:
 - server-generated session `seed`
 - server-set synchronized `start_time`
 - `family_game_session_results` stored per family-scoped session member
+- tracked `family_game_challenges`, `family_game_challenge_members`, and `family_game_challenge_results` scoped by active family membership
+- server-side best-score-only challenge result acceptance keyed by explicit `family_id` and `game_slug`
 - server-side winner resolution from shared session results
 - internal session-status and winner-resolution helpers are not client-callable paths
 - family presence updates for lobby and in-game states using explicit `family_id`
@@ -206,8 +209,9 @@ Repo-confirmed controls include:
 Important boundaries:
 
 - the client may render countdowns and standings, but it does not authorize families, session membership, readiness, or winners
-- session reads, joins, starts, and result reports must fail closed when `family_id` is missing
+- session reads, joins, starts, result reports, and challenge operations must fail closed when `family_id` is missing
 - no cross-family session discovery, invites, or fallback resolution are part of the intended model
+- the new async family challenge slice exists in tracked source and follows the same trust rules, but this document does not treat it as deployed backend functionality until its migration is promoted beyond local source
 
 Physical-device validation is still separate from repo confirmation.
 
@@ -219,7 +223,7 @@ The repo currently supports a stricter auth and origin posture than older versio
 - deployed localhost-origin posture
 - final canonical public host posture
 - final passkey posture
-- ongoing discipline around the repaired staging migration chain for the newer shared-game and family-presence database layer. The targeted production rollout for those features was applied on 2026-04-02, and staging now reaches the same schema head after the migration repairs completed that same day.
+- ongoing discipline around the repaired staging migration chain for the newer shared-game and family-presence database layer. The targeted production rollout for sessions/presence/race sync/rematch was applied on 2026-04-02. The repo now contains a newer async family challenge migration that still needs promotion to staging and production before the live environment reaches the current local head again.
 
 These are deployment questions, not code-only questions.
 

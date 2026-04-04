@@ -40,6 +40,7 @@ The registry is the shared source of truth for:
 - display name
 - launcher path
 - play path
+- challenge-board path
 - availability and shared-dashboard copy
 - upcoming-game overview content
 - whether the game supports multiplayer
@@ -106,6 +107,7 @@ Current route shape:
 - `/dashboard/games`
 - `/dashboard/games/flappy-plane`
 - `/dashboard/games/:gameSlug` for registry-backed future game overviews
+- `/dashboard/games/:gameSlug/challenges`
 - `/dashboard/games/flappy-plane/lobby`
 - `/dashboard/games/flappy-plane/lobby/:sessionId`
 
@@ -144,6 +146,7 @@ Primary migrations:
 - [../../supabase/migrations/20260402233000_add_family_game_race_sync_and_results.sql](../../supabase/migrations/20260402233000_add_family_game_race_sync_and_results.sql)
 - [../../supabase/migrations/20260402234500_harden_family_game_helper_scope.sql](../../supabase/migrations/20260402234500_harden_family_game_helper_scope.sql)
 - [../../supabase/migrations/20260402235500_add_family_game_session_rematch.sql](../../supabase/migrations/20260402235500_add_family_game_session_rematch.sql)
+- [../../supabase/migrations/20260402243000_add_family_game_challenges.sql](../../supabase/migrations/20260402243000_add_family_game_challenges.sql)
 
 Current tables and concepts:
 
@@ -151,6 +154,9 @@ Current tables and concepts:
 - `family_game_sessions`
 - `family_game_session_members`
 - `family_game_session_results`
+- `family_game_challenges`
+- `family_game_challenge_members`
+- `family_game_challenge_results`
 
 Current server-side capabilities:
 
@@ -163,6 +169,10 @@ Current server-side capabilities:
 - result rows stored per session member
 - server-owned winner resolution
 - host-only rematch reset
+- family-scoped challenge overview by `game_slug`
+- challenge creation and acceptance
+- best-score-only challenge result submission
+- challenge close/expire lifecycle with family-scoped leaderboard state
 
 ## 5. What Works In The Repo Right Now
 
@@ -172,10 +182,14 @@ Repo-confirmed working pieces:
 - Toy Plane Dash is playable
 - the solo-preview path works in code
 - the family lobby/session model is generic and implemented in code
+- the async family challenge model is generic and implemented in code
+- the shared challenge board route exists and is wired into the registry-backed games surface
 - deterministic seeded race support exists in the game runtime
 - session start countdown and result reporting exist in code
+- challenge result reporting and family-scoped standings exist in code
 - server-side winner resolution and rematch flow exist in migrations
 - the frontend now handles missing game/presence RPCs more gracefully with maintenance messaging and solo-preview fallback
+- the pricing banner now uses explicit source/intent routing into `/pricing`, so the authenticated dashboard entry path can render purpose-specific copy instead of a generic landing
 
 Local verification also currently passes:
 
@@ -200,32 +214,40 @@ Operationally confirmed on 2026-04-02:
 
 That means the production environment now contains the shared-game RPC layer that had previously been missing.
 
+Important boundary:
+
+- the newer async family challenge migration and challenge-board client flow now exist in the repo, but they were added after the confirmed 2026-04-02 production database bundle
+- until that migration is promoted, challenge routes should be described as repo-complete and locally verified, not as confirmed live backend functionality
+
 ## 7. What Recently Closed
 
-The live production blocker that originally removed the family-lobby path is now addressed.
+The live production blocker that originally removed the family-lobby path is now addressed, and the repo has moved on to the next game-platform slice.
 
 Recently completed:
 
 - the first real two-user multiplayer verification pass has been completed against the dedicated staging same-family setup
-- the staging project has been repaired to the current schema and can now serve as the safe multiplayer proof environment
+- the staging project has been repaired to the last deployed shared-game schema and can now serve as the safe multiplayer proof environment
 - the frontend maintenance fallbacks remain in place as protection for genuinely partial or older environments, even though production now has the targeted game RPC bundle
+- the repo now includes async family challenge UI, routing, client hooks, and the matching tracked migration on the generic `game_slug` platform
 
 ## 8. Current Environment State
 
-The blocker is no longer the production game RPC rollout or staging bootstrap posture.
+The blocker is no longer the production game RPC rollout or staging bootstrap posture for sessions, presence, and synchronized Toy Plane Dash results.
 
 What is currently true:
 
-- the staging project now reaches the current shared-game schema
+- the staging project reaches the last deployed shared-game schema bundle through rematch flow
 - the repo contains the explicit-family bridge migration that was missing during earlier replay attempts:
   - [../../supabase/migrations/20260324000000_add_explicit_family_scope_baseline.sql](../../supabase/migrations/20260324000000_add_explicit_family_scope_baseline.sql)
 - the March/April 2026 replay defects found during staging repair were corrected directly in the tracked migrations
-- local development can target staging explicitly, and the dedicated family-game verifier now succeeds there end to end
+- local development can target staging explicitly, and the dedicated family-game verifier now succeeds there end to end for the current deployed session/race model
+- the repo is now ahead of staging and production by one additional migration: async family challenges
 
 Because of that:
 
 - staging is now the trustworthy proof environment for shared games
 - production and staging both have the shared-game/session/presence backend layer
+- async family challenges still need their first staging and production promotion
 
 ## 9. What Is Not Finished Yet
 
@@ -235,19 +257,20 @@ The game system is still incomplete in several important ways.
 
 - the migration chain repair should be kept healthy as later DB changes land
 - the staging family-game seed + verifier flow should be rerun after meaningful multiplayer/backend changes
+- the new async family challenge migration still needs promotion to staging and production, then live verification
 
 ### Product / gameplay
 
 - only one real game is implemented
 - the current multiplayer model is synchronized parallel racing, not full real-time multiplayer
 - future games in the registry have overview routes, but they are not playable yet
-- async challenges are not built yet
 - the shared games backend is generic, but only Toy Plane Dash is currently wired through it
+- only Toy Plane Dash is currently wired through both the synchronized session flow and the new async family challenge flow
 
 ### UX polish
 
 - results and leaderboard flow have materially improved, but richer animation/reveal polish is still open
-- broader post-race session loops and challenge surfaces are still open
+- broader post-race session loops and challenge progression/history surfaces are still open
 - mobile behavior needs real-device verification after recent layout fixes
 
 ## 10. What The Current Fallback Behavior Does
@@ -271,9 +294,9 @@ The safest and cleanest next sequence is:
    - `npm run verify:family-games`
 2. Re-verify the shared games experience live after meaningful game/backend releases.
 3. Continue with next game-platform work:
+   - promote and verify async family challenges
    - stronger results/leaderboard animation flow
    - rematch/post-race refinement
-   - async family challenges
    - more games using the same generic session foundation
 
 ## 12. Current Bottom Line
@@ -285,13 +308,15 @@ What is true today:
 - the frontend and session architecture exist
 - the game registry and shared session model exist
 - Toy Plane Dash is the first working game consumer
+- the async family challenge foundation exists in the repo and rides the same generic `game_slug` platform
 - the production frontend is deployed
-- staging is wired and verified for the same family-game backend path
+- staging is wired and verified for the deployed session/race backend path
 
 What is also true today:
 
 - the production shared-games backend bundle is now applied
 - the staging multiplayer fixture is seeded and the dedicated family-game verifier passes there
+- the new async family challenge backend migration and client flow are locally verified but still waiting on staging/production rollout
 - live same-family UI verification on real devices is still worth doing after future releases
 
 So the game system is best described as:

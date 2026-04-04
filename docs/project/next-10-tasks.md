@@ -2,9 +2,24 @@
 
 Last updated: 2026-04-02
 
-Ranked by highest product and operational value after the current production deploy, the targeted shared-games database rollout, the staging verifier repair, and the latest Toy Plane Dash post-race/shared-platform polish.
+Ranked by highest product and operational value after the current production deploy, the targeted shared-games database rollout through rematch flow, the staging verifier repair, and the newly landed async family challenge / authenticated pricing-path repo work.
 
-## 1. Run The First Real Production Same-Family Multiplayer Proof
+## 1. Promote The New Repo-Ahead Bundle To Staging, Then Production
+
+Owner: Mixed
+
+- The repo now contains:
+  - async family challenges
+  - the authenticated dashboard subscription-banner pricing-path fix
+- Neither change should be described as fully deployed until:
+  - the new challenge migration is applied in staging
+  - the challenge flow is verified there
+  - the frontend/backend bundle is promoted and rechecked in production
+
+Why this is first:
+The repo is ahead of the confirmed deployed state again. Closing that gap is worth more than adding more features on top.
+
+## 2. Run The First Real Production Same-Family Multiplayer And Challenge Proof
 
 Owner: User-assisted
 
@@ -18,24 +33,17 @@ Owner: User-assisted
   - result reporting
   - winner resolution
   - rematch reset
+  - async challenge creation
+  - challenge acceptance
+  - best-score-only leaderboard updates
 
-Why this is first:
-The platform is now live and staging-verified. The highest-value remaining proof is one real production same-family run.
-
-## 2. Recheck Shared Games On Real Mobile Devices
+## 3. Recheck Shared Games On Real Mobile Devices
 
 Owner: User-assisted
 
 - Verify Game Dashboard layout on iPhone and Android after the recent safe-area and overflow fixes.
 - Confirm fullscreen/orientation controls behave well for Toy Plane Dash on supported devices.
-- Check the new post-race results flow on real small screens instead of relying only on desktop emulation.
-
-## 3. Investigate The Authenticated Pricing / Trial Banner Path
-
-Owner: Mixed
-
-- The public `/pricing` page itself currently loads normally.
-- The reported dashboard `See Plans` / trial-ending flow still needs a focused authenticated repro so the exact failing path can be identified and fixed if it is still happening.
+- Check the new post-race results flow and the async challenge board on real small screens instead of relying only on desktop emulation.
 
 ## 4. Complete Real-Device Push/PWA Validation
 
@@ -45,36 +53,25 @@ Owner: User-assisted
 - Verify child-mode and main-app install posture on real devices.
 - Save dated evidence instead of relying on repo-only assumptions.
 
-## 5. Build Async Family Challenges On The Shared Session Foundation
+## 5. Ship A Second Real Shared Game Consumer
 
 Owner: Mixed
 
-- Keep this on the generic `game_slug` platform instead of adding a Toy Plane Dash-only side system.
-- Start with:
-  - challenge creation
-  - challenge acceptance
-  - family-scoped standings
-  - simple lifecycle/status handling
+- Use the current registry, session, presence, and challenge foundation instead of rebuilding state for a second time.
+- `Family Raceway` is still the most natural next shared game consumer.
 
-## 6. Ship A Second Real Shared Game Consumer
+## 6. Refine Child-Safe Multiplayer And Challenge Restrictions
 
 Owner: Mixed
 
-- Use the current registry and shared session foundation instead of rebuilding session state.
-- `Family Raceway` is the most natural next consumer if the team wants another multiplayer-first game.
-
-## 7. Refine Child-Safe Multiplayer And Game Restrictions
-
-Owner: Mixed
-
-- Broaden the current child-safe posture from the first game into the platform layer.
+- Broaden the current child-safe posture from the first game and first async challenge into the platform layer.
 - Keep family scope explicit and server-backed for:
   - games enabled / disabled
   - multiplayer enabled / disabled
   - per-game allowlists
   - future challenge eligibility
 
-## 8. Finish The Toy Plane Dash Results Reveal Polish
+## 7. Finish The Toy Plane Dash Results Reveal Polish
 
 Owner: Mixed
 
@@ -84,11 +81,16 @@ Owner: Mixed
   - stronger leaderboard motion hierarchy
   - tasteful shared-family celebration without clutter
 
-## 9. Confirm Final Deployed Auth / Host / Passkey Posture
+## 8. Confirm Final Deployed Auth Posture
 
 Owner: Mixed
 
 - Reconfirm hCaptcha and the final localhost-origin posture in the deployed environment.
+
+## 9. Confirm Canonical Host And Final Passkey Posture
+
+Owner: Mixed
+
 - Confirm the canonical host/public deployment posture.
 - Decide whether passkeys remain hidden, remain partial, or become a tracked launch blocker.
 
@@ -100,5 +102,6 @@ Owner: Mixed
   - `npm run seed:family-games:staging`
   - `npm run verify:family-games`
   after meaningful shared-game changes.
+- Add async challenge verification coverage into that proof path once the new migration is promoted.
 - Preserve clean replay behavior in the repaired migration chain instead of reintroducing environment drift.
 - Refresh live evidence after production-facing game/platform deploys.
