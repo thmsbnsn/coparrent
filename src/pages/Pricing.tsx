@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Check, Loader2, ArrowRight, Shield, Clock, CreditCard } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useEffect } from "react";
 import { Navbar } from "@/components/landing/Navbar";
 import { Footer } from "@/components/landing/Footer";
@@ -10,6 +10,7 @@ import { useSubscription } from "@/hooks/useSubscription";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { StripeTier } from "@/lib/stripe";
+import { getPricingIntentCopy } from "@/lib/pricingPaths";
 
 /**
  * Pricing Page - Clear, Confident, No Hesitation
@@ -100,6 +101,10 @@ const Pricing = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const { tier: currentTier, subscribed, loading, checkoutLoading, createCheckout } = useSubscription();
+  const pricingIntentCopy = getPricingIntentCopy(
+    searchParams.get("source"),
+    searchParams.get("intent"),
+  );
 
   useEffect(() => {
     if (searchParams.get("canceled") === "true") {
@@ -146,6 +151,30 @@ const Pricing = () => {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           {/* Header - Direct, No Fluff */}
           <div className="max-w-2xl mx-auto text-center mb-14 lg:mb-16">
+            {pricingIntentCopy ? (
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mb-6 rounded-[28px] border border-primary/15 bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.12),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(20,184,166,0.12),transparent_38%),linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-5 py-5 text-left shadow-[0_18px_40px_-30px_rgba(15,23,42,0.55)] dark:bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.16),transparent_32%),radial-gradient(circle_at_bottom_right,rgba(20,184,166,0.12),transparent_38%),linear-gradient(180deg,rgba(10,16,27,0.98),rgba(12,18,31,0.96))]"
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                  Dashboard pricing path
+                </p>
+                <h2 className="mt-2 text-xl font-display font-semibold text-foreground">
+                  {pricingIntentCopy.title}
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                  {pricingIntentCopy.description}
+                </p>
+                {user ? (
+                  <div className="mt-4">
+                    <Button asChild variant="outline" className="rounded-full">
+                      <Link to="/dashboard">Back to dashboard</Link>
+                    </Button>
+                  </div>
+                ) : null}
+              </motion.div>
+            ) : null}
             <motion.h1
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
@@ -306,10 +335,10 @@ const Pricing = () => {
               Have questions about which plan is right for you?
             </p>
             <Button asChild variant="ghost" className="group">
-              <a href="/help" className="flex items-center gap-2">
+              <Link to="/help" className="flex items-center gap-2">
                 Visit Help Center
                 <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
-              </a>
+              </Link>
             </Button>
           </motion.div>
         </div>

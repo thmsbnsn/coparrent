@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { differenceInDays, format } from "date-fns";
 import { Clock, Crown, AlertTriangle, Sparkles, Gift, CreditCard, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,8 +9,10 @@ import { Progress } from "@/components/ui/progress";
 import { useSubscription } from "@/hooks/useSubscription";
 import { STRIPE_TIERS } from "@/lib/stripe";
 import { getSubscriptionTierLabel } from "@/lib/displayLabels";
+import { buildPricingPath } from "@/lib/pricingPaths";
 
 export const SubscriptionBanner = () => {
+  const navigate = useNavigate();
   const { 
     accessGraceUntil,
     tier, 
@@ -180,13 +182,24 @@ export const SubscriptionBanner = () => {
                 <p className="text-sm text-muted-foreground">
                   Upgrade to Power to keep using Expenses, Court Exports & Sports Hub
                 </p>
-              </div>
             </div>
-            <Button size="sm" asChild className="shrink-0">
-              <Link to="/pricing">Get Power</Link>
-            </Button>
           </div>
-        </motion.div>
+          <Button
+            size="sm"
+            className="shrink-0"
+            onClick={() =>
+              navigate(
+                buildPricingPath({
+                  intent: "trial-expired",
+                  source: "dashboard-subscription-banner",
+                }),
+              )
+            }
+          >
+            Get Power
+          </Button>
+        </div>
+      </motion.div>
       );
     }
 
@@ -217,11 +230,23 @@ export const SubscriptionBanner = () => {
               </div>
             </div>
           </div>
-          <Button variant="outline" size="sm" asChild className="shrink-0">
-            <Link to="/pricing">
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() =>
+              navigate(
+                buildPricingPath({
+                  intent: "trial-ending",
+                  source: "dashboard-subscription-banner",
+                }),
+              )
+            }
+          >
+            <span className="inline-flex items-center">
               <Sparkles className="w-4 h-4 mr-1.5" />
               View Plans
-            </Link>
+            </span>
           </Button>
         </div>
       </motion.div>
@@ -248,8 +273,20 @@ export const SubscriptionBanner = () => {
               </p>
             </div>
           </div>
-          <Button variant="outline" size="sm" asChild className="shrink-0">
-            <Link to="/pricing">View Plans</Link>
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() =>
+              navigate(
+                buildPricingPath({
+                  intent: "upgrade-power",
+                  source: "dashboard-subscription-banner",
+                }),
+              )
+            }
+          >
+            View Plans
           </Button>
         </div>
       </motion.div>
