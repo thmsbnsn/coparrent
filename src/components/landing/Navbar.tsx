@@ -35,13 +35,19 @@ export const Navbar = () => {
 
   return (
     <header className={cn(
-      "fixed top-0 left-0 right-0 z-50 pt-[env(safe-area-inset-top,0px)]",
-      isLandingPage 
-        ? "bg-transparent" 
-        : "bg-background/80 backdrop-blur-md border-b border-border/50"
+      "fixed top-0 left-0 right-0 z-50 px-4 pt-[env(safe-area-inset-top,0px)] sm:px-6 lg:px-8",
+      isLandingPage ? "bg-transparent" : "bg-transparent"
     )}>
-      <nav className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 lg:h-18">
+      <nav className="page-shell-public pt-3">
+        <div
+          className={cn(
+            "rounded-[1.75rem] border px-4 shadow-[0_18px_40px_-30px_rgba(8,21,47,0.55)] backdrop-blur-xl transition-colors sm:px-5",
+            isLandingPage
+              ? "border-white/10 bg-slate-950/22 text-white"
+              : "border-border/70 bg-background/78"
+          )}
+        >
+          <div className="flex items-center justify-between gap-4 h-16 lg:h-[4.5rem]">
           {/* Logo */}
           <Link to="/" className="flex-shrink-0">
             <Logo size="md" className={isLandingPage ? "text-white" : ""} />
@@ -54,10 +60,13 @@ export const Navbar = () => {
                 key={link.href}
                 to={link.href}
                 className={cn(
-                  "px-4 py-2 text-sm font-medium rounded-lg transition-colors",
+                  "rounded-full px-4 py-2 text-sm font-medium transition-colors",
+                  location.pathname === link.href && !isLandingPage
+                    ? "bg-primary/10 text-primary"
+                    : "",
                   isLandingPage 
-                    ? "text-white/70 hover:text-white hover:bg-white/10" 
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                    ? "text-white/72 hover:text-white hover:bg-white/10"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
                 )}
               >
                 {link.label}
@@ -72,6 +81,7 @@ export const Navbar = () => {
               <Button 
                 onClick={() => navigate("/dashboard")}
                 variant={isLandingPage ? "secondary" : "default"}
+                className={isLandingPage ? "rounded-full" : "rounded-full"}
               >
                 <LayoutDashboard className="w-4 h-4 mr-2" />
                 Dashboard
@@ -81,13 +91,14 @@ export const Navbar = () => {
                 <Button 
                   variant="ghost" 
                   onClick={() => navigate("/login")}
-                  className={isLandingPage ? "text-white/80 hover:text-white hover:bg-white/10" : ""}
+                  className={cn("rounded-full", isLandingPage ? "text-white/80 hover:text-white hover:bg-white/10" : "")}
                 >
                   Sign In
                 </Button>
                 <Button 
                   onClick={() => navigate("/signup")}
                   variant={isLandingPage ? "secondary" : "default"}
+                  className="rounded-full"
                 >
                   Get Started
                 </Button>
@@ -98,10 +109,10 @@ export const Navbar = () => {
           {/* Mobile Menu Button */}
           <button
             className={cn(
-              "md:hidden p-2 rounded-lg transition-colors",
+              "md:hidden p-2 rounded-xl transition-colors",
               isLandingPage 
                 ? "text-white hover:bg-white/10" 
-                : "hover:bg-muted"
+                : "hover:bg-muted/70"
             )}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label="Toggle menu"
@@ -120,18 +131,21 @@ export const Navbar = () => {
               className="md:hidden overflow-hidden"
             >
               <div className={cn(
-                "py-4 space-y-1 border-t",
-                isLandingPage ? "border-white/10" : "border-border"
+                "space-y-1 border-t py-4",
+                isLandingPage ? "border-white/10" : "border-border/70"
               )}>
                 {navLinks.map((link) => (
                   <Link
                     key={link.href}
                     to={link.href}
                     className={cn(
-                      "block px-3 py-3 text-base font-medium rounded-lg transition-colors",
+                      "block rounded-2xl px-3 py-3 text-base font-medium transition-colors",
+                      location.pathname === link.href && !isLandingPage
+                        ? "bg-primary/10 text-primary"
+                        : "",
                       isLandingPage 
                         ? "text-white/80 hover:text-white hover:bg-white/10" 
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                        : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
                     )}
                     onClick={() => setMobileMenuOpen(false)}
                   >
@@ -139,8 +153,8 @@ export const Navbar = () => {
                   </Link>
                 ))}
                 <div className={cn(
-                  "pt-4 mt-4 space-y-3 border-t",
-                  isLandingPage ? "border-white/10" : "border-border"
+                  "mt-4 space-y-3 border-t pt-4",
+                  isLandingPage ? "border-white/10" : "border-border/70"
                 )}>
                   <div className="flex items-center justify-between px-3 py-2">
                     <span className={cn(
@@ -153,7 +167,7 @@ export const Navbar = () => {
                   </div>
                   {!loading && user ? (
                     <Button 
-                      className="w-full" 
+                      className="w-full rounded-full"
                       onClick={() => { navigate("/dashboard"); setMobileMenuOpen(false); }}
                     >
                       <LayoutDashboard className="w-4 h-4 mr-2" />
@@ -163,13 +177,13 @@ export const Navbar = () => {
                     <>
                       <Button 
                         variant="outline" 
-                        className="w-full" 
+                        className="w-full rounded-full"
                         onClick={() => { navigate("/login"); setMobileMenuOpen(false); }}
                       >
                         Sign In
                       </Button>
                       <Button 
-                        className="w-full" 
+                        className="w-full rounded-full"
                         onClick={() => { navigate("/signup"); setMobileMenuOpen(false); }}
                       >
                         Get Started
@@ -181,6 +195,7 @@ export const Navbar = () => {
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
       </nav>
     </header>
   );

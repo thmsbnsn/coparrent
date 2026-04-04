@@ -16,6 +16,7 @@ import { format, differenceInYears, parseISO } from "date-fns";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { ExchangeCheckin } from "@/components/exchange/ExchangeCheckin";
 import { SubscriptionBanner } from "@/components/dashboard/SubscriptionBanner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -320,9 +321,9 @@ const Dashboard = () => {
         isParent ? <ParentHeaderCallAction /> : null
       }
     >
-      <div className="space-y-8 lg:space-y-10">
+      <div className="page-shell-app page-stack">
         {/* Subscription Status Banner */}
-        <div className="relative isolate overflow-hidden rounded-[30px] border border-primary/15 bg-gradient-to-r from-primary/10 via-background to-accent/10 p-[1px] shadow-[0_18px_40px_-28px_rgba(15,23,42,0.8)]">
+        <div className="surface-primary relative isolate overflow-hidden p-[1px]">
           <div className="absolute inset-y-0 left-8 w-28 rounded-full bg-primary/15 blur-3xl" />
           <div className="absolute inset-y-0 right-10 w-28 rounded-full bg-accent/15 blur-3xl" />
           <div className="relative rounded-[28px] border border-white/5 bg-background/80 p-1 backdrop-blur-sm">
@@ -334,21 +335,20 @@ const Dashboard = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative isolate overflow-hidden rounded-[34px] border border-primary/15 bg-[radial-gradient(circle_at_top_left,rgba(45,212,191,0.18),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.16),transparent_35%),linear-gradient(135deg,rgba(15,23,42,0.94),rgba(10,16,27,0.92))] p-5 shadow-[0_28px_70px_-38px_rgba(15,23,42,0.9)] sm:p-6"
+          className="surface-hero p-5 sm:p-6"
         >
-          <div className="absolute inset-x-0 top-0 h-px bg-white/10" />
           <div className="absolute left-6 top-5 h-32 w-32 rounded-full bg-primary/20 blur-3xl" />
           <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-accent/15 blur-3xl" />
           <div className="relative flex flex-col gap-6">
             <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="inline-flex rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/80">
+                  <StatusPill variant="dark">
                     {heroEyebrow}
-                  </div>
-                  <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-primary-foreground/70">
+                  </StatusPill>
+                  <StatusPill variant="dark">
                     Family command center
-                  </div>
+                  </StatusPill>
                 </div>
                 <div className="space-y-3">
                   <h1 className="max-w-3xl text-3xl font-display font-bold tracking-tight text-white sm:text-4xl">
@@ -361,7 +361,7 @@ const Dashboard = () => {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 xl:w-[360px] xl:grid-cols-1">
-                <div className="rounded-[26px] border border-white/10 bg-white/5 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm">
+                <div className="surface-hero-panel">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
                     Family connection
                   </p>
@@ -377,7 +377,7 @@ const Dashboard = () => {
                   </p>
                 </div>
 
-                <div className="rounded-[26px] border border-white/10 bg-slate-950/35 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] backdrop-blur-sm">
+                <div className="surface-hero-panel bg-slate-950/35">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
                     Current focus
                   </p>
@@ -398,7 +398,7 @@ const Dashboard = () => {
                 <div
                   key={label}
                   className={cn(
-                    "relative overflow-hidden rounded-[28px] border border-white/10 bg-white/5 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm",
+                    "surface-hero-panel relative overflow-hidden",
                     "before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-white/10",
                   )}
                 >
@@ -457,7 +457,7 @@ const Dashboard = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="overflow-hidden rounded-[30px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-6 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.85)]"
+          className="surface-primary overflow-hidden p-6"
         >
           <div className="mb-6 flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
@@ -483,7 +483,7 @@ const Dashboard = () => {
                   : "Add another parent or guardian to get started"}
               </p>
             </div>
-            <div className="rounded-[24px] border border-border/70 bg-background/55 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+            <div className="surface-secondary p-5">
               <p className="mb-1 text-sm font-medium text-muted-foreground">Next best move</p>
               <p className="text-sm leading-6 text-muted-foreground">
                 {schedule
@@ -525,7 +525,7 @@ const Dashboard = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 }}
-            className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-5 shadow-[0_20px_45px_-34px_rgba(15,23,42,0.85)]"
+            className="surface-standard p-5"
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="space-y-1">
@@ -567,7 +567,7 @@ const Dashboard = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3 }}
-            className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-5 shadow-[0_20px_45px_-34px_rgba(15,23,42,0.85)]"
+            className="surface-standard p-5"
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="space-y-1">
@@ -619,7 +619,7 @@ const Dashboard = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-5 shadow-[0_20px_45px_-34px_rgba(15,23,42,0.85)]"
+              className="surface-standard p-5"
             >
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="space-y-1">
@@ -674,7 +674,7 @@ const Dashboard = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.45 }}
-            className="rounded-[28px] border border-border/70 bg-gradient-to-br from-card via-card to-muted/25 p-5 shadow-[0_20px_45px_-34px_rgba(15,23,42,0.85)]"
+            className="surface-standard p-5"
           >
             <div className="mb-4 flex items-start justify-between gap-3">
               <div className="space-y-1">

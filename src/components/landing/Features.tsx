@@ -2,6 +2,8 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Calendar, MessageSquare, Users, FileText, DollarSign, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SectionCard } from "@/components/ui/SectionCard";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 
 /**
  * Features Section - System Overview
@@ -61,41 +63,27 @@ const accentClasses = {
 
 export const Features = () => {
   return (
-    <section className="py-20 lg:py-28 bg-background relative">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+    <section className="relative px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
+      <div className="page-shell-public">
         {/* Section Header - Direct, Authoritative */}
-        <div className="max-w-2xl mx-auto text-center mb-16 lg:mb-20">
-          <motion.span
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="inline-block text-sm font-semibold text-primary uppercase tracking-widest mb-4"
-          >
-            The Platform
-          </motion.span>
-          <motion.h2
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1 }}
-            className="mb-5"
-          >
-            Everything in one place
-          </motion.h2>
-          <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.15 }}
-            className="text-lg text-muted-foreground leading-relaxed"
-          >
-            A complete system for coordinating custody—schedules, messages, 
-            expenses, and records—designed to reduce conflict and create clarity.
-          </motion.p>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="mx-auto mb-14 max-w-3xl lg:mb-16"
+        >
+          <SectionHeader
+            align="center"
+            eyebrow="The Platform"
+            eyebrowTone="pill"
+            title="Everything in one place"
+            description="A complete system for coordinating custody, schedules, messages, expenses, and records, designed to reduce conflict and create clarity."
+            descriptionClassName="sm:text-lg"
+          />
+        </motion.div>
 
         {/* Capabilities Grid - Structured, Cohesive */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 lg:gap-6 mb-12">
+        <div className="mb-12 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
           {coreCapabilities.map((capability, index) => {
             const classes = accentClasses[capability.accent as keyof typeof accentClasses];
             
@@ -106,23 +94,22 @@ export const Features = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.08 }}
-                className="group relative p-6 lg:p-7 rounded-xl bg-card border border-border hover:border-primary/20 hover:shadow-lg transition-all duration-300"
               >
-                {/* Icon with color accent - now uses semantic class names */}
-                <div className={`inline-flex items-center justify-center w-11 h-11 rounded-lg mb-5 ${classes.bg}`}>
-                  <capability.icon className={`w-5 h-5 ${classes.text}`} />
-                </div>
+                <SectionCard variant="standard" interactive className="group relative overflow-hidden p-6 lg:p-7">
+                  <div className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-primary/25 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                  <div className={`mb-5 inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-current/5 ${classes.bg}`}>
+                    <capability.icon className={`h-5 w-5 ${classes.text}`} />
+                  </div>
 
-                {/* Content */}
-                <h3 className="text-lg font-display font-semibold mb-2 group-hover:text-primary transition-colors">
-                  {capability.title}
-                </h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  {capability.description}
-                </p>
+                  <h3 className="mb-2 text-lg font-display font-semibold transition-colors group-hover:text-primary">
+                    {capability.title}
+                  </h3>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {capability.description}
+                  </p>
 
-                {/* Subtle hover indicator - now uses semantic class */}
-                <div className={`absolute bottom-0 left-6 right-6 h-0.5 rounded-full scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left ${classes.line}`} />
+                  <div className={`absolute bottom-0 left-6 right-6 h-0.5 origin-left scale-x-0 rounded-full transition-transform duration-300 group-hover:scale-x-100 ${classes.line}`} />
+                </SectionCard>
               </motion.div>
             );
           })}

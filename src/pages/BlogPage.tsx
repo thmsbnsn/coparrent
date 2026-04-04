@@ -5,7 +5,9 @@ import { Link } from "react-router-dom";
 import { PublicLayout } from "@/components/landing/PublicLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { PageHero } from "@/components/ui/PageHero";
+import { SectionCard } from "@/components/ui/SectionCard";
+import { StatusPill } from "@/components/ui/StatusPill";
 import {
   Select,
   SelectContent,
@@ -81,22 +83,23 @@ const BlogPage = () => {
 
   return (
     <PublicLayout>
-      <div className="space-y-10 lg:space-y-12">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mx-auto max-w-4xl overflow-hidden rounded-[2.4rem] border border-border/70 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.12),transparent_28%),radial-gradient(circle_at_top_right,rgba(37,99,235,0.14),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,252,0.9))] px-6 py-8 text-center shadow-[0_30px_70px_-44px_rgba(8,21,47,0.45)] dark:bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.12),transparent_28%),radial-gradient(circle_at_top_right,rgba(37,99,235,0.16),transparent_34%),linear-gradient(180deg,rgba(10,16,27,0.98),rgba(12,18,31,0.96))] sm:px-8 sm:py-10"
-        >
-          <Badge variant="secondary" className="mb-5 rounded-full px-3 py-1">
-            CoParrent Blog
-          </Badge>
-          <h1 className="text-4xl lg:text-5xl font-display font-bold mb-5">
-            Ideas, guidance, and practical co-parenting notes
-          </h1>
-          <p className="text-lg text-muted-foreground leading-relaxed">
-            Short articles for families trying to communicate better, stay organized,
-            and handle shared custody with less friction.
-          </p>
+      <div className="page-shell-public page-stack">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <PageHero
+            className="mx-auto max-w-5xl px-6 py-8 sm:px-8 sm:py-10"
+            bodyClassName="grid-cols-1"
+            eyebrow="CoParrent Blog"
+            eyebrowTone="pill"
+            title="Ideas, guidance, and practical co-parenting notes"
+            description="Short articles for families trying to communicate better, stay organized, and handle shared custody with less friction."
+            descriptionClassName="mx-auto text-lg leading-relaxed text-center"
+            titleClassName="mx-auto text-center text-4xl lg:text-5xl"
+            metadata={
+              <div className="flex justify-center">
+                <StatusPill variant="highlight">Editorial guidance for real family coordination</StatusPill>
+              </div>
+            }
+          />
         </motion.div>
 
         <motion.div
@@ -105,17 +108,17 @@ const BlogPage = () => {
           transition={{ delay: 0.06 }}
           className="grid grid-cols-1 gap-4 md:grid-cols-3"
         >
-          <div className="rounded-[1.75rem] border border-border/70 bg-card/85 p-5 shadow-[0_20px_40px_-34px_rgba(8,21,47,0.45)]">
+          <SectionCard variant="standard" className="p-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">Published</p>
             <p className="text-2xl font-display font-bold">{posts.length}</p>
             <p className="text-sm text-muted-foreground mt-1">Articles currently live</p>
-          </div>
-          <div className="rounded-[1.75rem] border border-border/70 bg-card/85 p-5 shadow-[0_20px_40px_-34px_rgba(8,21,47,0.45)]">
+          </SectionCard>
+          <SectionCard variant="standard" className="p-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">Topics</p>
             <p className="text-2xl font-display font-bold">{categories.length}</p>
             <p className="text-sm text-muted-foreground mt-1">Communication, schedules, parenting, and more</p>
-          </div>
-          <div className="rounded-[1.75rem] border border-border/70 bg-card/85 p-5 shadow-[0_20px_40px_-34px_rgba(8,21,47,0.45)]">
+          </SectionCard>
+          <SectionCard variant="standard" className="p-5">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">Need a specific answer?</p>
             <p className="text-sm text-muted-foreground mb-4">
               The Help Center is better for product questions and step-by-step support.
@@ -123,7 +126,7 @@ const BlogPage = () => {
             <Button asChild variant="outline" size="sm" className="rounded-2xl">
               <Link to="/help">Visit Help Center</Link>
             </Button>
-          </div>
+          </SectionCard>
         </motion.div>
 
         {/* Filters */}
@@ -131,31 +134,33 @@ const BlogPage = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="mx-auto flex max-w-4xl flex-col gap-3 rounded-[2rem] border border-border/70 bg-card/80 p-4 shadow-[0_20px_45px_-36px_rgba(8,21,47,0.45)] sm:flex-row"
+          className="mx-auto max-w-4xl"
         >
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search communication, schedules, transitions..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-12 rounded-2xl pl-10"
-            />
-          </div>
-          <Select value={filterCategory} onValueChange={setFilterCategory}>
-            <SelectTrigger className="h-12 w-full rounded-2xl sm:w-52">
-              <Filter className="w-4 h-4 mr-2" />
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All categories</SelectItem>
-              {categories.map((category) => (
-                <SelectItem key={category} value={category}>
-                  {category}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SectionCard variant="standard" className="flex flex-col gap-3 p-4 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search communication, schedules, transitions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-12 rounded-2xl pl-10"
+              />
+            </div>
+            <Select value={filterCategory} onValueChange={setFilterCategory}>
+              <SelectTrigger className="h-12 w-full rounded-2xl sm:w-52">
+                <Filter className="w-4 h-4 mr-2" />
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </SectionCard>
         </motion.div>
 
         {featuredPost && (
@@ -163,55 +168,56 @@ const BlogPage = () => {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.15 }}
-            className="overflow-hidden rounded-[2rem] border border-border/70 bg-card shadow-[0_28px_60px_-44px_rgba(8,21,47,0.48)]"
           >
-            <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="p-8 lg:p-10 flex flex-col justify-center">
-                <Badge variant="secondary" className="mb-4 w-fit rounded-full px-3 py-1">
-                  Featured article
-                </Badge>
-                <h2 className="text-3xl lg:text-4xl font-display font-bold mb-4">
-                  {featuredPost.title}
-                </h2>
-                <p className="text-lg text-muted-foreground leading-relaxed mb-6">
-                  {featuredPost.excerpt}
-                </p>
-                <div className="flex flex-wrap gap-3 text-sm text-muted-foreground mb-8">
-                  <span>{featuredPost.author_name}</span>
-                  <span>•</span>
-                  <span>{featuredPost.category}</span>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Button asChild className="rounded-2xl">
-                    <Link to={`/blog/${featuredPost.slug}`} className="flex items-center gap-2">
-                      Read article
-                      <ArrowRight className="w-4 h-4" />
-                    </Link>
-                  </Button>
-                  <Button asChild variant="outline" className="rounded-2xl">
-                    <Link to="/help">Browse product help</Link>
-                  </Button>
-                </div>
-              </div>
-              <div className="min-h-[280px] lg:min-h-full bg-gradient-to-br from-primary/10 via-muted to-accent/10">
-                {featuredPost.featured_image ? (
-                  <img
-                    src={featuredPost.featured_image}
-                    alt={featuredPost.title}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="h-full w-full p-8 flex flex-col justify-end">
-                    <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground mb-3">
-                      Featured
-                    </p>
-                    <p className="text-2xl font-display font-semibold max-w-sm">
-                      A practical read for families trying to coordinate with less friction.
-                    </p>
+            <SectionCard variant="primary" className="overflow-hidden p-0">
+              <div className="grid grid-cols-1 lg:grid-cols-[1.1fr_0.9fr]">
+                <div className="flex flex-col justify-center p-8 lg:p-10">
+                  <StatusPill variant="highlight" className="mb-4 w-fit">
+                    Featured article
+                  </StatusPill>
+                  <h2 className="mb-4 text-3xl font-display font-bold lg:text-4xl">
+                    {featuredPost.title}
+                  </h2>
+                  <p className="mb-6 text-lg leading-relaxed text-muted-foreground">
+                    {featuredPost.excerpt}
+                  </p>
+                  <div className="mb-8 flex flex-wrap gap-3 text-sm text-muted-foreground">
+                    <span>{featuredPost.author_name}</span>
+                    <span>•</span>
+                    <span>{featuredPost.category}</span>
                   </div>
-                )}
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <Button asChild className="rounded-2xl">
+                      <Link to={`/blog/${featuredPost.slug}`} className="flex items-center gap-2">
+                        Read article
+                        <ArrowRight className="w-4 h-4" />
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" className="rounded-2xl">
+                      <Link to="/help">Browse product help</Link>
+                    </Button>
+                  </div>
+                </div>
+                <div className="min-h-[280px] bg-gradient-to-br from-primary/10 via-muted to-accent/10 lg:min-h-full">
+                  {featuredPost.featured_image ? (
+                    <img
+                      src={featuredPost.featured_image}
+                      alt={featuredPost.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full flex-col justify-end p-8">
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-muted-foreground">
+                        Featured
+                      </p>
+                      <p className="max-w-sm text-2xl font-display font-semibold">
+                        A practical read for families trying to coordinate with less friction.
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
+            </SectionCard>
           </motion.section>
         )}
 

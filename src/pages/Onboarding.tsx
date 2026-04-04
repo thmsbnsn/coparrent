@@ -6,6 +6,8 @@ import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +20,13 @@ const steps = [
   { id: 3, title: "Invite Co-Parent", icon: Mail },
   { id: 4, title: "Complete", icon: Check },
 ];
+
+const stepDescriptions: Record<number, string> = {
+  1: "Set your account role so CoParrent can shape the family workspace correctly.",
+  2: "Add the children who anchor your shared records, scheduling, and communication.",
+  3: "Invite the other parent or guardian into the same structured family system.",
+  4: "Review the completed setup and move into the live dashboard.",
+};
 
 const roles = ["Father", "Mother", "Guardian", "Other"];
 
@@ -245,6 +254,9 @@ const Onboarding = () => {
     }
   };
 
+  const currentStepMeta = steps[currentStep - 1];
+  const progressPercentage = ((currentStep - 1) / (steps.length - 1)) * 100;
+
   if (authLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -254,46 +266,138 @@ const Onboarding = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <div className="p-6 border-b border-border">
-        <Logo size="md" />
-      </div>
+    <div className="min-h-screen bg-background px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+      <div className="page-shell-public">
+        <div className="mb-6 flex items-center justify-between">
+          <Logo size="md" />
+          <StatusPill variant="scope">
+            Step {currentStep} of {steps.length}
+          </StatusPill>
+        </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center p-6">
-        <div className="w-full max-w-lg">
-          {/* Progress */}
-          <div className="flex items-center justify-between mb-8">
-            {steps.map((step, index) => (
-              <div key={step.id} className="flex items-center">
-                <div
-                  className={cn(
-                    "w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors",
-                    currentStep >= step.id
-                      ? "bg-primary border-primary text-primary-foreground"
-                      : "border-border text-muted-foreground"
-                  )}
-                >
-                  {currentStep > step.id ? (
-                    <Check className="w-5 h-5" />
-                  ) : (
-                    <step.icon className="w-5 h-5" />
-                  )}
+        <div className="grid gap-6 xl:grid-cols-[0.92fr_1.08fr] xl:items-start">
+          <aside className="surface-hero hidden p-6 xl:block xl:p-7">
+            <div className="relative space-y-8">
+              <div className="space-y-4">
+                <span className="eyebrow-pill-dark">Family setup</span>
+                <div className="space-y-3">
+                  <h1 className="text-white">Set up the family workspace with momentum</h1>
+                  <p className="max-w-xl text-base leading-7 text-white/76">
+                    This flow keeps the product wiring the same while making progress, family
+                    structure, and the next action feel unmistakable.
+                  </p>
                 </div>
-                {index < steps.length - 1 && (
-                  <div
-                    className={cn(
-                      "w-12 sm:w-20 h-0.5 mx-2",
-                      currentStep > step.id ? "bg-primary" : "bg-border"
-                    )}
-                  />
-                )}
               </div>
-            ))}
-          </div>
 
-          {/* Step Content */}
-          <AnimatePresence mode="wait">
+              <div className="surface-hero-panel">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">
+                      Current step
+                    </p>
+                    <p className="mt-2 text-2xl font-display font-semibold text-white">
+                      {currentStepMeta?.title}
+                    </p>
+                  </div>
+                  <div className="flex h-14 w-14 items-center justify-center rounded-[1.35rem] border border-white/12 bg-white/10 text-white">
+                    {currentStepMeta ? <currentStepMeta.icon className="h-6 w-6" /> : null}
+                  </div>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-200/74">
+                  {stepDescriptions[currentStep]}
+                </p>
+                <div className="mt-5 h-2 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-[linear-gradient(90deg,rgba(255,255,255,0.96),rgba(125,211,252,0.95),rgba(94,234,212,0.9))] transition-[width] duration-300"
+                    style={{ width: `${progressPercentage}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                {steps.map((step) => {
+                  const isComplete = currentStep > step.id;
+                  const isActive = currentStep === step.id;
+
+                  return (
+                    <div
+                      key={step.id}
+                      className={cn(
+                        "surface-hero-panel flex items-start gap-4 p-4 transition-all",
+                        isActive && "border-white/16 bg-white/10",
+                        isComplete && "bg-white/10",
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          "flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border text-white",
+                          isActive ? "border-white/18 bg-white/12" : "border-white/10 bg-slate-950/22",
+                        )}
+                      >
+                        {isComplete ? <Check className="h-5 w-5" /> : <step.icon className="h-5 w-5" />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-white">{step.title}</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-200/68">
+                          {stepDescriptions[step.id]}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </aside>
+
+          <section className="surface-primary p-5 sm:p-6 lg:p-7">
+            <div className="mb-6 space-y-5">
+              <SectionHeader
+                eyebrow="Guided setup"
+                eyebrowTone="pill"
+                title="Keep the setup moving"
+                description="The order stays the same: role, children, invitation, then the live family dashboard."
+              />
+
+              <div className="rounded-[1.5rem] border border-border/70 bg-background/72 p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                      Progress
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">
+                      {currentStepMeta?.title}
+                    </p>
+                  </div>
+                  <StatusPill variant="highlight">{Math.round(progressPercentage)}% complete</StatusPill>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  {steps.map((step, index) => (
+                    <div key={step.id} className="flex min-w-0 flex-1 items-center">
+                      <div
+                        className={cn(
+                          "flex h-11 w-11 items-center justify-center rounded-2xl border text-sm transition-colors",
+                          currentStep >= step.id
+                            ? "border-primary/20 bg-primary text-primary-foreground"
+                            : "border-border/80 bg-background text-muted-foreground",
+                        )}
+                      >
+                        {currentStep > step.id ? <Check className="h-5 w-5" /> : <step.icon className="h-5 w-5" />}
+                      </div>
+                      {index < steps.length - 1 && (
+                        <div
+                          className={cn(
+                            "mx-2 h-1 min-w-0 flex-1 rounded-full",
+                            currentStep > step.id ? "bg-primary/80" : "bg-border/80",
+                          )}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <AnimatePresence mode="wait">
             {currentStep === 1 && (
               <motion.div
                 key="step1"
@@ -302,8 +406,8 @@ const Onboarding = () => {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6"
               >
-                <div className="text-center">
-                  <h1 className="text-2xl font-display font-bold mb-2">What's your role?</h1>
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-display font-bold">What's your role?</h3>
                   <p className="text-muted-foreground">
                     This helps us personalize your experience
                   </p>
@@ -315,10 +419,10 @@ const Onboarding = () => {
                       key={r}
                       onClick={() => setRole(r)}
                       className={cn(
-                        "p-4 rounded-xl border-2 text-center font-medium transition-all",
+                        "rounded-[1.35rem] border p-4 text-center font-medium transition-all",
                         role === r
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
+                          ? "border-primary/25 bg-primary/10 shadow-[0_18px_35px_-28px_rgba(14,165,233,0.45)]"
+                          : "border-border bg-background/72 hover:border-primary/35 hover:bg-background"
                       )}
                     >
                       {r}
@@ -326,7 +430,7 @@ const Onboarding = () => {
                   ))}
                 </div>
 
-                <Button className="w-full" onClick={nextStep} disabled={!role}>
+                <Button className="h-12 w-full rounded-2xl" onClick={nextStep} disabled={!role}>
                   Continue
                   <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
@@ -341,8 +445,8 @@ const Onboarding = () => {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6"
               >
-                <div className="text-center">
-                  <h1 className="text-2xl font-display font-bold mb-2">Add your children</h1>
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-display font-bold">Add your children</h3>
                   <p className="text-muted-foreground">
                     We'll create profiles for each child
                   </p>
@@ -350,7 +454,7 @@ const Onboarding = () => {
 
                 <div className="space-y-4">
                   {children.map((child, index) => (
-                    <div key={index} className="p-4 rounded-xl border border-border space-y-3">
+                    <div key={index} className="surface-secondary space-y-3 p-4">
                       <div className="space-y-2">
                         <Label>Child's Name</Label>
                         <Input
@@ -369,17 +473,17 @@ const Onboarding = () => {
                       </div>
                     </div>
                   ))}
-                  <Button variant="outline" className="w-full" onClick={addChild}>
+                  <Button variant="outline" className="h-12 w-full rounded-2xl" onClick={addChild}>
                     Add Another Child
                   </Button>
                 </div>
 
                 <div className="flex gap-3">
-                  <Button variant="outline" onClick={prevStep}>
+                  <Button variant="outline" className="rounded-2xl" onClick={prevStep}>
                     <ArrowLeft className="mr-2 w-4 h-4" />
                     Back
                   </Button>
-                  <Button className="flex-1" onClick={nextStep} disabled={!children[0].name || saving}>
+                  <Button className="h-12 flex-1 rounded-2xl" onClick={nextStep} disabled={!children[0].name || saving}>
                     {saving ? "Saving..." : "Continue"}
                     {!saving && <ArrowRight className="ml-2 w-4 h-4" />}
                   </Button>
@@ -395,14 +499,14 @@ const Onboarding = () => {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6"
               >
-                <div className="text-center">
-                  <h1 className="text-2xl font-display font-bold mb-2">Invite your co-parent</h1>
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-display font-bold">Invite your co-parent</h3>
                   <p className="text-muted-foreground">
                     They'll receive an invitation to join CoParrent
                   </p>
                 </div>
 
-                <div className="space-y-2">
+                <div className="surface-secondary space-y-2 p-4">
                   <Label>Co-Parent's Email</Label>
                   <Input
                     type="email"
@@ -410,14 +514,18 @@ const Onboarding = () => {
                     value={coParentEmail}
                     onChange={(e) => setCoParentEmail(e.target.value)}
                   />
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    CoParrent sends the invitation, but the family-scoped workspace remains tied to
+                    your existing setup until they join.
+                  </p>
                 </div>
 
                 <div className="flex gap-3">
-                  <Button variant="outline" onClick={prevStep}>
+                  <Button variant="outline" className="rounded-2xl" onClick={prevStep}>
                     <ArrowLeft className="mr-2 w-4 h-4" />
                     Back
                   </Button>
-                  <Button className="flex-1" onClick={nextStep}>
+                  <Button className="h-12 flex-1 rounded-2xl" onClick={nextStep}>
                     {coParentEmail ? "Send Invite" : "Skip for now"}
                     <ArrowRight className="ml-2 w-4 h-4" />
                   </Button>
@@ -433,23 +541,24 @@ const Onboarding = () => {
                 exit={{ opacity: 0, x: -20 }}
                 className="space-y-6 text-center"
               >
-                <div className="w-16 h-16 rounded-full bg-success/10 flex items-center justify-center mx-auto">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
                   <Check className="w-8 h-8 text-success" />
                 </div>
                 <div>
-                  <h1 className="text-2xl font-display font-bold mb-2">You're all set!</h1>
+                  <h3 className="mb-2 text-2xl font-display font-bold">You're all set!</h3>
                   <p className="text-muted-foreground">
                     Your account is ready. Let's start building your parenting schedule.
                   </p>
                 </div>
 
-                <Button className="w-full" onClick={() => navigate("/dashboard")}>
+                <Button className="h-12 w-full rounded-2xl" onClick={() => navigate("/dashboard")}>
                   Go to Dashboard
                   <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </motion.div>
             )}
-          </AnimatePresence>
+            </AnimatePresence>
+          </section>
         </div>
       </div>
     </div>

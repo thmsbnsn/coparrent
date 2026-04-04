@@ -3,7 +3,8 @@ import { motion } from "framer-motion";
 import { Calendar, User, Share2 } from "lucide-react";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { SectionCard } from "@/components/ui/SectionCard";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { useState } from "react";
 import { ShareDialog } from "./ShareDialog";
 
@@ -36,77 +37,74 @@ export const BlogCard = ({ post, index = 0, isPublic = false }: BlogCardProps) =
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: index * 0.1 }}
-        className="group rounded-2xl border border-border bg-card overflow-hidden hover:shadow-lg transition-shadow"
       >
-        {/* Featured Image */}
-        <Link to={postPath}>
-          <div className="aspect-video bg-gradient-to-br from-primary/20 to-accent/20 relative overflow-hidden">
-            {post.featured_image ? (
-              <img
-                src={post.featured_image}
-                alt={post.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-            ) : (
-              <div className="w-full h-full p-5 bg-gradient-to-br from-primary/15 via-background to-primary/5 flex flex-col justify-between">
-                <Badge variant="secondary" className="w-fit">
-                  {post.category}
-                </Badge>
-                <div>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground mb-2">
-                    CoParrent Journal
-                  </p>
-                  <p className="text-lg font-display font-semibold leading-snug text-foreground line-clamp-3">
-                    {post.title}
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </Link>
-
-        {/* Content */}
-        <div className="p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <Badge variant="secondary" className="text-xs">
-              {post.category}
-            </Badge>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={(e) => {
-                e.preventDefault();
-                setShareDialogOpen(true);
-              }}
-            >
-              <Share2 className="w-4 h-4" />
-            </Button>
-          </div>
-
+        <SectionCard variant="standard" interactive className="group overflow-hidden p-0">
           <Link to={postPath}>
-            <h3 className="font-display font-semibold text-lg leading-snug group-hover:text-primary transition-colors line-clamp-2">
-              {post.title}
-            </h3>
+            <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-primary/20 to-accent/20">
+              {post.featured_image ? (
+                <img
+                  src={post.featured_image}
+                  alt={post.title}
+                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              ) : (
+                <div className="flex h-full w-full flex-col justify-between bg-gradient-to-br from-primary/15 via-background to-primary/5 p-5">
+                  <StatusPill variant="scope" className="w-fit">
+                    {post.category}
+                  </StatusPill>
+                  <div>
+                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                      CoParrent Journal
+                    </p>
+                    <p className="line-clamp-3 text-lg font-display font-semibold leading-snug text-foreground">
+                      {post.title}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
           </Link>
 
-          {post.excerpt && (
-            <p className="text-sm text-muted-foreground line-clamp-2">{post.excerpt}</p>
-          )}
-
-          <div className="flex items-center gap-4 text-xs text-muted-foreground pt-2">
-            <div className="flex items-center gap-1">
-              <User className="w-3 h-3" />
-              {post.author_name}
+          <div className="space-y-3 p-5">
+            <div className="flex items-center justify-between">
+              <StatusPill variant="scope">{post.category}</StatusPill>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShareDialogOpen(true);
+                }}
+              >
+                <Share2 className="w-4 h-4" />
+              </Button>
             </div>
-            {post.published_at && (
-              <div className="flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                {format(new Date(post.published_at), "MMM d, yyyy")}
-              </div>
+
+            <Link to={postPath}>
+              <h3 className="line-clamp-2 text-lg font-display font-semibold leading-snug transition-colors group-hover:text-primary">
+                {post.title}
+              </h3>
+            </Link>
+
+            {post.excerpt && (
+              <p className="line-clamp-2 text-sm text-muted-foreground">{post.excerpt}</p>
             )}
+
+            <div className="flex items-center gap-4 pt-2 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <User className="w-3 h-3" />
+                {post.author_name}
+              </div>
+              {post.published_at && (
+                <div className="flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  {format(new Date(post.published_at), "MMM d, yyyy")}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
+        </SectionCard>
       </motion.div>
 
       <ShareDialog

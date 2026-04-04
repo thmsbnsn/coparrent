@@ -218,7 +218,7 @@ describe("CalendarPage", () => {
 
     expect(rendered.textContent).toContain("No parenting plan saved for this family");
     expect(rendered.textContent).toContain("will not assume an alternating pattern");
-    expect(rendered.textContent).not.toContain("Court-ready summary");
+    expect(rendered.textContent).not.toContain("Legal summary");
   });
 
   it("renders the saved family plan when schedule data exists", async () => {
@@ -242,7 +242,7 @@ describe("CalendarPage", () => {
 
     expect(rendered.textContent).toContain("Current parenting plan");
     expect(rendered.textContent).toContain("Calendar view");
-    expect(rendered.textContent).toContain("Court view");
+    expect(rendered.textContent).toContain("Legal view");
     expect(rendered.textContent).toContain("2-2-3 rotation");
   });
 });

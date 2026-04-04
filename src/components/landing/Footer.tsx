@@ -42,13 +42,14 @@ export const Footer = () => {
   const showVersion = env !== "production";
 
   return (
-    <footer className="bg-primary text-primary-foreground">
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-14 lg:py-18">
+    <footer className="relative overflow-hidden bg-[linear-gradient(180deg,hsl(221_70%_12%)_0%,hsl(221_66%_10%)_48%,hsl(218_68%_9%)_100%)] text-primary-foreground">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-48 bg-[radial-gradient(circle_at_top_left,rgba(45,212,191,0.14),transparent_32%),radial-gradient(circle_at_top_right,rgba(33,176,254,0.16),transparent_34%)]" />
+      <div className="page-shell-public relative px-4 py-14 sm:px-6 lg:px-8 lg:py-16">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-10 lg:gap-8">
           {/* Brand Column */}
           <div className="lg:col-span-2">
             <Logo size="lg" className="mb-5 text-white" />
-            <p className="text-white/60 max-w-sm text-sm leading-relaxed">
+            <p className="max-w-sm text-sm leading-relaxed text-white/68">
               The co-parenting platform built for clarity, documentation,
               and peace of mind. Trusted by families who need calmer coordination.
             </p>
@@ -57,7 +58,7 @@ export const Footer = () => {
           {/* Link Columns */}
           {Object.entries(footerLinks).map(([category, links]) => (
             <div key={category}>
-              <h4 className="font-display font-semibold text-xs uppercase tracking-widest mb-4 text-white/80">
+              <h4 className="mb-4 text-xs font-display font-semibold uppercase tracking-widest text-white/82">
                 {category}
               </h4>
               <ul className="space-y-2.5">
@@ -65,7 +66,7 @@ export const Footer = () => {
                   <li key={link.href}>
                     <Link
                       to={link.href}
-                      className="text-white/50 hover:text-white transition-colors text-sm"
+                      className="text-sm text-white/56 transition-colors hover:text-white"
                     >
                       {link.label}
                     </Link>
@@ -77,13 +78,13 @@ export const Footer = () => {
         </div>
 
         {/* Bottom Bar */}
-        <div className="mt-14 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="mt-14 flex flex-col items-center justify-between gap-4 border-t border-white/10 pt-6 sm:flex-row">
           <div className="flex items-center gap-4">
-            <p className="text-sm text-white/40">
+            <p className="text-sm text-white/44">
               © {new Date().getFullYear()} CoParrent. All rights reserved.
             </p>
             {showVersion && (
-              <span className="text-xs text-white/25 font-mono">
+              <span className="text-xs font-mono text-white/28">
                 v{APP_VERSION}
               </span>
             )}

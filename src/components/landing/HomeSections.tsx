@@ -11,7 +11,9 @@ import {
   Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { SectionCard } from "@/components/ui/SectionCard";
+import { SectionHeader } from "@/components/ui/SectionHeader";
+import { StatusPill } from "@/components/ui/StatusPill";
 
 import calendarFeature from "@/assets/features/calendar-feature.png";
 import messagingFeature from "@/assets/features/messaging-feature.png";
@@ -100,39 +102,25 @@ const roleCards = [
 export const HomeSections = () => {
   return (
     <>
-      <section className="py-20 lg:py-24 bg-muted/20 border-y border-border/60">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mx-auto text-center mb-12 lg:mb-14">
-            <motion.span
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="inline-block text-sm font-semibold text-primary uppercase tracking-widest mb-4"
-            >
-              Why It Works
-            </motion.span>
-            <motion.h2
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.08 }}
-              className="mb-5"
-            >
-              Built for the full coordination loop
-            </motion.h2>
-            <motion.p
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.14 }}
-              className="text-lg text-muted-foreground leading-relaxed"
-            >
-              CoParrent works best when the schedule, the conversation, the records,
-              and the follow-through all live in the same system.
-            </motion.p>
-          </div>
+      <section className="border-y border-border/60 bg-muted/20 px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
+        <div className="page-shell-public">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mx-auto mb-12 max-w-3xl lg:mb-14"
+          >
+            <SectionHeader
+              align="center"
+              eyebrow="Why It Works"
+              eyebrowTone="pill"
+              title="Built for the full coordination loop"
+              description="CoParrent works best when the schedule, the conversation, the records, and the follow-through all live in the same system."
+              descriptionClassName="sm:text-lg"
+            />
+          </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-6">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:gap-6">
             {proofCards.map((card, index) => (
               <motion.div
                 key={card.title}
@@ -140,53 +128,38 @@ export const HomeSections = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.08 }}
-                className="rounded-2xl border border-border bg-card p-6 lg:p-7 shadow-sm"
               >
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 mb-5">
-                  <card.icon className="h-5 w-5 text-primary" />
-                </div>
-                <h3 className="text-lg font-display font-semibold mb-3">{card.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{card.body}</p>
+                <SectionCard variant="standard" className="p-6 lg:p-7">
+                  <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/10 bg-primary/10">
+                    <card.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <h3 className="mb-3 text-lg font-display font-semibold">{card.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{card.body}</p>
+                </SectionCard>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="py-20 lg:py-24 bg-background">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mb-12 lg:mb-14">
-            <motion.span
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="inline-block text-sm font-semibold text-primary uppercase tracking-widest mb-4"
-            >
-              Product Surface
-            </motion.span>
-            <motion.h2
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.08 }}
-              className="mb-5"
-            >
-              A broader system than messaging alone
-            </motion.h2>
-            <motion.p
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.14 }}
-              className="text-lg text-muted-foreground leading-relaxed max-w-2xl"
-            >
-              The strongest co-parenting products are not just inboxes. They help families
-              manage time, information, records, and accountability without rebuilding the
-              same context over and over.
-            </motion.p>
-          </div>
+      <section className="bg-background px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
+        <div className="page-shell-public">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mb-12 max-w-3xl lg:mb-14"
+          >
+            <SectionHeader
+              eyebrow="Product Surface"
+              eyebrowTone="pill"
+              title="A broader system than messaging alone"
+              description="The strongest co-parenting products are not just inboxes. They help families manage time, information, records, and accountability without rebuilding the same context over and over."
+              descriptionClassName="max-w-2xl sm:text-lg"
+            />
+          </motion.div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {showcaseCards.map((card, index) => (
               <motion.div
                 key={card.title}
@@ -194,62 +167,46 @@ export const HomeSections = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.1 }}
-                className="overflow-hidden rounded-[1.75rem] border border-border bg-card shadow-sm"
               >
-                <div className="aspect-[4/3] overflow-hidden border-b border-border bg-muted">
-                  <img
-                    src={card.image}
-                    alt={card.title}
-                    className="h-full w-full object-cover"
-                    loading="lazy"
-                  />
-                </div>
-                <div className="p-6">
-                  <Badge variant="secondary" className="mb-4">
-                    {card.badge}
-                  </Badge>
-                  <h3 className="text-xl font-display font-semibold mb-3">{card.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{card.description}</p>
-                </div>
+                <SectionCard variant="standard" className="overflow-hidden p-0">
+                  <div className="aspect-[4/3] overflow-hidden border-b border-border/70 bg-muted">
+                    <img
+                      src={card.image}
+                      alt={card.title}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                  <div className="p-6">
+                    <StatusPill variant="scope" className="mb-4">
+                      {card.badge}
+                    </StatusPill>
+                    <h3 className="mb-3 text-xl font-display font-semibold">{card.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{card.description}</p>
+                  </div>
+                </SectionCard>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="py-20 lg:py-24 bg-muted/25">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-[0.95fr_1.05fr] gap-12 lg:gap-16 items-start">
-            <div>
-              <motion.span
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                className="inline-block text-sm font-semibold text-primary uppercase tracking-widest mb-4"
-              >
-                Workflow
-              </motion.span>
-              <motion.h2
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.08 }}
-                className="mb-5"
-              >
-                Clarity should come from the system, not from extra effort
-              </motion.h2>
-              <motion.p
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.14 }}
-                className="text-lg text-muted-foreground leading-relaxed"
-              >
-                The strongest part of the product is the structure underneath it:
-                families, roles, shared records, and flows that create documentation
-                while people are simply trying to stay organized.
-              </motion.p>
-            </div>
+      <section className="bg-muted/25 px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
+        <div className="page-shell-public">
+          <div className="grid grid-cols-1 items-start gap-12 lg:grid-cols-[0.95fr_1.05fr] lg:gap-16">
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+            >
+              <SectionHeader
+                eyebrow="Workflow"
+                eyebrowTone="pill"
+                title="Clarity should come from the system, not from extra effort"
+                description="The strongest part of the product is the structure underneath it: families, roles, shared records, and flows that create documentation while people are simply trying to stay organized."
+                descriptionClassName="sm:text-lg"
+              />
+            </motion.div>
 
             <div className="space-y-4">
               {workflowSteps.map((step, index) => (
@@ -259,11 +216,12 @@ export const HomeSections = () => {
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.08 }}
-                  className="rounded-2xl border border-border bg-card p-6"
                 >
-                  <div className="text-sm font-semibold text-primary mb-2">{step.step}</div>
-                  <h3 className="text-lg font-display font-semibold mb-3">{step.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{step.body}</p>
+                  <SectionCard variant="standard" className="p-6">
+                    <div className="mb-2 text-sm font-semibold text-primary">{step.step}</div>
+                    <h3 className="mb-3 text-lg font-display font-semibold">{step.title}</h3>
+                    <p className="text-sm leading-relaxed text-muted-foreground">{step.body}</p>
+                  </SectionCard>
                 </motion.div>
               ))}
             </div>
@@ -271,39 +229,25 @@ export const HomeSections = () => {
         </div>
       </section>
 
-      <section className="py-20 lg:py-24 bg-background">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="max-w-3xl mx-auto text-center mb-12 lg:mb-14">
-            <motion.span
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              className="inline-block text-sm font-semibold text-primary uppercase tracking-widest mb-4"
-            >
-              Roles
-            </motion.span>
-            <motion.h2
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.08 }}
-              className="mb-5"
-            >
-              Made for the people actually involved
-            </motion.h2>
-            <motion.p
-              initial={{ opacity: 0, y: 16 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.14 }}
-              className="text-lg text-muted-foreground leading-relaxed"
-            >
-              CoParrent is designed for parents first, but it already leaves room
-              for the other people real families rely on.
-            </motion.p>
-          </div>
+      <section className="bg-background px-4 py-20 sm:px-6 lg:px-8 lg:py-24">
+        <div className="page-shell-public">
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            className="mx-auto mb-12 max-w-3xl lg:mb-14"
+          >
+            <SectionHeader
+              align="center"
+              eyebrow="Roles"
+              eyebrowTone="pill"
+              title="Made for the people actually involved"
+              description="CoParrent is designed for parents first, but it already leaves room for the other people real families rely on."
+              descriptionClassName="sm:text-lg"
+            />
+          </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {roleCards.map((card, index) => (
               <motion.div
                 key={card.title}
@@ -311,32 +255,33 @@ export const HomeSections = () => {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: index * 0.08 }}
-                className="rounded-2xl border border-border bg-card p-6 lg:p-7"
               >
-                <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 mb-5">
-                  <card.icon className="h-5 w-5 text-primary" />
-                </div>
-                <h3 className="text-lg font-display font-semibold mb-3">{card.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{card.body}</p>
+                <SectionCard variant="standard" className="p-6 lg:p-7">
+                  <div className="mb-5 inline-flex h-12 w-12 items-center justify-center rounded-2xl border border-primary/10 bg-primary/10">
+                    <card.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <h3 className="mb-3 text-lg font-display font-semibold">{card.title}</h3>
+                  <p className="text-sm leading-relaxed text-muted-foreground">{card.body}</p>
+                </SectionCard>
               </motion.div>
             ))}
           </div>
         </div>
       </section>
 
-      <section className="py-20 lg:py-24 bg-primary text-primary-foreground">
-        <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="px-4 py-20 text-primary-foreground sm:px-6 lg:px-8 lg:py-24">
+        <div className="page-shell-public">
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            className="max-w-3xl mx-auto text-center"
+            className="surface-hero mx-auto max-w-4xl px-6 py-8 text-center sm:px-8 sm:py-10"
           >
-            <span className="inline-block text-sm font-semibold uppercase tracking-widest text-white/70 mb-4">
+            <span className="eyebrow-pill-dark">
               Start With Structure
             </span>
-            <h2 className="text-white mb-4">See the full system before you commit to more chaos</h2>
-            <p className="text-lg text-white/75 max-w-2xl mx-auto mb-8">
+            <h2 className="mt-4 text-white">See the full system before you commit to more chaos</h2>
+            <p className="mx-auto mb-8 mt-4 max-w-2xl text-lg text-white/75">
               Explore the platform, compare the plans, and see how CoParrent handles
               schedules, communication, records, and family coordination together.
             </p>

@@ -88,11 +88,17 @@ export const ThreadSummaryBar = ({
       : readyRecord
         ? "border-accent/25 bg-accent/10 text-accent"
         : "border-border/70 bg-background/65 text-muted-foreground";
+  const viewBadgeClass = courtView
+    ? "border-slate-300/40 bg-slate-900 text-white"
+    : "border-border/70 bg-background/75 text-foreground/85";
 
   return (
     <div
       className={cn(
-        "border-b border-border/80 bg-[linear-gradient(180deg,hsl(var(--background)/0.86),hsl(var(--muted)/0.28))] px-4 py-3",
+        "border-b border-border/80 px-4 py-3",
+        courtView
+          ? "bg-[linear-gradient(180deg,rgba(250,250,249,0.98),rgba(244,244,245,0.92))]"
+          : "bg-[linear-gradient(180deg,hsl(var(--background)/0.86),hsl(var(--muted)/0.28))]",
         className
       )}
     >
@@ -117,11 +123,11 @@ export const ThreadSummaryBar = ({
           )}
         </div>
         <Badge
-          variant={courtView ? "default" : "outline"}
-          className="w-fit gap-1.5 rounded-full"
+          variant="outline"
+          className={cn("w-fit gap-1.5 rounded-full", viewBadgeClass)}
         >
           <FileText className="h-3.5 w-3.5" />
-          {courtView ? "Court view" : "Chat view"}
+          {courtView ? "Legal view" : "Chat view"}
         </Badge>
       </div>
       <p className="mt-2 text-xs leading-5 text-muted-foreground">

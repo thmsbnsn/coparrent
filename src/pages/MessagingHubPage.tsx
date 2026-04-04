@@ -1291,7 +1291,37 @@ const MessagingHubPage = () => {
         ? "Group thread"
         : "Direct thread"
     : "No thread selected";
-  const modeSummaryLabel = courtView ? "Court view active" : "Chat view active";
+  const modeSummaryLabel = courtView ? "Legal view active" : "Chat view active";
+  const threadShellClass = courtView
+    ? "border-slate-300/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(245,245,244,0.97))] shadow-[0_28px_60px_-38px_rgba(120,113,108,0.3)]"
+    : "border-border/70 bg-gradient-to-b from-card via-card to-card/90 shadow-[0_28px_60px_-38px_rgba(15,23,42,0.92)]";
+  const threadHeaderClass = courtView
+    ? "border-slate-300/70 bg-[linear-gradient(180deg,rgba(250,250,249,0.98),rgba(244,244,245,0.94))]"
+    : "border-border/80 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(15,23,42,0.7))]";
+  const threadHeaderTextClass = courtView ? "text-slate-950" : "text-white";
+  const threadHeaderSubtleClass = courtView ? "text-slate-600" : "text-slate-300/70";
+  const threadActionBarClass = courtView
+    ? "border-slate-300/70 bg-white/92"
+    : "border-white/10 bg-white/5";
+  const threadActionTextClass = courtView ? "text-slate-600" : "text-slate-300/75";
+  const threadActionButtonClass = courtView
+    ? "border-slate-300/70 bg-white text-slate-900 hover:bg-slate-50"
+    : "border-white/10 bg-white/5 text-white hover:bg-white/10";
+  const evidenceShellClass = courtView
+    ? "bg-[linear-gradient(180deg,rgba(161,161,170,0.08),transparent_28%)]"
+    : "bg-[linear-gradient(180deg,rgba(15,23,42,0.06),transparent_35%)]";
+  const evidenceCardClass = courtView
+    ? "border-slate-300/70 bg-white/90"
+    : "border-border/70 bg-background/35";
+  const evidencePanelClass = courtView
+    ? "border-slate-300/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,245,244,0.96))]"
+    : "border-border/70 bg-background/45";
+  const composerSectionClass = courtView
+    ? "border-slate-300/70 bg-[linear-gradient(180deg,rgba(245,245,244,0.9),rgba(231,229,228,0.92))]"
+    : "border-border/80 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.12))]";
+  const composerCardClass = courtView
+    ? "border-slate-300/70 bg-white/92"
+    : "border-border/70 bg-background/55";
   const evidenceSummaryLabel =
     recordState === "loading_existing"
       ? "Loading existing record"
@@ -1906,7 +1936,7 @@ const MessagingHubPage = () => {
             animate={{ opacity: 1, y: 0 }}
             className="mb-4 no-print"
           >
-            <div className="relative isolate overflow-hidden rounded-[30px] border border-primary/15 bg-[radial-gradient(circle_at_top_left,rgba(45,212,191,0.16),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(59,130,246,0.14),transparent_35%),linear-gradient(135deg,rgba(15,23,42,0.94),rgba(10,16,27,0.92))] p-5 shadow-[0_28px_70px_-38px_rgba(15,23,42,0.9)]">
+            <div className="surface-hero relative isolate overflow-hidden p-5">
               <div className="absolute inset-x-0 top-0 h-px bg-white/10" />
               <div className="absolute left-8 top-6 h-32 w-32 rounded-full bg-primary/20 blur-3xl" />
               <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-accent/15 blur-3xl" />
@@ -1914,15 +1944,15 @@ const MessagingHubPage = () => {
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                   <div className="min-w-0 space-y-4">
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="inline-flex rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-primary-foreground/80">
+                      <div className="eyebrow-pill-dark">
                         Messaging record
                       </div>
-                      <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-primary-foreground/70">
+                      <div className="status-pill-dark">
                         {modeSummaryLabel}
                       </div>
                       {activeThread ? (
                         <>
-                          <div className="inline-flex rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-medium text-primary-foreground/70">
+                          <div className="status-pill-dark">
                             {currentThreadTypeLabel}
                           </div>
                           <div className={cn("inline-flex rounded-full border px-3 py-1 text-xs font-medium", threadStatusBadgeClass)}>
@@ -1939,10 +1969,10 @@ const MessagingHubPage = () => {
                         Messaging Hub
                       </h1>
                       <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-200/80">
-                        Review the current family record, switch into court view when needed, and keep the conversation itself ahead of utility controls.
+                        Review the current family record, switch into legal view when needed, and keep the conversation itself ahead of utility controls.
                       </p>
                     </div>
-                    <div className="rounded-[24px] border border-white/10 bg-white/5 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-sm">
+                    <div className="surface-hero-panel px-4 py-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
                         Selected conversation
                       </p>
@@ -2300,15 +2330,15 @@ const MessagingHubPage = () => {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[30px] border border-border/70 bg-gradient-to-b from-card via-card to-card/90 shadow-[0_28px_60px_-38px_rgba(15,23,42,0.92)]"
+              className={cn(
+                "flex min-w-0 flex-1 flex-col overflow-hidden rounded-[30px] border",
+                threadShellClass,
+              )}
             >
               {activeThread ? (
                 <>
                   {/* Thread Header - Context for attribution */}
-                  <div className={cn(
-                    "border-b border-border/80 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(15,23,42,0.7))] px-4 py-4 sm:px-5",
-                    courtView && "bg-[linear-gradient(135deg,rgba(15,23,42,0.94),rgba(17,24,39,0.78))]"
-                  )}>
+                  <div className={cn("border-b px-4 py-4 sm:px-5", threadHeaderClass)}>
                     <div className="flex flex-col gap-4">
                       <div className="flex w-full items-start justify-between gap-3">
                         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
@@ -2318,8 +2348,8 @@ const MessagingHubPage = () => {
                                 <Hash className="h-5 w-5" />
                               </div>
                               <div className="min-w-0">
-                                <h2 className="text-sm font-semibold text-white">Family Channel</h2>
-                                <p className="text-[11px] text-slate-300/70">
+                                <h2 className={cn("text-sm font-semibold", threadHeaderTextClass)}>Family Channel</h2>
+                                <p className={cn("text-[11px]", threadHeaderSubtleClass)}>
                                   Official family communication record
                                 </p>
                               </div>
@@ -2330,10 +2360,10 @@ const MessagingHubPage = () => {
                                 <UsersRound className="h-5 w-5" />
                               </div>
                               <div className="min-w-0">
-                                <h2 className="truncate text-sm font-semibold text-white">
+                                <h2 className={cn("truncate text-sm font-semibold", threadHeaderTextClass)}>
                                   {activeThread.name || "Group"}
                                 </h2>
-                                <p className="truncate text-[11px] text-slate-300/70">
+                                <p className={cn("truncate text-[11px]", threadHeaderSubtleClass)}>
                                   {activeThread.participants?.map((p) => p.full_name || p.email).join(", ")}
                                 </p>
                               </div>
@@ -2349,7 +2379,7 @@ const MessagingHubPage = () => {
                                 </AvatarFallback>
                               </Avatar>
                               <div className="min-w-0">
-                                <h2 className="truncate text-sm font-semibold text-white">
+                                <h2 className={cn("truncate text-sm font-semibold", threadHeaderTextClass)}>
                                   {activeThread.other_participant?.full_name ||
                                    activeThread.other_participant?.email ||
                                    "Unknown"}
@@ -2358,7 +2388,14 @@ const MessagingHubPage = () => {
                                   {activeThread.other_participant?.role && (
                                     getRoleBadge(activeThread.other_participant.role)
                                   )}
-                                  <Badge variant="outline" className="border-white/10 bg-white/5 text-[10px] uppercase tracking-[0.14em] text-slate-200/70">
+                                  <Badge
+                                    variant="outline"
+                                    className={cn(
+                                      "text-[10px] uppercase tracking-[0.14em]",
+                                      threadActionBarClass,
+                                      threadActionTextClass,
+                                    )}
+                                  >
                                     Direct record
                                   </Badge>
                                   <Badge variant="outline" className={threadStatusBadgeClass}>
@@ -2370,7 +2407,7 @@ const MessagingHubPage = () => {
                           )}
                         </div>
                         {!isMobile && !isChildAccount && activeThread.thread_type === "direct_message" ? (
-                          <div className="rounded-[18px] border border-white/10 bg-white/5 p-1.5">
+                          <div className={cn("rounded-[18px] border p-1.5", threadActionBarClass)}>
                             <CallActionButtons
                               disabled={Boolean(currentThreadCall)}
                               loading={Boolean(startingCallType)}
@@ -2380,8 +2417,8 @@ const MessagingHubPage = () => {
                           </div>
                         ) : null}
                       </div>
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-white/10 bg-white/5 px-3 py-2.5">
-                        <p className="text-xs text-slate-300/75">
+                      <div className={cn("flex flex-wrap items-center justify-between gap-3 rounded-[20px] border px-3 py-2.5", threadActionBarClass)}>
+                        <p className={cn("text-xs", threadActionTextClass)}>
                           {recordState === "ready"
                             ? `${messages.length} recorded message${messages.length === 1 ? "" : "s"} visible.`
                             : recordState === "empty"
@@ -2390,7 +2427,7 @@ const MessagingHubPage = () => {
                         </p>
                         <div className="flex flex-wrap items-center gap-2">
                           {!isChildAccount && activeThread.thread_type === "direct_message" ? (
-                            <div className="rounded-[18px] border border-white/10 bg-white/5 p-1.5 md:hidden">
+                            <div className={cn("rounded-[18px] border p-1.5 md:hidden", threadActionBarClass)}>
                               <CallActionButtons
                                 disabled={Boolean(currentThreadCall)}
                                 loading={Boolean(startingCallType)}
@@ -2411,7 +2448,7 @@ const MessagingHubPage = () => {
                           <Button
                             variant="outline"
                             size={isMobile ? "icon" : "sm"}
-                            className="rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10"
+                            className={cn("rounded-xl", threadActionButtonClass)}
                             onClick={() => void handleRefresh()}
                             disabled={isRefreshing || isPullRefreshing}
                             aria-label={isRefreshing || isPullRefreshing ? "Refreshing thread" : "Refresh thread"}
@@ -2430,7 +2467,7 @@ const MessagingHubPage = () => {
                               <Button
                                 variant="outline"
                                 size={isMobile ? "icon" : "sm"}
-                                className="rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/10"
+                                className={cn("rounded-xl", threadActionButtonClass)}
                                 aria-label="More messaging actions"
                               >
                                 <MoreHorizontal className={cn("h-4 w-4", !isMobile && "mr-2")} />
@@ -2488,15 +2525,15 @@ const MessagingHubPage = () => {
                     recordState={recordState ?? undefined}
                     threadType={activeThread.thread_type as "family_channel" | "group_chat" | "direct_message"}
                     courtView={courtView}
-                    className="no-print border-b border-border/80 bg-background/55 px-5 py-3"
+                    className={cn("no-print border-b px-5 py-3", courtView ? "border-slate-300/70" : "border-border/80")}
                   />
 
                   {/* 
                     EVIDENCE SECTION - Message History
                     RULE: Evidence and Action must be visually separated
                   */}
-                  <div className="flex min-h-0 flex-1 flex-col bg-[linear-gradient(180deg,rgba(15,23,42,0.06),transparent_35%)] px-3 py-3 sm:px-4">
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border border-border/70 bg-background/35 px-4 py-2.5">
+                  <div className={cn("flex min-h-0 flex-1 flex-col px-3 py-3 sm:px-4", evidenceShellClass)}>
+                    <div className={cn("mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border px-4 py-2.5", evidenceCardClass)}>
                       <div>
                         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                           Record timeline
@@ -2516,7 +2553,7 @@ const MessagingHubPage = () => {
                       </Badge>
                     </div>
                     {recordState === "loading_existing" || recordState === "loading_empty" ? (
-                      <div className="flex flex-1 items-center justify-center rounded-[26px] border border-border/70 bg-background/45 px-6 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                      <div className={cn("flex flex-1 items-center justify-center rounded-[26px] border px-6 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]", evidencePanelClass)}>
                         <div className="max-w-sm">
                           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/15 bg-primary/10 text-primary">
                             <Loader2 className="h-6 w-6 animate-spin" />
@@ -2563,7 +2600,7 @@ const MessagingHubPage = () => {
                       <EvidencePanel
                         timelineItems={timelineItems}
                         viewMode={viewMode}
-                        className="flex-1 rounded-[26px] border border-border/70 bg-background/45 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+                        className={cn("flex-1 rounded-[26px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]", evidencePanelClass)}
                       />
                     )}
                   </div>
@@ -2573,8 +2610,8 @@ const MessagingHubPage = () => {
                     RULE: Feel deliberate, not impulsive
                     RULE: Visually separate drafting from history
                    */}
-                  <div className="no-print border-t border-border/80 bg-[linear-gradient(180deg,rgba(15,23,42,0.02),rgba(15,23,42,0.12))] px-3 pb-3 pt-3 sm:px-4">
-                    <div className="mb-3 rounded-[20px] border border-border/70 bg-background/35 px-4 py-2.5">
+                  <div className={cn("no-print border-t px-3 pb-3 pt-3 sm:px-4", composerSectionClass)}>
+                    <div className={cn("mb-3 rounded-[20px] border px-4 py-2.5", evidenceCardClass)}>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                         Deliberate composer
                       </p>
@@ -2584,7 +2621,7 @@ const MessagingHubPage = () => {
                           : "Draft carefully. Sending places the message into the permanent family record."}
                       </p>
                     </div>
-                    <div className="rounded-[26px] border border-border/70 bg-background/55 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                    <div className={cn("rounded-[26px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]", composerCardClass)}>
                       <DeliberateComposer
                         disabled={composerDisabled}
                         helperText={composerHelperText}

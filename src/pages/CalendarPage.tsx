@@ -292,11 +292,11 @@ const CalendarPage = () => {
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="page-shell-app page-stack">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="relative isolate overflow-hidden rounded-[30px] border border-primary/15 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.16),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(45,212,191,0.14),transparent_35%),linear-gradient(145deg,rgba(15,23,42,0.96),rgba(10,16,27,0.94))] p-5 text-white shadow-[0_28px_70px_-40px_rgba(15,23,42,0.95)] sm:p-6"
+          className="surface-hero p-5 text-white sm:p-6"
         >
           <div className="absolute inset-y-0 right-8 w-36 rounded-full bg-primary/15 blur-3xl" />
           <div className="absolute left-6 top-5 h-28 w-28 rounded-full bg-accent/20 blur-3xl" />
@@ -505,7 +505,7 @@ const CalendarPage = () => {
                     No parenting plan saved for this family
                   </h2>
                   <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-                    The calendar will not assume an alternating pattern or generate a court summary on its own.
+                    The calendar will not assume an alternating pattern or generate a legal summary on its own.
                     Save a schedule for {activeFamilyLabel.toLowerCase()} first, then the day-by-day calendar and
                     export tools will unlock.
                   </p>
@@ -645,7 +645,7 @@ const CalendarPage = () => {
                     className="rounded-full"
                     onClick={() => setViewMode("court")}
                   >
-                    Court view
+                    Legal view
                   </Button>
                 </div>
               </div>
@@ -776,12 +776,12 @@ const CalendarPage = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.12 }}
-                className="rounded-[30px] border border-border/70 bg-card p-6 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.85)]"
+                className="surface-legal p-6"
               >
                 <div className="mx-auto max-w-3xl space-y-6">
                   <div className="text-center">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      Court-ready summary
+                      Legal summary
                     </p>
                     <h2 className="mt-2 text-2xl font-display font-bold text-foreground">Parenting time schedule</h2>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">
@@ -790,7 +790,7 @@ const CalendarPage = () => {
                   </div>
 
                   <div className="grid gap-4 md:grid-cols-2">
-                    <div className="rounded-[24px] border border-border/70 bg-muted/25 p-5">
+                    <div className="surface-legal-muted p-5">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                         Schedule pattern
                       </p>
@@ -802,7 +802,7 @@ const CalendarPage = () => {
                       </p>
                     </div>
 
-                    <div className="rounded-[24px] border border-border/70 bg-muted/25 p-5">
+                    <div className="surface-legal-muted p-5">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                         Exchange details
                       </p>
@@ -818,7 +818,7 @@ const CalendarPage = () => {
                     </div>
                   </div>
 
-                  <div className="rounded-[24px] border border-border/70 bg-muted/25 p-5">
+                  <div className="surface-legal-muted p-5">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                       Holiday schedule
                     </p>

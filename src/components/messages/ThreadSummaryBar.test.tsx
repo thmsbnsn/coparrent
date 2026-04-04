@@ -60,4 +60,11 @@ describe("ThreadSummaryBar", () => {
     expect(rendered.textContent).toContain("2 recorded messages are visible in order for review.");
     expect(rendered.textContent).not.toContain("First message pending");
   });
+
+  it("uses Legal view as the user-facing structured-review label", () => {
+    const rendered = renderBar({ courtView: true, recordState: "ready", totalMessages: 2 });
+
+    expect(rendered.textContent).toContain("Legal view");
+    expect(rendered.textContent).not.toContain("Court view");
+  });
 });

@@ -1,7 +1,10 @@
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
-import { ArrowRight, Shield, Scale, FileCheck, LayoutDashboard } from "lucide-react";
+import { ArrowRight, CalendarDays, FileCheck, LayoutDashboard, Scale, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PageHero } from "@/components/ui/PageHero";
+import { SectionCard } from "@/components/ui/SectionCard";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
@@ -26,137 +29,165 @@ const trustSignals = [
   { icon: Scale, label: "Court-aware exports" },
 ];
 
+const heroPanels = [
+  {
+    icon: CalendarDays,
+    title: "Clear operational view",
+    copy: "Schedules, exchanges, and shared context stay visible before anyone needs to search for them.",
+  },
+  {
+    icon: FileCheck,
+    title: "Records that hold up",
+    copy: "Messages, notes, and exports keep the chronology intact without turning daily coordination into extra work.",
+  },
+];
+
 export const Hero = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
 
+  const heroActions = !loading && user ? (
+    <Button
+      size="lg"
+      onClick={() => navigate("/dashboard")}
+      className="h-12 rounded-2xl bg-white text-slate-950 shadow-[0_24px_50px_-28px_rgba(15,23,42,0.95)] hover:bg-white/95"
+    >
+      <LayoutDashboard className="mr-2 h-5 w-5" />
+      Go to Dashboard
+    </Button>
+  ) : (
+    <>
+      <Button
+        size="lg"
+        onClick={() => navigate("/signup")}
+        className="h-12 rounded-2xl bg-white text-slate-950 shadow-[0_24px_50px_-28px_rgba(15,23,42,0.95)] hover:bg-white/95"
+      >
+        Start Free
+        <ArrowRight className="ml-2 h-5 w-5" />
+      </Button>
+      <Button
+        variant="outline"
+        size="lg"
+        onClick={() => navigate("/features")}
+        className="h-12 rounded-2xl border-white/20 bg-white/6 text-white hover:border-white/30 hover:bg-white/12"
+      >
+        See How It Works
+      </Button>
+    </>
+  );
+
   return (
-    <section className="relative min-h-[90vh] flex items-center pt-20 lg:pt-24 overflow-hidden bg-[#0a0f1a]">
-      {/* Structured Background - Direct dark navy gradient for guaranteed contrast */}
-      <div 
-        className="absolute inset-0 -z-10"
-        style={{
-          background: 'linear-gradient(160deg, hsl(222, 50%, 6%) 0%, hsl(222, 45%, 10%) 50%, hsl(215, 40%, 12%) 100%)'
-        }}
-      />
-      
-      {/* Subtle Grid Pattern for Structure */}
-      <div 
-        className="absolute inset-0 -z-10 opacity-[0.03]"
-        style={{
-          backgroundImage: `linear-gradient(hsl(0 0% 100%) 1px, transparent 1px),
-                           linear-gradient(90deg, hsl(0 0% 100%) 1px, transparent 1px)`,
-          backgroundSize: '60px 60px'
-        }}
-      />
-
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center">
-          {/* Eyebrow - Subtle but legible, not playful */}
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="mb-6"
-          >
-            {/* FIX: Increased contrast on eyebrow text for readability */}
-            <span className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/15 backdrop-blur-sm border border-white/20 text-white/95 text-sm font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+    <section className="relative overflow-hidden px-4 pb-20 pt-24 sm:px-6 lg:px-8 lg:pb-28 lg:pt-32">
+      <div className="absolute inset-x-0 top-0 -z-10 h-[32rem] bg-[radial-gradient(circle_at_top,rgba(14,165,233,0.16),transparent_56%),radial-gradient(circle_at_top_right,rgba(45,212,191,0.14),transparent_42%)]" />
+      <div className="page-shell-public">
+        <PageHero
+          variant="dark"
+          className="px-6 py-8 sm:px-8 sm:py-10 lg:px-10 lg:py-12"
+          bodyClassName="gap-8 lg:grid-cols-[minmax(0,1.05fr)_minmax(18rem,0.95fr)]"
+          eyebrow={
+            <>
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
               Built for shared custody and clearer records
-            </span>
-          </motion.div>
-
-          {/* Primary Headline - Commanding, Clear */}
-          <motion.h1
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            className="text-white mb-6"
-          >
-            One system for
-            <br />
-            {/* FIX: headline sub-line was too faint */}
-            <span className="text-white/95">calmer co-parenting</span>
-          </motion.h1>
-
-          {/* Value Proposition - Direct, Confident */}
-          {/* FIX: Increased contrast from white/70 to white/85 */}
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-            className="text-lg sm:text-xl text-white/85 max-w-2xl mx-auto mb-10 leading-relaxed"
-          >
-            CoParrent keeps schedules, messages, child information, documents,
-            and expenses in one structured place, so fewer details fall through
-            the cracks and every decision has context.
-          </motion.p>
-
-          {/* CTA - Singular, Clear Action */}
+            </>
+          }
+          title={
+            <>
+              One operating system for
+              <br />
+              <span className="text-white/92">calmer co-parenting</span>
+            </>
+          }
+          description={
+            <p className="max-w-2xl text-base leading-7 text-white/78 sm:text-lg">
+              CoParrent keeps schedules, messages, child information, documents, and expenses
+              inside one modern family workspace so decisions stay grounded in the same record.
+            </p>
+          }
+          actions={
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-center"
+            >
+              {heroActions}
+            </motion.div>
+          }
+          metadata={
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              className="flex flex-wrap items-center gap-3"
+            >
+              {trustSignals.map((signal, index) => (
+                <motion.div
+                  key={signal.label}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.4, delay: 0.45 + index * 0.1 }}
+                >
+                  <StatusPill variant="dark" icon={<signal.icon className="h-4 w-4" />}>
+                    {signal.label}
+                  </StatusPill>
+                </motion.div>
+              ))}
+            </motion.div>
+          }
+        >
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="mb-12"
+            initial={{ opacity: 0, x: 18 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.55, delay: 0.22 }}
+            className="space-y-4"
           >
-            {!loading && user ? (
-              <Button 
-                size="lg" 
-                onClick={() => navigate("/dashboard")} 
-                className="h-14 px-8 text-base font-medium bg-white text-primary hover:bg-white/95 shadow-xl"
-              >
-                <LayoutDashboard className="mr-2 w-5 h-5" />
-                Go to Dashboard
-              </Button>
-            ) : (
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-                <Button 
-                  size="lg" 
-                  onClick={() => navigate("/signup")} 
-                  className="h-14 px-8 text-base font-medium bg-white text-primary hover:bg-white/95 shadow-xl"
-                >
-                  Start Free
-                  <ArrowRight className="ml-2 w-5 h-5" />
-                </Button>
-                {/* Secondary CTA - visible outline button */}
-                <Button 
-                  variant="outline" 
-                  size="lg"
-                  onClick={() => navigate("/features")} 
-                  className="h-14 px-6 text-base text-white bg-transparent border-white/50 hover:bg-white/10 hover:border-white"
-                >
-                  See How It Works
-                </Button>
+            <SectionCard variant="glass" className="text-white">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">
+                Why families switch
+              </p>
+              <div className="mt-4 space-y-3">
+                {heroPanels.map((panel) => (
+                  <div
+                    key={panel.title}
+                    className="rounded-[1.35rem] border border-white/10 bg-slate-950/28 p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-white">
+                        <panel.icon className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-white">{panel.title}</p>
+                        <p className="mt-1 text-sm leading-6 text-slate-200/72">{panel.copy}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            )}
-          </motion.div>
+            </SectionCard>
 
-          {/* Trust Signals - Understated but VISIBLE Authority */}
-          {/* FIX: Increased contrast from white/60 to white/80 */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-            className="flex flex-wrap items-center justify-center gap-6 sm:gap-10"
-          >
-            {trustSignals.map((signal, index) => (
-              <motion.div
-                key={signal.label}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ duration: 0.4, delay: 0.5 + index * 0.1 }}
-                className="flex items-center gap-2 text-white/80"
-              >
-                <signal.icon className="w-4 h-4" />
-                <span className="text-sm font-medium">{signal.label}</span>
-              </motion.div>
-            ))}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <SectionCard variant="glass" className="text-white">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">
+                  Shared family system
+                </p>
+                <p className="mt-3 text-2xl font-display font-semibold text-white">Calendar first</p>
+                <p className="mt-2 text-sm leading-6 text-slate-200/72">
+                  Schedules, messages, records, and follow-through all align to the same family context.
+                </p>
+              </SectionCard>
+              <SectionCard variant="glass" className="text-white">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/68">
+                  Professional tone
+                </p>
+                <p className="mt-3 text-2xl font-display font-semibold text-white">Calm authority</p>
+                <p className="mt-2 text-sm leading-6 text-slate-200/72">
+                  Modern product polish without feeling casual, childish, or legally vague.
+                </p>
+              </SectionCard>
+            </div>
           </motion.div>
-        </div>
+        </PageHero>
       </div>
-
-      {/* Bottom Fade to Content */}
-      <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-background to-transparent" />
     </section>
   );
 };

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
@@ -155,7 +156,7 @@ export const DashboardLayout = ({
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo - Fixed at top, no safe area here (handled by container) */}
-      <div className="p-4 border-b border-sidebar-border shrink-0">
+      <div className="shrink-0 border-b border-sidebar-border/90 p-4">
         <div className="flex items-center justify-between gap-2">
           <Link to={isLawOfficeLayout ? "/law-office/dashboard" : "/dashboard"}>
             <Logo size="md" showText={!sidebarCollapsed} className="[&_span]:text-sidebar-foreground" />
@@ -165,7 +166,7 @@ export const DashboardLayout = ({
       </div>
 
       {/* Family Switcher */}
-      <div className="px-3 py-2 border-b border-sidebar-border shrink-0">
+      <div className="shrink-0 border-b border-sidebar-border/90 px-3 py-3">
         <FamilySwitcher collapsed={sidebarCollapsed} />
       </div>
 
@@ -182,7 +183,7 @@ export const DashboardLayout = ({
                 "flex items-center gap-3 rounded-2xl border px-3 py-2.5 transition-all duration-200",
                 isActive
                   ? "border-sidebar-primary/20 bg-[linear-gradient(135deg,rgba(18,84,214,0.42),rgba(17,127,191,0.2))] text-sidebar-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_30px_-24px_rgba(13,148,136,0.6)]"
-                  : "border-transparent text-sidebar-foreground/72 hover:border-white/10 hover:bg-white/[0.05] hover:text-sidebar-foreground"
+                  : "border-transparent text-sidebar-foreground/72 hover:border-white/10 hover:bg-white/[0.06] hover:text-sidebar-foreground"
               )}
             >
               <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -195,7 +196,7 @@ export const DashboardLayout = ({
       </nav>
 
       {/* Bottom Section - Fixed at bottom with safe area padding */}
-      <div className="p-3 border-t border-sidebar-border space-y-1 shrink-0" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}>
+      <div className="shrink-0 space-y-1 border-t border-sidebar-border/90 p-3" style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}>
         <button
           onClick={handleSignOut}
           className="flex w-full items-center gap-3 rounded-2xl border border-transparent px-3 py-2.5 text-sidebar-foreground/72 transition-all duration-200 hover:border-white/10 hover:bg-white/[0.05] hover:text-sidebar-foreground"
@@ -208,12 +209,12 @@ export const DashboardLayout = ({
   );
 
   return (
-    <div className="flex min-h-screen overflow-x-clip bg-[linear-gradient(180deg,hsl(var(--background))_0%,hsl(var(--background))_70%,hsl(var(--muted)/0.28)_100%)]">
+    <div className="page-background-app flex min-h-screen overflow-x-clip bg-background">
       {/* Desktop Sidebar */}
       <motion.aside
         initial={false}
         animate={{ width: sidebarCollapsed ? 72 : 256 }}
-        className="hidden fixed left-0 top-0 bottom-0 z-40 flex-col border-r border-sidebar-border/80 bg-[linear-gradient(180deg,hsl(var(--sidebar-background))_0%,hsl(221_62%_8%)_100%)] shadow-[18px_0_40px_-28px_rgba(8,21,47,0.85)] lg:flex"
+        className="hidden fixed left-0 top-0 bottom-0 z-40 flex-col border-r border-sidebar-border/80 bg-[linear-gradient(180deg,hsl(var(--sidebar-background))_0%,hsl(221_66%_10%)_52%,hsl(219_66%_8%)_100%)] shadow-[18px_0_40px_-28px_rgba(8,21,47,0.85)] lg:flex"
       >
         <SidebarContent />
         <button
@@ -239,7 +240,7 @@ export const DashboardLayout = ({
               initial={{ x: -280 }}
               animate={{ x: 0 }}
               exit={{ x: -280 }}
-              className="fixed left-0 top-0 bottom-0 z-50 flex w-[280px] flex-col border-r border-sidebar-border/80 bg-[linear-gradient(180deg,hsl(var(--sidebar-background))_0%,hsl(221_62%_8%)_100%)] shadow-[18px_0_40px_-28px_rgba(8,21,47,0.85)] lg:hidden"
+              className="fixed left-0 top-0 bottom-0 z-50 flex w-[280px] flex-col border-r border-sidebar-border/80 bg-[linear-gradient(180deg,hsl(var(--sidebar-background))_0%,hsl(221_66%_10%)_52%,hsl(219_66%_8%)_100%)] shadow-[18px_0_40px_-28px_rgba(8,21,47,0.85)] lg:hidden"
             >
               <SidebarContent />
             </motion.aside>
@@ -251,7 +252,7 @@ export const DashboardLayout = ({
       <div className={cn("flex min-w-0 flex-1 flex-col min-h-screen", sidebarCollapsed ? "lg:ml-[72px]" : "lg:ml-[256px]")}>
         {/* Top Bar with safe area support - consistent across all pages */}
         <header 
-          className="sticky top-0 z-30 flex min-w-0 items-center justify-between overflow-x-clip border-b border-border/70 bg-background/78 px-4 shadow-[0_16px_34px_-30px_rgba(8,21,47,0.5)] backdrop-blur-xl lg:px-6"
+          className="sticky top-0 z-30 flex min-w-0 items-center justify-between overflow-x-clip border-b border-border/70 bg-background/74 px-4 shadow-[0_16px_34px_-30px_rgba(8,21,47,0.5)] backdrop-blur-xl lg:px-6"
           style={{ 
             paddingTop: 'env(safe-area-inset-top, 0)', 
             minHeight: '4rem',
@@ -270,6 +271,17 @@ export const DashboardLayout = ({
           <div className="flex-1" />
 
           <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+            {!isLawOfficeLayout && !roleLoading && (
+              <div className="hidden xl:block">
+                {activeFamilyId ? (
+                  <StatusPill variant="scope" icon={<Users className="h-3.5 w-3.5" />}>
+                    Active family scope
+                  </StatusPill>
+                ) : (
+                  <StatusPill variant="warning">Family selection required</StatusPill>
+                )}
+              </div>
+            )}
             {headerActions}
             {shouldShowFamilyPresence && <FamilyPresenceToggle />}
             <ThemeToggle />
