@@ -11,6 +11,7 @@ export type FamilyGameAvailability = "playable" | "coming_soon";
 export interface FamilyGameConfig {
   accentClass: string;
   availability: FamilyGameAvailability;
+  challengePath: string;
   dashboardDescription: string;
   dashboardEyebrow: string;
   defaultMaxPlayers: number;
@@ -35,6 +36,7 @@ export const FAMILY_GAME_REGISTRY: Record<FamilyGameSlug, FamilyGameConfig> = {
   "family-raceway": {
     accentClass: "from-rose-500 via-orange-400 to-amber-300",
     availability: "coming_soon",
+    challengePath: "/dashboard/games/family-raceway/challenges",
     dashboardDescription:
       "Friendly lap races built for side-by-side family competition with simple touch controls.",
     dashboardEyebrow: "Shared racing lane",
@@ -61,6 +63,7 @@ export const FAMILY_GAME_REGISTRY: Record<FamilyGameSlug, FamilyGameConfig> = {
   "flappy-plane": {
     accentClass: "from-sky-500 via-cyan-500 to-emerald-400",
     availability: "playable",
+    challengePath: "/dashboard/games/flappy-plane/challenges",
     dashboardDescription:
       "Open a family lobby first, then launch the synchronized Toy Plane Dash race once everyone is ready.",
     dashboardEyebrow: "Playable now",
@@ -90,6 +93,7 @@ export const FAMILY_GAME_REGISTRY: Record<FamilyGameSlug, FamilyGameConfig> = {
   "pirate-harbor": {
     accentClass: "from-emerald-500 via-teal-500 to-cyan-400",
     availability: "coming_soon",
+    challengePath: "/dashboard/games/pirate-harbor/challenges",
     dashboardDescription:
       "Treasure maps, shared puzzles, and playful pirate adventures without cluttered controls.",
     dashboardEyebrow: "Story co-op",
@@ -116,6 +120,7 @@ export const FAMILY_GAME_REGISTRY: Record<FamilyGameSlug, FamilyGameConfig> = {
   "star-hopper": {
     accentClass: "from-indigo-500 via-sky-500 to-cyan-300",
     availability: "coming_soon",
+    challengePath: "/dashboard/games/star-hopper/challenges",
     dashboardDescription:
       "Picture-first space missions, quick co-op goals, and bright exploration moments.",
     dashboardEyebrow: "Mission co-op",

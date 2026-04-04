@@ -172,6 +172,16 @@ describe("ProtectedRoute", () => {
     expect(rendered.textContent).toContain("protected-content");
   });
 
+  it("allows child-scoped users onto the shared family challenge route when explicitly permitted", () => {
+    mockedUseChildAccount.mockReturnValue({
+      ...defaultChildAccountState,
+      isChildAccount: true,
+    } as never);
+
+    const rendered = renderProtectedRoute("/dashboard/games/flappy-plane/challenges");
+    expect(rendered.textContent).toContain("protected-content");
+  });
+
   it("allows child-scoped users onto the shared games lobby route when explicitly permitted", () => {
     mockedUseChildAccount.mockReturnValue({
       ...defaultChildAccountState,
@@ -239,6 +249,16 @@ describe("ProtectedRoute", () => {
     } as never);
 
     const rendered = renderProtectedRoute("/dashboard/games");
+    expect(rendered.textContent).toContain("Active family required");
+  });
+
+  it("fails closed for shared family challenge routes without an active family", () => {
+    mockedUseFamilyRole.mockReturnValue({
+      ...defaultFamilyRoleState,
+      activeFamilyId: null,
+    } as never);
+
+    const rendered = renderProtectedRoute("/dashboard/games/flappy-plane/challenges");
     expect(rendered.textContent).toContain("Active family required");
   });
 

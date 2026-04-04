@@ -13,6 +13,7 @@ describe("gameRegistry", () => {
     expect(FAMILY_GAMES.flappyPlane.slug).toBe("flappy-plane");
     expect(FAMILY_GAMES.flappyPlane.launcherPath).toBe("/dashboard/games/flappy-plane/lobby");
     expect(FAMILY_GAMES.flappyPlane.playPath).toBe("/dashboard/games/flappy-plane");
+    expect(FAMILY_GAMES.flappyPlane.challengePath).toBe("/dashboard/games/flappy-plane/challenges");
     expect(FAMILY_GAMES.flappyPlane.supportsMultiplayer).toBe(true);
     expect(FAMILY_GAMES.flappyPlane.availability).toBe("playable");
   });

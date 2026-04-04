@@ -88,6 +88,10 @@ vi.mock("./pages/ChildAccessSetupPage", () => ({
   default: () => <div>child-access-setup-page</div>,
 }));
 
+vi.mock("./pages/GameChallengePage", () => ({
+  default: () => <div>game-challenge-page</div>,
+}));
+
 const renderAppAtPath = async (path: string) => {
   window.history.replaceState({}, "", path);
 
@@ -173,5 +177,14 @@ describe("App messaging routes", () => {
 
     expect(window.location.pathname).toBe("/dashboard/settings/child-access/child-1");
     expect(container.textContent).toContain("child-access-setup-page");
+  });
+
+  it("activates the shared family challenge route", async () => {
+    const rendered = await renderAppAtPath("/dashboard/games/flappy-plane/challenges");
+    container = rendered.container;
+    root = rendered.root;
+
+    expect(window.location.pathname).toBe("/dashboard/games/flappy-plane/challenges");
+    expect(container.textContent).toContain("game-challenge-page");
   });
 });

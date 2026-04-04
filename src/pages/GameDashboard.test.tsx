@@ -6,6 +6,7 @@ import { useFamily } from "@/contexts/FamilyContext";
 import { useChildAccount } from "@/hooks/useChildAccount";
 import { useFamilyPresence } from "@/hooks/useFamilyPresence";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
+import { useGameChallenges } from "@/hooks/useGameChallenges";
 import { useGameSessions } from "@/hooks/useGameSessions";
 import GameDashboard from "@/pages/GameDashboard";
 
@@ -23,6 +24,10 @@ vi.mock("@/hooks/useFamilyRole", () => ({
 
 vi.mock("@/hooks/useFamilyPresence", () => ({
   useFamilyPresence: vi.fn(),
+}));
+
+vi.mock("@/hooks/useGameChallenges", () => ({
+  useGameChallenges: vi.fn(),
 }));
 
 vi.mock("@/hooks/useGameSessions", () => ({
@@ -52,6 +57,7 @@ const mockedUseFamily = vi.mocked(useFamily);
 const mockedUseFamilyRole = vi.mocked(useFamilyRole);
 const mockedUseChildAccount = vi.mocked(useChildAccount);
 const mockedUseFamilyPresence = vi.mocked(useFamilyPresence);
+const mockedUseGameChallenges = vi.mocked(useGameChallenges);
 const mockedUseGameSessions = vi.mocked(useGameSessions);
 
 describe("GameDashboard", () => {
@@ -157,6 +163,76 @@ describe("GameDashboard", () => {
       scopeError: null,
       sessions: [],
     } as never);
+
+    mockedUseGameChallenges.mockReturnValue({
+      acceptChallenge: vi.fn().mockResolvedValue(true),
+      challenge: {
+        completedAt: null,
+        createdAt: "2026-04-02T18:00:00.000Z",
+        createdByDisplayName: "Alice Parent",
+        createdByProfileId: "profile-1",
+        expiresAt: null,
+        familyId: "family-1",
+        gameDisplayName: "Toy Plane Dash",
+        gameSlug: "flappy-plane",
+        id: "challenge-1",
+        leadingProfileId: "profile-1",
+        participantCount: 2,
+        resultCount: 1,
+        status: "active",
+        updatedAt: "2026-04-02T18:05:00.000Z",
+      },
+      closeChallenge: vi.fn().mockResolvedValue(true),
+      createChallenge: vi.fn().mockResolvedValue("challenge-1"),
+      currentParticipant: {
+        acceptedAt: "2026-04-02T18:00:00.000Z",
+        avatarUrl: "https://example.com/alice.png",
+        displayName: "Alice Parent",
+        hasResult: true,
+        profileId: "profile-1",
+        relationshipLabel: "parent",
+        role: "parent",
+      },
+      currentResult: {
+        avatarUrl: "https://example.com/alice.png",
+        displayName: "Alice Parent",
+        distance: 412,
+        isLeader: true,
+        profileId: "profile-1",
+        relationshipLabel: "parent",
+        role: "parent",
+        score: 7,
+        submittedAt: "2026-04-02T18:03:00.000Z",
+      },
+      leaderboard: [
+        {
+          avatarUrl: "https://example.com/alice.png",
+          displayName: "Alice Parent",
+          distance: 412,
+          isLeader: true,
+          profileId: "profile-1",
+          relationshipLabel: "parent",
+          role: "parent",
+          score: 7,
+          submittedAt: "2026-04-02T18:03:00.000Z",
+        },
+      ],
+      loading: false,
+      participants: [
+        {
+          acceptedAt: "2026-04-02T18:00:00.000Z",
+          avatarUrl: "https://example.com/alice.png",
+          displayName: "Alice Parent",
+          hasResult: true,
+          profileId: "profile-1",
+          relationshipLabel: "parent",
+          role: "parent",
+        },
+      ],
+      refresh: vi.fn(),
+      scopeError: null,
+      submitResult: vi.fn(),
+    } as never);
   });
 
   afterEach(() => {
@@ -180,6 +256,9 @@ describe("GameDashboard", () => {
     expect(rendered.textContent).toContain("Star Hopper");
     expect(rendered.textContent).toContain("Pirate Harbor");
     expect(rendered.textContent).toContain("parent-header-call-action");
+    expect(rendered.textContent).toContain("Family challenge");
+    expect(rendered.textContent).toContain("Open challenge board");
+    expect(rendered.textContent).toContain("Play to beat score");
 
     const playLink = Array.from(rendered.querySelectorAll("a")).find(
       (anchor) => anchor.textContent?.includes("Open Toy Plane Dash lobby"),
@@ -255,5 +334,20 @@ describe("GameDashboard", () => {
     );
 
     expect(previewLinks.length).toBeGreaterThan(0);
+  });
+
+  it("shows the challenge restriction for child accounts when multiplayer is disabled", async () => {
+    mockedUseChildAccount.mockReturnValue({
+      allowed_game_slugs: ["flappy-plane"],
+      games_enabled: true,
+      isChildAccount: true,
+      loading: false,
+      multiplayer_enabled: false,
+      scopeError: null,
+    } as never);
+
+    const rendered = await renderPage();
+
+    expect(rendered.textContent).toContain("Family challenges stay off for this child account");
   });
 });

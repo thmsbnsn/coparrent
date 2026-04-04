@@ -55,6 +55,7 @@ const GameDashboard = lazy(() => import("./pages/GameDashboard"));
 const GameFlappyPage = lazy(() => import("./pages/GameFlappyPage"));
 const GameLobbyPage = lazy(() => import("./pages/GameLobbyPage"));
 const GameOverviewPage = lazy(() => import("./pages/GameOverviewPage"));
+const GameChallengePage = lazy(() => import("./pages/GameChallengePage"));
 const CalendarPage = lazy(() => import("./pages/CalendarPage"));
 const ChildrenPage = lazy(() => import("./pages/ChildrenPage"));
 const MessagingHubPage = lazy(() => import("./pages/MessagingHubPage"));
@@ -159,6 +160,7 @@ const App = () => (
                 <Route path="/dashboard" element={<ProtectedRoute><RouteErrorBoundary routeName="Dashboard"><Dashboard /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/games" element={<ProtectedRoute><RouteErrorBoundary routeName="Games"><GameDashboard /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/games/flappy-plane" element={<ProtectedRoute><RouteErrorBoundary routeName="Toy Plane Dash"><GameFlappyPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/games/:gameSlug/challenges" element={<ProtectedRoute><RouteErrorBoundary routeName="Game Challenge"><GameChallengePage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/games/:gameSlug" element={<ProtectedRoute><RouteErrorBoundary routeName="Game Overview"><GameOverviewPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/games/flappy-plane/lobby" element={<ProtectedRoute><RouteErrorBoundary routeName="Toy Plane Dash Lobby"><GameLobbyPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/games/flappy-plane/lobby/:sessionId" element={<ProtectedRoute><RouteErrorBoundary routeName="Toy Plane Dash Lobby"><GameLobbyPage /></RouteErrorBoundary></ProtectedRoute>} />

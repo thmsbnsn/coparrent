@@ -18,6 +18,7 @@ describe("routeAccess", () => {
 
   it("keeps child accounts inside their allowed route set", () => {
     expect(isChildAllowedRoute("/dashboard/games")).toBe(true);
+    expect(isChildAllowedRoute("/dashboard/games/flappy-plane/challenges")).toBe(true);
     expect(isChildAllowedRoute("/dashboard/games/flappy-plane/lobby/session-1")).toBe(true);
     expect(isChildAllowedRoute("/dashboard/messages/thread-1")).toBe(true);
     expect(isChildAllowedRoute("/kids/portal")).toBe(true);
@@ -99,6 +100,7 @@ describe("routeAccess", () => {
 
   it("requires active family scope only for registered family routes", () => {
     expect(requiresActiveFamilyScope("/dashboard/games")).toBe(true);
+    expect(requiresActiveFamilyScope("/dashboard/games/flappy-plane/challenges")).toBe(true);
     expect(requiresActiveFamilyScope("/dashboard/games/flappy-plane/lobby/session-1")).toBe(true);
     expect(requiresActiveFamilyScope("/dashboard/messages")).toBe(true);
     expect(requiresActiveFamilyScope("/dashboard/settings/child-access/child-1")).toBe(true);

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFamily } from "@/contexts/FamilyContext";
 import { useChildAccount } from "@/hooks/useChildAccount";
+import { useGameChallenges } from "@/hooks/useGameChallenges";
 import { useGameLobby } from "@/hooks/useGameLobby";
 import { useKidPortalAccess } from "@/hooks/useKidPortalAccess";
 import { usePresenceHeartbeat } from "@/hooks/usePresenceHeartbeat";
@@ -20,6 +21,10 @@ vi.mock("@/contexts/FamilyContext", () => ({
 
 vi.mock("@/hooks/useChildAccount", () => ({
   useChildAccount: vi.fn(),
+}));
+
+vi.mock("@/hooks/useGameChallenges", () => ({
+  useGameChallenges: vi.fn(),
 }));
 
 vi.mock("@/hooks/useGameLobby", () => ({
@@ -61,19 +66,23 @@ vi.mock("@/components/kids/games/GameShell", () => ({
 }));
 
 vi.mock("@/components/kids/games/FlappyPlaneGame", () => ({
-  FlappyPlaneGame: (props: Record<string, unknown>) => (
-    <div>
-      <div>flappy-plane-game</div>
-      <div data-testid="flappy-auto-start">{String(props.autoStartSignal ?? "")}</div>
-      <div data-testid="flappy-seed">{String(props.seed ?? "")}</div>
-      <div data-testid="flappy-manual-start">{String(props.manualStartEnabled)}</div>
-    </div>
-  ),
+  FlappyPlaneGame: (props: Record<string, unknown>) => {
+    (globalThis as Record<string, unknown>).__lastFlappyProps = props;
+    return (
+      <div>
+        <div>flappy-plane-game</div>
+        <div data-testid="flappy-auto-start">{String(props.autoStartSignal ?? "")}</div>
+        <div data-testid="flappy-seed">{String(props.seed ?? "")}</div>
+        <div data-testid="flappy-manual-start">{String(props.manualStartEnabled)}</div>
+      </div>
+    );
+  },
 }));
 
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedUseFamily = vi.mocked(useFamily);
 const mockedUseChildAccount = vi.mocked(useChildAccount);
+const mockedUseGameChallenges = vi.mocked(useGameChallenges);
 const mockedUseGameLobby = vi.mocked(useGameLobby);
 const mockedUseKidPortalAccess = vi.mocked(useKidPortalAccess);
 const mockedUsePresenceHeartbeat = vi.mocked(usePresenceHeartbeat);
@@ -161,6 +170,17 @@ describe("GameFlappyPage", () => {
       startSession: vi.fn(),
     } as never);
 
+    mockedUseGameChallenges.mockReturnValue({
+      challenge: null,
+      currentParticipant: null,
+      currentResult: null,
+      leaderboard: [],
+      loading: false,
+      participants: [],
+      scopeError: null,
+      submitResult: vi.fn().mockResolvedValue(null),
+    } as never);
+
     mockedUsePresenceHeartbeat.mockReturnValue({
       scopeError: null,
       updatePresence: vi.fn(),
@@ -176,6 +196,7 @@ describe("GameFlappyPage", () => {
     container = null;
     root = null;
     vi.clearAllMocks();
+    delete (globalThis as Record<string, unknown>).__lastFlappyProps;
   });
 
   it("renders the shared flappy page for adults and wires shared game presence", async () => {
@@ -416,6 +437,120 @@ describe("GameFlappyPage", () => {
 
     expect(rendered.textContent).toContain("Family scope required");
     expect(rendered.textContent).toContain("active family");
+  });
+
+  it("submits async family challenge scores and shows the family leaderboard feedback", async () => {
+    const submitResult = vi.fn().mockResolvedValue({
+      accepted: true,
+      challengeId: "challenge-1",
+      distance: 455,
+      leadingProfileId: "profile-2",
+      profileId: "profile-1",
+      score: 6,
+      status: "active",
+      submittedAt: "2026-04-02T18:08:00.000Z",
+    });
+
+    mockedUseGameChallenges.mockReturnValue({
+      challenge: {
+        completedAt: null,
+        createdAt: "2026-04-02T18:00:00.000Z",
+        createdByDisplayName: "Alice Parent",
+        createdByProfileId: "profile-2",
+        expiresAt: null,
+        familyId: "family-1",
+        gameDisplayName: "Toy Plane Dash",
+        gameSlug: "flappy-plane",
+        id: "challenge-1",
+        leadingProfileId: "profile-2",
+        participantCount: 2,
+        resultCount: 2,
+        status: "active",
+        updatedAt: "2026-04-02T18:08:00.000Z",
+      },
+      currentParticipant: {
+        acceptedAt: "2026-04-02T18:00:00.000Z",
+        avatarUrl: null,
+        displayName: "You",
+        hasResult: true,
+        profileId: "profile-1",
+        relationshipLabel: "parent",
+        role: "parent",
+      },
+      currentResult: {
+        avatarUrl: null,
+        displayName: "You",
+        distance: 455,
+        isLeader: false,
+        profileId: "profile-1",
+        relationshipLabel: "parent",
+        role: "parent",
+        score: 6,
+        submittedAt: "2026-04-02T18:08:00.000Z",
+      },
+      leaderboard: [
+        {
+          avatarUrl: null,
+          displayName: "Alice Parent",
+          distance: 500,
+          isLeader: true,
+          profileId: "profile-2",
+          relationshipLabel: "parent",
+          role: "parent",
+          score: 8,
+          submittedAt: "2026-04-02T18:03:00.000Z",
+        },
+        {
+          avatarUrl: null,
+          displayName: "You",
+          distance: 455,
+          isLeader: false,
+          profileId: "profile-1",
+          relationshipLabel: "parent",
+          role: "parent",
+          score: 6,
+          submittedAt: "2026-04-02T18:08:00.000Z",
+        },
+      ],
+      loading: false,
+      participants: [],
+      scopeError: null,
+      submitResult,
+    } as never);
+
+    const rendered = await renderPage("/dashboard/games/flappy-plane?challengeId=challenge-1");
+    const flappyProps = (globalThis as Record<string, unknown>).__lastFlappyProps as {
+      onRoundEnd?: (summary: { bestScore: number; distance: number; score: number; seed: number }) => Promise<void>;
+    };
+
+    await act(async () => {
+      await flappyProps.onRoundEnd?.({
+        bestScore: 6,
+        distance: 455,
+        score: 6,
+        seed: 1,
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(submitResult).toHaveBeenCalledWith({
+      distance: 455,
+      score: 6,
+      submittedAt: expect.any(String),
+    });
+    expect(rendered.textContent).toContain("You are #2");
+    expect(rendered.textContent).toContain("Beat 8 to take the family lead");
+    expect(rendered.textContent).toContain("Back to challenge board");
+  });
+
+  it("fails closed when both shared session and family challenge mode are requested together", async () => {
+    const rendered = await renderPage(
+      "/dashboard/games/flappy-plane?sessionId=session-1&challengeId=challenge-1",
+    );
+
+    expect(rendered.textContent).toContain("Family scope required");
+    expect(rendered.textContent).toContain("Choose either a shared family session or a family challenge");
   });
 
   it("blocks child access when Toy Plane Dash is not enabled for that child", async () => {

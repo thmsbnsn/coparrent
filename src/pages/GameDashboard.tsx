@@ -1,19 +1,24 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { CarFront, Rocket, ShipWheel, TimerReset, type LucideIcon } from "lucide-react";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { FamilyGameActivityPanel } from "@/components/games/FamilyGameActivityPanel";
+import { GameChallengeLeaderboard } from "@/components/games/GameChallengeLeaderboard";
 import { GameCard } from "@/components/games/GameCard";
 import { GameComingSoonCard } from "@/components/games/GameComingSoonCard";
 import { GameDashboardHero } from "@/components/games/GameDashboardHero";
 import { Button } from "@/components/ui/button";
+import { StatusPill } from "@/components/ui/StatusPill";
 import { ParentHeaderCallAction } from "@/components/calls/ParentHeaderCallAction";
 import { useFamily } from "@/contexts/FamilyContext";
 import { useChildAccount } from "@/hooks/useChildAccount";
+import { useGameChallenges } from "@/hooks/useGameChallenges";
 import { useFamilyPresence } from "@/hooks/useFamilyPresence";
 import { useGameSessions } from "@/hooks/useGameSessions";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { isChildGameAllowed } from "@/lib/childAccess";
 import { isMissingSupabaseFunctionError } from "@/lib/featureAvailabilityErrors";
+import { getFamilyGameChallengeStatusLabel } from "@/lib/gameChallenges";
 import {
   FAMILY_GAMES,
   PLAYABLE_FAMILY_GAMES,
@@ -29,9 +34,11 @@ const GAME_ICONS: Record<FamilyGameSlug, LucideIcon> = {
 };
 
 export default function GameDashboard() {
+  const navigate = useNavigate();
   const featuredGame = FAMILY_GAMES.flappyPlane;
   const { activeFamily, activeFamilyId, loading: familyLoading, profileId } = useFamily();
   const { activeFamilyId: roleFamilyId, isLawOffice, isParent, isThirdParty } = useFamilyRole();
+  const [challengeActionPending, setChallengeActionPending] = useState<"accept" | "create" | null>(null);
   const {
     allowed_game_slugs,
     games_enabled,
@@ -54,11 +61,30 @@ export default function GameDashboard() {
     gameDisplayName: featuredGame.displayName,
     gameSlug: featuredGame.slug,
   });
+  const {
+    acceptChallenge,
+    challenge,
+    createChallenge,
+    currentParticipant,
+    leaderboard,
+    loading: challengeLoading,
+    participants,
+    scopeError: challengeScopeError,
+  } = useGameChallenges({
+    gameDisplayName: featuredGame.displayName,
+    gameSlug: featuredGame.slug,
+  });
 
   const viewerName = members.find((member) => member.profileId === profileId)?.displayName ?? null;
   const familyLobbyUpdating = isMissingSupabaseFunctionError(sessionsScopeError, [
     "get_family_game_sessions_overview",
     "rpc_create_family_game_session",
+  ]);
+  const familyChallengeUpdating = isMissingSupabaseFunctionError(challengeScopeError, [
+    "get_family_game_challenge_overview",
+    "rpc_create_family_game_challenge",
+    "rpc_accept_family_game_challenge",
+    "rpc_submit_family_game_challenge_result",
   ]);
   const childCanPlayFlappy = !isChildAccount || isChildGameAllowed(
     {
@@ -101,6 +127,30 @@ export default function GameDashboard() {
   })).filter((game) => (game.title === featuredGame.displayName ? childCanPlayFlappy : true));
   const showCallLauncher =
     Boolean(roleFamilyId) && isParent && !isThirdParty && !isLawOffice && !isChildAccount;
+  const childCanUseChallenges = !isChildAccount || (childCanPlayFlappy && multiplayer_enabled);
+  const challengeLeader = leaderboard[0] ?? null;
+
+  const handleCreateChallenge = async () => {
+    setChallengeActionPending("create");
+    try {
+      const challengeId = await createChallenge();
+      if (challengeId) {
+        navigate(featuredGame.challengePath);
+      }
+      return challengeId;
+    } finally {
+      setChallengeActionPending(null);
+    }
+  };
+
+  const handleAcceptChallenge = async () => {
+    setChallengeActionPending("accept");
+    try {
+      await acceptChallenge();
+    } finally {
+      setChallengeActionPending(null);
+    }
+  };
 
   if (familyLoading || childLoading) {
     return (
@@ -145,7 +195,7 @@ export default function GameDashboard() {
       }
       showFamilyPresenceToggle={false}
     >
-      <div className="mx-auto max-w-[1400px] min-w-0 space-y-8">
+      <div className="page-shell-app page-stack min-w-0">
         <GameDashboardHero
           activeCount={activeCount}
           familyName={activeFamily?.display_name ?? null}
@@ -159,7 +209,7 @@ export default function GameDashboard() {
         <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
           <section className="min-w-0 space-y-6">
             <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+              <p className="section-kicker text-slate-500">
                 Featured game
               </p>
               {availableGames.length > 0 ? (
@@ -167,7 +217,7 @@ export default function GameDashboard() {
                   <GameCard key={game.title} {...game} className="min-h-[20rem]" />
                 ))
               ) : (
-                <section className="rounded-[2rem] border border-border/70 bg-card/88 p-6 shadow-[0_22px_42px_-32px_rgba(8,21,47,0.3)]">
+                <section className="surface-primary p-6">
                   <h2 className="text-2xl font-display font-semibold text-foreground">
                     Games are unavailable for this child account right now.
                   </h2>
@@ -179,10 +229,10 @@ export default function GameDashboard() {
               )}
             </div>
 
-            <section className="rounded-[2rem] border border-border/70 bg-card/85 p-5 shadow-sm">
+            <section className="surface-primary p-5">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                  <p className="section-kicker text-muted-foreground">
                     Available now
                   </p>
                   <h2 className="mt-1 text-2xl font-display font-semibold text-foreground">
@@ -193,15 +243,15 @@ export default function GameDashboard() {
                     synchronized seeded race begins.
                   </p>
                 </div>
-                <div className="rounded-full border border-primary/15 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                <StatusPill variant="highlight">
                   1 live game
-                </div>
+                </StatusPill>
               </div>
 
-              <div className="mt-5 rounded-[1.75rem] border border-border/70 bg-[linear-gradient(135deg,hsl(var(--muted)/0.65),hsl(var(--accent)/0.24))] p-4">
+              <div className="surface-secondary mt-5 p-4">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-1">
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                    <p className="section-kicker text-muted-foreground">
                       Family lobby
                     </p>
                     {isChildAccount && !multiplayer_enabled ? (
@@ -256,9 +306,9 @@ export default function GameDashboard() {
               </div>
             </section>
 
-            <section className="rounded-[2rem] border border-border/70 bg-card/85 p-5 shadow-sm">
+            <section className="surface-standard p-5">
               <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                <p className="section-kicker text-muted-foreground">
                   Coming soon
                 </p>
                 <h2 className="text-2xl font-display font-semibold text-foreground">
@@ -294,17 +344,149 @@ export default function GameDashboard() {
               scopeError={scopeError}
             />
 
-            <section className="rounded-[2rem] border border-border/70 bg-card/88 p-5 shadow-[0_22px_42px_-32px_rgba(8,21,47,0.3)]">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+            <section className="surface-primary p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="section-kicker text-muted-foreground">
+                    Family challenge
+                  </p>
+                  <h2 className="mt-1 text-2xl font-display font-semibold text-foreground">
+                    Beat the family score on your own time
+                  </h2>
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                    Async challenges keep one shared score target for the active family without
+                    needing everyone online at once.
+                  </p>
+                </div>
+                {challenge ? (
+                  <StatusPill variant="scope">
+                    {getFamilyGameChallengeStatusLabel(challenge.status)}
+                  </StatusPill>
+                ) : null}
+              </div>
+
+              <div className="mt-5 space-y-4">
+                {!childCanUseChallenges ? (
+                  <div className="rounded-[1.5rem] border border-dashed border-border/70 bg-muted/20 p-4">
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      Family challenges stay off for this child account while multiplayer is disabled.
+                    </p>
+                  </div>
+                ) : familyChallengeUpdating ? (
+                  <div className="rounded-[1.5rem] border border-dashed border-border/70 bg-muted/20 p-4">
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      Family challenges are still being enabled on this server. Solo preview stays
+                      available while the rollout finishes.
+                    </p>
+                  </div>
+                ) : challengeScopeError ? (
+                  <div className="rounded-[1.5rem] border border-rose-200 bg-rose-50/70 p-4">
+                    <p className="text-sm leading-6 text-rose-700">{challengeScopeError}</p>
+                  </div>
+                ) : challengeLoading ? (
+                  <div className="rounded-[1.5rem] border border-dashed border-border/70 bg-muted/20 p-4">
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      Loading the current family challenge board...
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          Current leader
+                        </p>
+                        <p className="mt-2 text-lg font-display font-semibold text-foreground">
+                          {challengeLeader ? challengeLeader.displayName : "No score yet"}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          {challengeLeader
+                            ? `${challengeLeader.score} points and ${challengeLeader.distance} distance units`
+                            : "Start the board and let the family chase the first score."}
+                        </p>
+                      </div>
+                      <div className="rounded-[1.5rem] border border-border/70 bg-background/80 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                          Accepted players
+                        </p>
+                        <p className="mt-2 text-lg font-display font-semibold text-foreground">
+                          {challenge ? participants.length : 0}
+                        </p>
+                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                          {challenge
+                            ? `${challenge.resultCount} score${challenge.resultCount === 1 ? "" : "s"} on the board`
+                            : "No active challenge open yet"}
+                        </p>
+                      </div>
+                    </div>
+
+                    <GameChallengeLeaderboard
+                      compact
+                      currentProfileId={profileId}
+                      emptyLabel="No challenge scores yet. Open the board and be the first pilot to post a family score."
+                      leaderboard={leaderboard.slice(0, 3)}
+                    />
+
+                    <div className="flex flex-wrap gap-3">
+                      {!challenge ? (
+                        <Button
+                          type="button"
+                          className="rounded-full"
+                          disabled={challengeActionPending === "create"}
+                          onClick={() => {
+                            void handleCreateChallenge();
+                          }}
+                        >
+                          Start family challenge
+                        </Button>
+                      ) : challenge.status === "active" && !currentParticipant ? (
+                        <Button
+                          type="button"
+                          className="rounded-full"
+                          disabled={challengeActionPending === "accept"}
+                          onClick={() => {
+                            void handleAcceptChallenge();
+                          }}
+                        >
+                          Accept challenge
+                        </Button>
+                      ) : challenge.status === "active" ? (
+                        <Button asChild className="rounded-full">
+                          <Link to={`${featuredGame.playPath}?challengeId=${challenge.id}`}>Play to beat score</Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          className="rounded-full"
+                          disabled={challengeActionPending === "create"}
+                          onClick={() => {
+                            void handleCreateChallenge();
+                          }}
+                        >
+                          Start next challenge
+                        </Button>
+                      )}
+
+                      <Button asChild variant="outline" className="rounded-full bg-background/85">
+                        <Link to={featuredGame.challengePath}>Open challenge board</Link>
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </section>
+
+            <section className="surface-standard p-5">
+              <p className="section-kicker text-muted-foreground">
                 Multiplayer lane
               </p>
               <h2 className="mt-1 text-2xl font-display font-semibold text-foreground">
                 Built for shared family play
               </h2>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                The shared games dashboard is the family entry point for quick rounds now and
-                cleaner multiplayer matchmaking later. Presence already shows who is browsing or
-                playing without exposing parent-only tools.
+                The shared games dashboard is the family entry point for quick rounds, async
+                family challenges, and cleaner multiplayer matchmaking later. Presence already
+                shows who is browsing or playing without exposing parent-only tools.
               </p>
             </section>
           </div>
