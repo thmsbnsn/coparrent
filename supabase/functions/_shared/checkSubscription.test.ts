@@ -209,7 +209,8 @@ describe("check-subscription", () => {
   });
 
   it("leaves active trials alone when the trial has not expired", async () => {
-    state.tables.profiles[0].trial_ends_at = "2026-04-04T12:00:00.000Z";
+    const activeTrialEndsAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    state.tables.profiles[0].trial_ends_at = activeTrialEndsAt;
 
     const response = await handler(buildRequest());
     const payload = await response.json();
@@ -219,7 +220,7 @@ describe("check-subscription", () => {
       subscribed: true,
       tier: "power",
       trial: true,
-      trial_ends_at: "2026-04-04T12:00:00.000Z",
+      trial_ends_at: activeTrialEndsAt,
     });
     expect(state.tables.profiles[0]).toMatchObject({
       subscription_status: "trial",

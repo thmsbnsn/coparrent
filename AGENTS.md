@@ -1,5 +1,5 @@
 # CoParrent Codex Rules
-
+- Limit the amount of editors that stay open. Dont overwhelm the pc and cause performance issues with the number of extenstion windows staying open.
 ## Primary architecture rule
 
 Use `activeFamilyId` on the client and explicit `family_id` on the server as the only valid scope for family-scoped operations.
