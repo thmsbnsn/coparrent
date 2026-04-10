@@ -88,8 +88,8 @@ describe("GameSessionResultsCard", () => {
     expect(container.textContent).toContain("You");
     expect(container.textContent).toContain("MP");
     expect(container.textContent).toContain("Your finish");
-    expect(container.textContent).toContain("Winner spotlight");
-    expect(container.textContent).toContain("Next step");
+    expect(container.textContent).toContain("Standings");
+    expect(container.textContent).toContain("3 final results");
     expect(container.textContent).toContain("Head back to the lobby for a rematch.");
     expect(container.textContent).toContain("Score");
     expect(container.textContent).toContain("Distance");

@@ -257,11 +257,12 @@ describe("GameLobbyPage", () => {
   it("renders the Toy Plane Dash lobby and wires lobby presence", async () => {
     const rendered = await renderPage();
 
-    expect(rendered.textContent).toContain("Gather the family before takeoff");
+    expect(rendered.textContent).toContain("Gather the family, then move into preflight");
     expect(rendered.textContent).toContain("Alice Parent");
     expect(rendered.textContent).toContain("Milo Pilot");
     expect(rendered.textContent).toContain("Not ready");
     expect(rendered.textContent).toContain("Host");
+    expect(rendered.textContent).toContain("Open flight deck");
     expect(mockedUsePresenceHeartbeat).toHaveBeenCalledWith({
       enabled: true,
       gameDisplayName: "Toy Plane Dash",
@@ -270,7 +271,7 @@ describe("GameLobbyPage", () => {
     });
   });
 
-  it("moves joined players into the shared race page once the session becomes active", async () => {
+  it("keeps active sessions on the lobby page and offers a rejoin-flight-deck handoff", async () => {
     mockedUseGameLobby.mockReturnValue({
       currentMember: {
         avatarUrl: "https://example.com/alice.png",
@@ -339,8 +340,9 @@ describe("GameLobbyPage", () => {
     const rendered = await renderPage();
 
     expect(rendered.querySelector('[data-testid="location"]')?.textContent).toBe(
-      "/dashboard/games/flappy-plane",
+      "/dashboard/games/flappy-plane/lobby/session-1",
     );
+    expect(rendered.textContent).toContain("Rejoin live flight");
   });
 
   it("keeps under-6 child accounts behind the approval gate", async () => {
@@ -491,6 +493,6 @@ describe("GameLobbyPage", () => {
 
     const rendered = await renderPage();
     expect(rendered.textContent).toContain("Set up rematch");
-    expect(rendered.textContent).toContain("reset the same family-scoped room");
+    expect(rendered.textContent).toContain("send everyone back into the flight deck");
   });
 });

@@ -35,6 +35,7 @@ describe("GameLobbyCard", () => {
         <MemoryRouter>
           <GameLobbyCard
             currentProfileId="profile-1"
+            flightDeckHref="/dashboard/games/flappy-plane?sessionId=session-1"
             members={[
               {
                 avatarUrl: null,
@@ -51,8 +52,6 @@ describe("GameLobbyCard", () => {
             ]}
             onJoin={vi.fn()}
             onPrepareRematch={handlePrepareRematch}
-            onSetReady={vi.fn()}
-            onStart={vi.fn()}
             session={{
               createdAt: "2026-04-01T13:00:00.000Z",
               createdByDisplayName: "Alice Parent",
@@ -88,6 +87,6 @@ describe("GameLobbyCard", () => {
     });
 
     expect(handlePrepareRematch).toHaveBeenCalled();
-    expect(container.textContent).toContain("reset the same family-scoped room");
+    expect(container.textContent).toContain("reopen the preflight screen");
   });
 });

@@ -1,4 +1,4 @@
-import { act, type ReactNode } from "react";
+import { act, useEffect, useRef, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -53,23 +53,83 @@ vi.mock("@/components/kids/games/GameShell", () => ({
     description,
     title,
   }: {
-    children?: ReactNode;
+    children?: ReactNode | ((immersiveMode: Record<string, unknown>) => ReactNode);
     description: string;
     title: string;
-  }) => (
-    <div>
-      <div>{title}</div>
-      <div>{description}</div>
-      {children}
-    </div>
-  ),
+  }) => {
+    const enterImmersiveModeRef = useRef(vi.fn().mockResolvedValue(undefined));
+    const exitImmersiveModeRef = useRef(vi.fn().mockResolvedValue(undefined));
+    const immersiveMode = {
+      enterImmersiveMode: enterImmersiveModeRef.current,
+      exitImmersiveMode: exitImmersiveModeRef.current,
+      fullscreenSupported: true,
+      immersiveNotice: null,
+      immersiveNoticeTone: null,
+      isFullscreenActive: false,
+      isLandscape: false,
+      landscapeSupportLabel: "Use fullscreen to request landscape on supported phones and tablets.",
+      orientationLocked: false,
+      orientationLockSupported: true,
+    };
+
+    (globalThis as Record<string, unknown>).__mockImmersiveMode = immersiveMode;
+
+    return (
+      <div>
+        <div>{title}</div>
+        <div>{description}</div>
+        {typeof children === "function" ? children(immersiveMode) : children}
+      </div>
+    );
+  },
 }));
 
 vi.mock("@/components/kids/games/FlappyPlaneGame", () => ({
+  readBestFlappyScore: () => 0,
   FlappyPlaneGame: (props: Record<string, unknown>) => {
+    const previousAutoStartRef = useRef(props.autoStartSignal);
+
+    useEffect(() => {
+      if ((globalThis as Record<string, unknown>).__skipFlappyArm) {
+        return;
+      }
+
+      const notifyArmed = props.onRuntimeArmedChange as ((armed: boolean) => void) | undefined;
+      notifyArmed?.(true);
+    }, [props.onRuntimeArmedChange]);
+
+    useEffect(() => {
+      if (previousAutoStartRef.current === props.autoStartSignal) {
+        return;
+      }
+
+      previousAutoStartRef.current = props.autoStartSignal;
+      const notifyRoundStart = props.onRoundStart as (() => void) | undefined;
+      notifyRoundStart?.();
+    }, [props.autoStartSignal, props.onRoundStart]);
+
     (globalThis as Record<string, unknown>).__lastFlappyProps = props;
+
+    const readyOverlay = typeof props.renderReadyOverlay === "function"
+      ? (props.renderReadyOverlay as (args: {
+          bestScore: number;
+          manualStartEnabled: boolean;
+          startRound: () => void;
+          status: string;
+        }) => ReactNode)({
+          bestScore: 12,
+          manualStartEnabled: Boolean(props.manualStartEnabled),
+          startRound: () => {
+            const notifyRoundStart = props.onRoundStart as (() => void) | undefined;
+            notifyRoundStart?.();
+          },
+          status: "ready",
+        })
+      : null;
+
     return (
       <div>
+        {readyOverlay}
         <div>flappy-plane-game</div>
         <div data-testid="flappy-auto-start">{String(props.autoStartSignal ?? "")}</div>
         <div data-testid="flappy-seed">{String(props.seed ?? "")}</div>
@@ -197,14 +257,21 @@ describe("GameFlappyPage", () => {
     root = null;
     vi.clearAllMocks();
     delete (globalThis as Record<string, unknown>).__lastFlappyProps;
+    delete (globalThis as Record<string, unknown>).__mockImmersiveMode;
+    delete (globalThis as Record<string, unknown>).__skipFlappyArm;
   });
 
-  it("renders the shared flappy page for adults and wires shared game presence", async () => {
+  it("renders the solo preflight screen and requires an explicit Start Game action", async () => {
     const rendered = await renderPage();
 
     expect(rendered.textContent).toContain("Toy Plane Dash");
     expect(rendered.textContent).toContain("flappy-plane-game");
+    expect(rendered.textContent).toContain("Start Game");
+    expect(rendered.textContent).toContain("Start in Fullscreen");
+    expect(rendered.textContent).toContain("Join family lobby");
+    expect(rendered.textContent).toContain("Scorecard");
     expect(rendered.querySelector('[data-testid="flappy-manual-start"]')?.textContent).toBe("true");
+    expect(rendered.querySelector('[data-testid="flappy-auto-start"]')?.textContent).toBe("");
     expect(mockedUsePresenceHeartbeat).toHaveBeenCalledWith({
       enabled: true,
       gameDisplayName: "Toy Plane Dash",
@@ -213,17 +280,74 @@ describe("GameFlappyPage", () => {
     });
   });
 
-  it("uses the shared session seed and lobby-mode presence before the synchronized race starts", async () => {
+  it("requests fullscreen only after the solo preflight fullscreen button is tapped", async () => {
+    const rendered = await renderPage();
+    const immersiveMode = (globalThis as Record<string, unknown>).__mockImmersiveMode as {
+      enterImmersiveMode: ReturnType<typeof vi.fn>;
+    };
+
+    expect(immersiveMode.enterImmersiveMode).not.toHaveBeenCalled();
+
+    const startFullscreenButton = Array.from(rendered.querySelectorAll("button")).find((button) =>
+      button.textContent?.includes("Start in Fullscreen"),
+    );
+
+    await act(async () => {
+      startFullscreenButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(immersiveMode.enterImmersiveMode).toHaveBeenCalledTimes(1);
+    expect(rendered.textContent).toContain("Flight controls");
+  });
+
+  it("waits in multiplayer preflight until the synchronized countdown arms and then starts the round", async () => {
     vi.useFakeTimers();
     mockedUseGameLobby.mockReturnValue({
-      currentMember: null,
+      currentMember: {
+        avatarUrl: null,
+        displayName: "Alice Parent",
+        isCreator: true,
+        joinedAt: "2026-04-01T13:00:00.000Z",
+        profileId: "profile-1",
+        readyAt: "2026-04-01T13:01:00.000Z",
+        relationshipLabel: "parent",
+        role: "parent",
+        seatOrder: 1,
+        status: "ready",
+      },
       currentResult: null,
-      isCreator: false,
-      isJoined: false,
+      isCreator: true,
+      isJoined: true,
       joinLobby: vi.fn(),
       loading: false,
       lobby: null,
-      members: [],
+      members: [
+        {
+          avatarUrl: null,
+          displayName: "Alice Parent",
+          isCreator: true,
+          joinedAt: "2026-04-01T13:00:00.000Z",
+          profileId: "profile-1",
+          readyAt: "2026-04-01T13:01:00.000Z",
+          relationshipLabel: "parent",
+          role: "parent",
+          seatOrder: 1,
+          status: "ready",
+        },
+        {
+          avatarUrl: null,
+          displayName: "Milo Pilot",
+          isCreator: false,
+          joinedAt: "2026-04-01T13:00:00.000Z",
+          profileId: "profile-2",
+          readyAt: "2026-04-01T13:01:00.000Z",
+          relationshipLabel: "child",
+          role: "child",
+          seatOrder: 2,
+          status: "ready",
+        },
+      ],
       prepareRematch: vi.fn().mockResolvedValue(true),
       refresh: vi.fn(),
       reportResult: vi.fn().mockResolvedValue(true),
@@ -257,6 +381,8 @@ describe("GameFlappyPage", () => {
     expect(rendered.querySelector('[data-testid="flappy-seed"]')?.textContent).toBe("48271");
     expect(rendered.querySelector('[data-testid="flappy-manual-start"]')?.textContent).toBe("false");
     expect(rendered.querySelector('[data-testid="flappy-auto-start"]')?.textContent).toBe("0");
+    expect(rendered.textContent).toContain("Launch");
+    expect(rendered.textContent).toContain("Countdown live");
     expect(mockedUsePresenceHeartbeat).toHaveBeenCalledWith({
       enabled: true,
       gameDisplayName: "Toy Plane Dash",
@@ -269,6 +395,7 @@ describe("GameFlappyPage", () => {
     });
 
     expect(rendered.querySelector('[data-testid="flappy-auto-start"]')?.textContent).toBe("1");
+    expect(rendered.textContent).toContain("In flight");
     vi.useRealTimers();
   });
 
@@ -347,16 +474,40 @@ describe("GameFlappyPage", () => {
     );
   });
 
-  it("redirects waiting synchronized sessions back to the lobby instead of staying on the race page", async () => {
+  it("shows the multiplayer preflight overlay instead of redirecting waiting sessions away from the game page", async () => {
     mockedUseGameLobby.mockReturnValue({
-      currentMember: null,
+      currentMember: {
+        avatarUrl: null,
+        displayName: "Alice Parent",
+        isCreator: true,
+        joinedAt: "2026-04-01T13:00:00.000Z",
+        profileId: "profile-1",
+        readyAt: null,
+        relationshipLabel: "parent",
+        role: "parent",
+        seatOrder: 1,
+        status: "joined",
+      },
       currentResult: null,
-      isCreator: false,
+      isCreator: true,
       isJoined: true,
       joinLobby: vi.fn(),
       loading: false,
       lobby: null,
-      members: [],
+      members: [
+        {
+          avatarUrl: null,
+          displayName: "Alice Parent",
+          isCreator: true,
+          joinedAt: "2026-04-01T13:00:00.000Z",
+          profileId: "profile-1",
+          readyAt: null,
+          relationshipLabel: "parent",
+          role: "parent",
+          seatOrder: 1,
+          status: "joined",
+        },
+      ],
       prepareRematch: vi.fn().mockResolvedValue(true),
       refresh: vi.fn(),
       reportResult: vi.fn().mockResolvedValue(true),
@@ -388,8 +539,88 @@ describe("GameFlappyPage", () => {
     const rendered = await renderPage("/dashboard/games/flappy-plane?sessionId=session-1");
 
     expect(rendered.querySelector('[data-testid="location"]')?.textContent).toBe(
-      "/dashboard/games/flappy-plane/lobby/session-1",
+      "/dashboard/games/flappy-plane?sessionId=session-1",
     );
+    expect(rendered.textContent).toContain("Family preflight");
+    expect(rendered.textContent).toContain("Ready up");
+    expect(rendered.textContent).toContain("Enter Fullscreen");
+    expect(rendered.textContent).toContain("Back to Lobby");
+  });
+
+  it("shows an explicit sync error when the local cockpit never arms before Go", async () => {
+    vi.useFakeTimers();
+    (globalThis as Record<string, unknown>).__skipFlappyArm = true;
+
+    mockedUseGameLobby.mockReturnValue({
+      currentMember: {
+        avatarUrl: null,
+        displayName: "Alice Parent",
+        isCreator: true,
+        joinedAt: "2026-04-01T13:00:00.000Z",
+        profileId: "profile-1",
+        readyAt: "2026-04-01T13:01:00.000Z",
+        relationshipLabel: "parent",
+        role: "parent",
+        seatOrder: 1,
+        status: "ready",
+      },
+      currentResult: null,
+      isCreator: true,
+      isJoined: true,
+      joinLobby: vi.fn(),
+      loading: false,
+      lobby: null,
+      members: [
+        {
+          avatarUrl: null,
+          displayName: "Alice Parent",
+          isCreator: true,
+          joinedAt: "2026-04-01T13:00:00.000Z",
+          profileId: "profile-1",
+          readyAt: "2026-04-01T13:01:00.000Z",
+          relationshipLabel: "parent",
+          role: "parent",
+          seatOrder: 1,
+          status: "ready",
+        },
+      ],
+      prepareRematch: vi.fn().mockResolvedValue(true),
+      refresh: vi.fn(),
+      reportResult: vi.fn().mockResolvedValue(true),
+      results: [],
+      scopeError: null,
+      session: {
+        createdAt: "2026-04-01T13:00:00.000Z",
+        createdByDisplayName: "Alice Parent",
+        createdByProfileId: "profile-1",
+        endedAt: null,
+        familyId: "family-1",
+        gameDisplayName: "Toy Plane Dash",
+        gameSlug: "flappy-plane",
+        id: "session-1",
+        maxPlayers: 4,
+        memberCount: 1,
+        readyCount: 1,
+        seed: 48271,
+        startedAt: "2026-04-01T13:02:57.000Z",
+        startTime: new Date(Date.now() + 1_000).toISOString(),
+        status: "active",
+        updatedAt: "2026-04-01T13:02:57.000Z",
+        winnerProfileId: null,
+      },
+      setReady: vi.fn(),
+      startSession: vi.fn(),
+    } as never);
+
+    const rendered = await renderPage("/dashboard/games/flappy-plane?sessionId=session-1");
+
+    await act(async () => {
+      vi.advanceTimersByTime(1_400);
+    });
+
+    expect(rendered.textContent).toContain("Launch sync failed closed");
+    expect(rendered.textContent).toContain("Reset cockpit");
+    vi.useRealTimers();
   });
 
   it("keeps under-6 child accounts behind the approval gate", async () => {

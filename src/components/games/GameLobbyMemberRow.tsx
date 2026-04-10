@@ -18,9 +18,10 @@ export const GameLobbyMemberRow = ({
 }: GameLobbyMemberRowProps) => {
   const roleLabel = formatFamilyPresenceRoleLabel(member.role, member.relationshipLabel);
   const isReady = member.status === "ready" && Boolean(member.readyAt);
+  const seatLabel = member.seatOrder ? `Seat ${member.seatOrder}` : "Open seat";
 
   return (
-    <div className="flex items-center gap-4 rounded-[1.6rem] border border-border/70 bg-card/85 p-4 shadow-sm">
+    <div className="flex items-center gap-4 rounded-[1.5rem] border border-white/75 bg-white/80 p-4 shadow-[0_18px_36px_-28px_rgba(8,21,47,0.3)]">
       <div className="relative">
         <Avatar className="h-14 w-14 ring-1 ring-border/60">
           <AvatarImage src={member.avatarUrl ?? undefined} alt={member.displayName} />
@@ -67,20 +68,25 @@ export const GameLobbyMemberRow = ({
               Ready to launch
             </span>
           ) : (
-            "Still getting ready"
+            "In the room, not marked ready yet"
           )}
         </p>
       </div>
 
-      <div
-        className={cn(
-          "rounded-full px-3 py-1 text-[11px] font-semibold",
-          isReady
-            ? "bg-emerald-100 text-emerald-700"
-            : "bg-amber-100 text-amber-700",
-        )}
-      >
-        {isReady ? "Ready" : "Not ready"}
+      <div className="flex flex-col items-end gap-2">
+        <div
+          className={cn(
+            "rounded-full px-3 py-1 text-[11px] font-semibold",
+            isReady
+              ? "bg-emerald-100 text-emerald-700"
+              : "bg-amber-100 text-amber-700",
+          )}
+        >
+          {isReady ? "Ready" : "Not ready"}
+        </div>
+        <div className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-medium text-slate-600">
+          {seatLabel}
+        </div>
       </div>
     </div>
   );

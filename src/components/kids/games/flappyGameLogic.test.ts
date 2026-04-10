@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FLAPPY_GROUND_TOP,
   FLAPPY_WORLD,
+  createFlappyObstacle,
   createRunningFlappyState,
   flapFlappyGame,
   normalizeFlappySeed,
@@ -40,11 +41,32 @@ describe("flappyGameLogic", () => {
     expect(nextState.velocityY).toBe(FLAPPY_WORLD.flapVelocity);
   });
 
+  it("keeps the glide gentler at low descent than at high fall speed", () => {
+    const glideState = {
+      ...createRunningFlappyState(0, 48271),
+      obstacles: [],
+      velocityY: 20,
+    };
+    const fallingState = {
+      ...createRunningFlappyState(0, 48271),
+      obstacles: [],
+      velocityY: 360,
+    };
+
+    const glideResult = stepFlappyGame(glideState, 100);
+    const fallingResult = stepFlappyGame(fallingState, 100);
+
+    expect(glideResult.state.velocityY - glideState.velocityY).toBeLessThan(
+      fallingResult.state.velocityY - fallingState.velocityY,
+    );
+  });
+
   it("increments the score after the plane passes an obstacle pair", () => {
     const state = {
       ...createRunningFlappyState(0, 0.5),
       obstacles: [
         {
+          gapSize: 220,
           gapY: 220,
           id: 0,
           scored: false,
@@ -67,8 +89,8 @@ describe("flappyGameLogic", () => {
     const state = {
       ...createRunningFlappyState(0, 0.5),
       obstacles: [],
-      playerY: FLAPPY_GROUND_TOP - FLAPPY_WORLD.playerHeight + 2,
-      velocityY: 420,
+      playerY: FLAPPY_GROUND_TOP - FLAPPY_WORLD.playerHeight + 8,
+      velocityY: 520,
     };
 
     const result = stepFlappyGame(state, 16);
@@ -78,11 +100,21 @@ describe("flappyGameLogic", () => {
     expect(result.state.playerY).toBe(FLAPPY_GROUND_TOP - FLAPPY_WORLD.playerHeight);
   });
 
+  it("widens the early obstacle gaps before ramping down the difficulty", () => {
+    const openingObstacle = createFlappyObstacle(0, 0.42);
+    const laterObstacle = createFlappyObstacle(12, 0.42, undefined, openingObstacle.gapY);
+
+    expect(openingObstacle.gapSize).toBeGreaterThan(laterObstacle.gapSize);
+    expect(openingObstacle.gapSize).toBeGreaterThanOrEqual(210);
+    expect(laterObstacle.gapSize).toBeLessThanOrEqual(180);
+  });
+
   it("ends the round when the plane clips an obstacle body", () => {
     const state = {
       ...createRunningFlappyState(0, 0.5),
       obstacles: [
         {
+          gapSize: 174,
           gapY: 96,
           id: 0,
           scored: false,

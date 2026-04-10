@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { Play, RotateCcw, Trophy } from "lucide-react";
 import { FLAPPY_ASSETS } from "@/assets/games/flappy";
 import { Button } from "@/components/ui/button";
@@ -13,20 +13,10 @@ import {
   getPlayerRotation,
   getRenderedObstacleSegments,
   stepFlappyGame,
+  type FlappyGameStatus,
   type FlappyGameState,
 } from "./flappyGameLogic";
-
-const BEST_SCORE_STORAGE_KEY = "coparrent.games.flappy-plane.best-score";
-
-const readBestScore = () => {
-  if (typeof window === "undefined") {
-    return 0;
-  }
-
-  const rawValue = window.localStorage.getItem(BEST_SCORE_STORAGE_KEY);
-  const parsed = Number.parseInt(rawValue ?? "0", 10);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-};
+import { BEST_SCORE_STORAGE_KEY, readBestFlappyScore } from "./flappyBestScore";
 
 const playSound = (src: string, volume: number) => {
   if (typeof Audio === "undefined") {
@@ -56,8 +46,17 @@ interface FlappyPlaneGameProps {
   gameOverTitle?: string;
   manualStartEnabled?: boolean;
   onRoundEnd?: (summary: FlappyRoundSummary) => void;
+  onRoundStart?: () => void;
+  onRuntimeArmedChange?: (armed: boolean) => void;
   readyDescription?: string;
+  renderReadyOverlay?: (args: {
+    bestScore: number;
+    manualStartEnabled: boolean;
+    startRound: () => void;
+    status: FlappyGameStatus;
+  }) => ReactNode;
   readyTitle?: string;
+  resetSignal?: number;
   seed?: number | null;
 }
 
@@ -68,8 +67,12 @@ export const FlappyPlaneGame = ({
   gameOverTitle = "Nice flight",
   manualStartEnabled = true,
   onRoundEnd,
+  onRoundStart,
+  onRuntimeArmedChange,
   readyDescription = "Fly through the rocky gaps. Tap, click, or press space to stay in the sky.",
+  renderReadyOverlay,
   readyTitle = "Toy Plane Dash",
+  resetSignal = 0,
   seed = null,
 }: FlappyPlaneGameProps) => {
   const providedSeed = useMemo(
@@ -80,13 +83,15 @@ export const FlappyPlaneGame = ({
     providedSeed ?? normalizeFlappySeed(Math.floor(Math.random() * 2147483646) + 1),
   );
   const [gameState, setGameState] = useState<FlappyGameState>(() =>
-    createReadyFlappyState(readBestScore(), roundSeedRef.current),
+    createReadyFlappyState(readBestFlappyScore(), roundSeedRef.current),
   );
   const stateRef = useRef(gameState);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const previousFrameRef = useRef<number | null>(null);
   const onRoundEndRef = useRef(onRoundEnd);
+  const onRoundStartRef = useRef(onRoundStart);
+  const onRuntimeArmedChangeRef = useRef(onRuntimeArmedChange);
   const autoStartSignalRef = useRef(autoStartSignal);
 
   useEffect(() => {
@@ -96,6 +101,18 @@ export const FlappyPlaneGame = ({
   useEffect(() => {
     onRoundEndRef.current = onRoundEnd;
   }, [onRoundEnd]);
+
+  useEffect(() => {
+    onRoundStartRef.current = onRoundStart;
+  }, [onRoundStart]);
+
+  useEffect(() => {
+    onRuntimeArmedChangeRef.current = onRuntimeArmedChange;
+  }, [onRuntimeArmedChange]);
+
+  useEffect(() => {
+    onRuntimeArmedChangeRef.current?.(gameState.status === "ready");
+  }, [gameState.status]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -125,6 +142,7 @@ export const FlappyPlaneGame = ({
     playSound(FLAPPY_ASSETS.audio.buttonPress, 0.32);
     previousFrameRef.current = null;
     commitState(createRunningFlappyState(stateRef.current.bestScore, nextSeed));
+    onRoundStartRef.current?.();
     stageRef.current?.focus();
   }, [commitState, providedSeed]);
 
@@ -191,9 +209,10 @@ export const FlappyPlaneGame = ({
   useEffect(() => {
     roundSeedRef.current =
       providedSeed ?? normalizeFlappySeed(Math.floor(Math.random() * 2147483646) + 1);
-    commitState(createReadyFlappyState(readBestScore(), roundSeedRef.current));
+    commitState(createReadyFlappyState(readBestFlappyScore(), roundSeedRef.current));
     previousFrameRef.current = null;
-  }, [commitState, providedSeed]);
+    stageRef.current?.focus();
+  }, [commitState, providedSeed, resetSignal]);
 
   useEffect(() => {
     if (autoStartSignal === undefined || autoStartSignal === null) {
@@ -219,19 +238,12 @@ export const FlappyPlaneGame = ({
 
       if (stateRef.current.status === "running") {
         flap();
-        return;
       }
-
-      if (!manualStartEnabled) {
-        return;
-      }
-
-      startRound();
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [flap, manualStartEnabled, startRound]);
+  }, [flap]);
 
   const handleStagePointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (stateRef.current.status !== "running") {
@@ -344,30 +356,39 @@ export const FlappyPlaneGame = ({
 
         {gameState.status === "ready" && (
           <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/18 p-4 backdrop-blur-[2px]">
-            <div className="max-w-sm rounded-[2rem] bg-white/96 p-6 text-center shadow-[0_22px_60px_rgba(15,23,42,0.18)]">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-sky-100 text-sky-700">
-                <Play className="h-8 w-8" />
-              </div>
-              <h2 className="mt-4 text-2xl font-display font-semibold text-slate-950">
-                {readyTitle}
-              </h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {readyDescription}
-              </p>
-              {manualStartEnabled ? (
-                <Button
-                  type="button"
-                  data-overlay-action="true"
-                  className="mt-5 h-12 rounded-full bg-sky-600 px-8 text-base text-white hover:bg-sky-500"
-                  onPointerDown={stopOverlayPointer}
-                  onClick={startRound}
-                >
-                  <Play className="mr-2 h-5 w-5" />
-                  Play
-                </Button>
-              ) : (
-                <div className="mt-5 rounded-full bg-sky-50 px-4 py-3 text-sm font-medium text-sky-700">
-                  Waiting for the family race countdown.
+            <div className="w-full max-w-sm" onPointerDown={stopOverlayPointer}>
+              {renderReadyOverlay ? renderReadyOverlay({
+                bestScore: gameState.bestScore,
+                manualStartEnabled,
+                startRound,
+                status: gameState.status,
+              }) : (
+                <div className="rounded-[2rem] bg-white/96 p-6 text-center shadow-[0_22px_60px_rgba(15,23,42,0.18)]">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                    <Play className="h-8 w-8" />
+                  </div>
+                  <h2 className="mt-4 text-2xl font-display font-semibold text-slate-950">
+                    {readyTitle}
+                  </h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {readyDescription}
+                  </p>
+                  {manualStartEnabled ? (
+                    <Button
+                      type="button"
+                      data-overlay-action="true"
+                      className="mt-5 h-12 rounded-full bg-sky-600 px-8 text-base text-white hover:bg-sky-500"
+                      onPointerDown={stopOverlayPointer}
+                      onClick={startRound}
+                    >
+                      <Play className="mr-2 h-5 w-5" />
+                      Play
+                    </Button>
+                  ) : (
+                    <div className="mt-5 rounded-full bg-sky-50 px-4 py-3 text-sm font-medium text-sky-700">
+                      Waiting for the family race countdown.
+                    </div>
+                  )}
                 </div>
               )}
             </div>

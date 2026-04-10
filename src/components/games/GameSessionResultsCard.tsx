@@ -94,6 +94,7 @@ export const GameSessionResultsCard = ({
   const currentResult = sortedResults.find((result) => result.profileId === currentProfileId) ?? null;
   const shouldAnimate = !skipAnimations;
   const reportedCount = sortedResults.length;
+  const hasCompetitiveStandings = sortedResults.length > 1;
   const standingsLabel = totalMembers && totalMembers > reportedCount
     ? `${reportedCount}/${totalMembers} finished`
     : `${reportedCount} final${reportedCount === 1 ? " result" : " results"}`;
@@ -157,7 +158,7 @@ export const GameSessionResultsCard = ({
       </div>
 
       <div className="space-y-6 p-5 sm:p-6">
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div className={`grid gap-3 ${hasCompetitiveStandings ? "lg:grid-cols-2" : "lg:grid-cols-1"}`}>
           <div className="rounded-[1.5rem] border border-border/70 bg-background/85 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
               Your finish
@@ -180,28 +181,18 @@ export const GameSessionResultsCard = ({
 
           <div className="rounded-[1.5rem] border border-border/70 bg-background/85 p-4">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Winner spotlight
+              {hasCompetitiveStandings ? "Standings" : "Next step"}
             </p>
             <p className="mt-2 text-lg font-display font-semibold text-slate-950 dark:text-white">
-              {winner
-                ? winner.profileId === currentProfileId
-                  ? "You took the win"
-                  : winner.displayName
-                : "Winner pending"}
-            </p>
-            <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {winner
-                ? `${winner.score} points across ${winner.distance} distance units.`
-                : "The winner locks in after the family-scoped results finish reporting."}
-            </p>
-          </div>
-
-          <div className="rounded-[1.5rem] border border-border/70 bg-background/85 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Next step
-            </p>
-            <p className="mt-2 text-lg font-display font-semibold text-slate-950 dark:text-white">
-              {sessionStatus === "finished" ? standingsLabel : "Standings still moving"}
+              {hasCompetitiveStandings
+                ? sessionStatus === "finished"
+                  ? standingsLabel
+                  : "Standings still moving"
+                : winner
+                  ? winner.profileId === currentProfileId
+                    ? "Your flight is logged"
+                    : winner.displayName
+                  : "Flight logged"}
             </p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
               {nextStepLabel ??
@@ -212,76 +203,78 @@ export const GameSessionResultsCard = ({
           </div>
         </div>
 
-        <div className="grid gap-3 lg:grid-cols-3">
-          {PODIUM_ORDER.map((placement, index) => {
-            const result = podiumResults[placement];
+        {hasCompetitiveStandings ? (
+          <div className="grid gap-3 lg:grid-cols-3">
+            {PODIUM_ORDER.map((placement, index) => {
+              const result = podiumResults[placement];
 
-            if (!result) {
+              if (!result) {
+                return (
+                  <div
+                    key={`empty-${placement}`}
+                    className="hidden rounded-[1.75rem] border border-dashed border-border/70 bg-muted/20 lg:block"
+                  />
+                );
+              }
+
+              const isCurrentProfile = result.profileId === currentProfileId;
+              const animationDelay = skipAnimations ? 0 : index * 0.08;
+
               return (
-                <div
-                  key={`empty-${placement}`}
-                  className="hidden rounded-[1.75rem] border border-dashed border-border/70 bg-muted/20 lg:block"
-                />
-              );
-            }
-
-            const isCurrentProfile = result.profileId === currentProfileId;
-            const animationDelay = skipAnimations ? 0 : index * 0.08;
-
-            return (
-              <motion.div
-                key={result.profileId}
-                initial={shouldAnimate ? { opacity: 0, y: 20 } : false}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: animationDelay, duration: 0.32 }}
-                className={cn(
-                  "rounded-[1.75rem] border p-5 shadow-[0_24px_45px_-38px_rgba(8,21,47,0.42)]",
-                  getPodiumTone(placement),
-                  placement === 0 && "lg:-order-none lg:-translate-y-3",
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className={cn("rounded-full px-3 py-1 text-xs font-semibold", getRankBadgeTone(placement))}>
-                    {getPlacementLabel(placement)}
-                  </div>
-                  {result.isWinner ? (
-                    <div className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-100">
-                      <Trophy className="h-3.5 w-3.5" />
-                      Winner
+                <motion.div
+                  key={result.profileId}
+                  initial={shouldAnimate ? { opacity: 0, y: 20 } : false}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: animationDelay, duration: 0.32 }}
+                  className={cn(
+                    "rounded-[1.75rem] border p-5 shadow-[0_24px_45px_-38px_rgba(8,21,47,0.42)]",
+                    getPodiumTone(placement),
+                    placement === 0 && "lg:-order-none lg:-translate-y-3",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className={cn("rounded-full px-3 py-1 text-xs font-semibold", getRankBadgeTone(placement))}>
+                      {getPlacementLabel(placement)}
                     </div>
-                  ) : null}
-                </div>
+                    {result.isWinner ? (
+                      <div className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-[11px] font-semibold text-amber-800 dark:bg-amber-500/20 dark:text-amber-100">
+                        <Trophy className="h-3.5 w-3.5" />
+                        Winner
+                      </div>
+                    ) : null}
+                  </div>
 
-                <div className="mt-4 flex items-center gap-4">
-                  <Avatar className="h-14 w-14 ring-1 ring-border/60">
-                    <AvatarImage src={result.avatarUrl ?? undefined} alt={result.displayName} />
-                    <AvatarFallback className="bg-sky-100 text-sm font-semibold text-sky-700">
-                      {getFamilyPresenceInitials(result.displayName)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <p className="truncate text-base font-semibold text-slate-950 dark:text-white">
-                      {result.displayName}
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      {isCurrentProfile ? (
-                        <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-semibold text-sky-700">
-                          You
+                  <div className="mt-4 flex items-center gap-4">
+                    <Avatar className="h-14 w-14 ring-1 ring-border/60">
+                      <AvatarImage src={result.avatarUrl ?? undefined} alt={result.displayName} />
+                      <AvatarFallback className="bg-sky-100 text-sm font-semibold text-sky-700">
+                        {getFamilyPresenceInitials(result.displayName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-semibold text-slate-950 dark:text-white">
+                        {result.displayName}
+                      </p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {isCurrentProfile ? (
+                          <span className="rounded-full bg-sky-100 px-2.5 py-1 text-[11px] font-semibold text-sky-700">
+                            You
+                          </span>
+                        ) : null}
+                        <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                          Score {result.score}
                         </span>
-                      ) : null}
-                      <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                        Score {result.score}
-                      </span>
-                      <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
-                        Distance {result.distance}
-                      </span>
+                        <span className="rounded-full border border-border/70 bg-background/70 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                          Distance {result.distance}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        ) : null}
 
         <div className="rounded-[1.75rem] border border-border/70 bg-muted/20 p-4 sm:p-5">
           <div className="mb-4 flex items-center justify-between gap-3">

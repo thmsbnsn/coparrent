@@ -1,16 +1,17 @@
 export const FLAPPY_WORLD = {
   backgroundTileWidth: 800,
   backgroundSpeed: 18,
-  flapVelocity: -470,
-  gapSize: 164,
-  gravity: 1520,
+  flapVelocity: -410,
+  gapSize: 204,
+  gravity: 780,
+  gravityBoost: 520,
   groundHeight: 71,
-  groundSpeed: 230,
+  groundSpeed: 212,
   groundTileWidth: 808,
   height: 480,
-  maxFallSpeed: 720,
-  obstacleSpawnEveryMs: 1325,
-  obstacleWidth: 108,
+  maxFallSpeed: 560,
+  obstacleSpawnEveryMs: 1460,
+  obstacleWidth: 100,
   playerHeight: 73,
   playerStartY: 180,
   playerWidth: 88,
@@ -23,6 +24,7 @@ export const FLAPPY_GROUND_TOP = FLAPPY_WORLD.height - FLAPPY_WORLD.groundHeight
 export type FlappyGameStatus = "ready" | "running" | "game_over";
 
 export interface FlappyObstacle {
+  gapSize: number;
   gapY: number;
   id: number;
   scored: boolean;
@@ -57,16 +59,22 @@ export interface FlappyStepResult {
 
 const INITIAL_OBSTACLE_X = FLAPPY_WORLD.width + 224;
 const OBSTACLE_SPAWN_LEAD_MS = 900;
-const GAP_EDGE_PADDING = 34;
 const PLAYER_COLLISION_INSET = {
-  bottom: 6,
-  left: 12,
-  right: 10,
-  top: 8,
+  bottom: 10,
+  left: 14,
+  right: 12,
+  top: 10,
 } as const;
 const MAX_SEED = 2147483647;
+const INITIAL_GAP_PADDING = 58;
+const FINAL_GAP_PADDING = 40;
+const INITIAL_GAP_SHIFT_LIMIT = 36;
+const FINAL_GAP_SHIFT_LIMIT = 88;
+const MAX_DIFFICULTY_OBSTACLE_INDEX = 14;
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const lerp = (start: number, end: number, amount: number) => start + (end - start) * amount;
+const easeOutCubic = (value: number) => 1 - (1 - value) ** 3;
 
 const wrapOffset = (value: number, max: number) => {
   if (max <= 0) {
@@ -77,11 +85,35 @@ const wrapOffset = (value: number, max: number) => {
   return wrapped < 0 ? wrapped + max : wrapped;
 };
 
-const getPlayableGapRange = () => {
-  const gapHalf = FLAPPY_WORLD.gapSize / 2;
-  const min = gapHalf + GAP_EDGE_PADDING;
-  const max = FLAPPY_GROUND_TOP - gapHalf - GAP_EDGE_PADDING;
+const getObstacleDifficulty = (obstacleId: number) =>
+  clamp(obstacleId / MAX_DIFFICULTY_OBSTACLE_INDEX, 0, 1);
+
+const getObstacleGapSize = (obstacleId: number) => {
+  const difficulty = easeOutCubic(getObstacleDifficulty(obstacleId));
+  return Math.round(lerp(220, 174, difficulty));
+};
+
+const getObstacleEdgePadding = (obstacleId: number) =>
+  lerp(INITIAL_GAP_PADDING, FINAL_GAP_PADDING, getObstacleDifficulty(obstacleId));
+
+const getObstacleShiftLimit = (obstacleId: number) =>
+  lerp(INITIAL_GAP_SHIFT_LIMIT, FINAL_GAP_SHIFT_LIMIT, easeOutCubic(getObstacleDifficulty(obstacleId)));
+
+const getPlayableGapRange = (gapSize: number, edgePadding: number) => {
+  const gapHalf = gapSize / 2;
+  const min = gapHalf + edgePadding;
+  const max = FLAPPY_GROUND_TOP - gapHalf - edgePadding;
   return { max, min };
+};
+
+const getFlappyGravity = (velocityY: number) => {
+  const normalizedFallSpeed = clamp(
+    (velocityY + 80) / (FLAPPY_WORLD.maxFallSpeed + 80),
+    0,
+    1,
+  );
+
+  return FLAPPY_WORLD.gravity + easeOutCubic(normalizedFallSpeed) * FLAPPY_WORLD.gravityBoost;
 };
 
 export const normalizeFlappySeed = (seed: number | null | undefined) => {
@@ -103,7 +135,9 @@ const pullSeededRandom = (seed: number) => {
 };
 
 export const getRandomGapY = (randomValue = Math.random()) => {
-  const { max, min } = getPlayableGapRange();
+  const gapSize = FLAPPY_WORLD.gapSize;
+  const edgePadding = INITIAL_GAP_PADDING;
+  const { max, min } = getPlayableGapRange(gapSize, edgePadding);
   return min + clamp(randomValue, 0, 1) * (max - min);
 };
 
@@ -111,11 +145,28 @@ export const createFlappyObstacle = (
   id: number,
   randomValue = Math.random(),
   x = INITIAL_OBSTACLE_X,
+  previousGapY: number | null = null,
 ): FlappyObstacle => ({
-  gapY: getRandomGapY(randomValue),
-  id,
-  scored: false,
-  x,
+  ...(() => {
+    const gapSize = getObstacleGapSize(id);
+    const edgePadding = getObstacleEdgePadding(id);
+    const shiftLimit = getObstacleShiftLimit(id);
+    const { max, min } = getPlayableGapRange(gapSize, edgePadding);
+    const centeredGapY = previousGapY ?? (min + max) / 2;
+    const rawGapY = min + clamp(randomValue, 0, 1) * (max - min);
+
+    return {
+      gapSize,
+      gapY: clamp(
+        rawGapY,
+        Math.max(min, centeredGapY - shiftLimit),
+        Math.min(max, centeredGapY + shiftLimit),
+      ),
+      id,
+      scored: false,
+      x,
+    };
+  })(),
 });
 
 export const createReadyFlappyState = (bestScore = 0, seed = 1): FlappyGameState => {
@@ -169,11 +220,17 @@ export const flapFlappyGame = (state: FlappyGameState): FlappyGameState => {
 };
 
 export const getPlayerRotation = (velocityY: number) =>
-  clamp((velocityY / FLAPPY_WORLD.maxFallSpeed) * 78, -24, 82);
+  clamp(
+    velocityY < 0
+      ? -16 + (velocityY / Math.abs(FLAPPY_WORLD.flapVelocity)) * 10
+      : (velocityY / FLAPPY_WORLD.maxFallSpeed) * 62,
+    -18,
+    70,
+  );
 
 export const getRenderedObstacleSegments = (obstacle: FlappyObstacle) => {
-  const gapTop = obstacle.gapY - FLAPPY_WORLD.gapSize / 2;
-  const gapBottom = obstacle.gapY + FLAPPY_WORLD.gapSize / 2;
+  const gapTop = obstacle.gapY - obstacle.gapSize / 2;
+  const gapBottom = obstacle.gapY + obstacle.gapSize / 2;
 
   return {
     bottomHeight: Math.max(0, FLAPPY_GROUND_TOP - gapBottom),
@@ -201,15 +258,16 @@ export const stepFlappyGame = (
   }
 
   const deltaSeconds = Math.min(deltaMs, 32) / 1000;
-  let playerY = state.playerY + (state.velocityY + FLAPPY_WORLD.gravity * deltaSeconds) * deltaSeconds;
+  const gravity = getFlappyGravity(state.velocityY);
   let velocityY = Math.min(
-    state.velocityY + FLAPPY_WORLD.gravity * deltaSeconds,
+    state.velocityY + gravity * deltaSeconds,
     FLAPPY_WORLD.maxFallSpeed,
   );
+  let playerY = state.playerY + ((state.velocityY + velocityY) / 2) * deltaSeconds;
 
   if (playerY < 0) {
     playerY = 0;
-    velocityY = Math.max(velocityY, -120);
+    velocityY = Math.max(velocityY, -90);
   }
 
   let scored = false;
@@ -244,7 +302,11 @@ export const stepFlappyGame = (
   while (spawnTimerMs <= 0) {
     const { nextSeed, value } = pullSeededRandom(rngState);
     rngState = nextSeed;
-    obstacles = [...obstacles, createFlappyObstacle(nextObstacleId, value)];
+    const previousObstacle = obstacles[obstacles.length - 1] ?? null;
+    obstacles = [
+      ...obstacles,
+      createFlappyObstacle(nextObstacleId, value, INITIAL_OBSTACLE_X, previousObstacle?.gapY ?? null),
+    ];
     nextObstacleId += 1;
     spawnTimerMs += FLAPPY_WORLD.obstacleSpawnEveryMs;
   }
@@ -298,8 +360,8 @@ export const stepFlappyGame = (
       return false;
     }
 
-    const gapTop = obstacle.gapY - FLAPPY_WORLD.gapSize / 2;
-    const gapBottom = obstacle.gapY + FLAPPY_WORLD.gapSize / 2;
+    const gapTop = obstacle.gapY - obstacle.gapSize / 2;
+    const gapBottom = obstacle.gapY + obstacle.gapSize / 2;
 
     return playerBounds.top < gapTop || playerBounds.bottom > gapBottom;
   });

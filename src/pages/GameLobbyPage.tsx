@@ -53,14 +53,12 @@ export default function GameLobbyPage() {
     prepareRematch,
     scopeError: lobbyScopeError,
     session,
-    setReady,
-    startSession,
   } = useGameLobby({
     gameSlug: game.slug,
     sessionId: sessionId ?? null,
   });
   const [launchingLobby, setLaunchingLobby] = useState(false);
-  const [actionPending, setActionPending] = useState<"join" | "ready" | "start" | "rematch" | null>(null);
+  const [actionPending, setActionPending] = useState<"join" | "rematch" | null>(null);
   const launcherAttemptRef = useRef<string | null>(null);
   const childCanUseLobby = !isChildAccount || (
     isChildGameAllowed(
@@ -152,18 +150,6 @@ export default function GameLobbyPage() {
     user,
   ]);
 
-  useEffect(() => {
-    if (!sessionId || !session || !isJoined) {
-      return;
-    }
-
-    if (session.status !== "active") {
-      return;
-    }
-
-    navigate(`${game.playPath}?sessionId=${session.id}`, { replace: true });
-  }, [game.playPath, isJoined, navigate, session, sessionId]);
-
   const scopeError =
     childScopeError ??
     portalScopeError ??
@@ -183,31 +169,6 @@ export default function GameLobbyPage() {
     setActionPending("join");
     try {
       await joinLobby();
-    } finally {
-      setActionPending(null);
-    }
-  };
-
-  const handleSetReady = async (isReady: boolean) => {
-    setActionPending("ready");
-    try {
-      await setReady(isReady);
-    } finally {
-      setActionPending(null);
-    }
-  };
-
-  const handleStart = async () => {
-    if (!session) {
-      return;
-    }
-
-    setActionPending("start");
-    try {
-      const started = await startSession();
-      if (started) {
-        navigate(`${game.playPath}?sessionId=${session.id}`);
-      }
     } finally {
       setActionPending(null);
     }
@@ -335,8 +296,9 @@ export default function GameLobbyPage() {
                   {game.displayName}
                 </h1>
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                  Meet in one family-scoped lobby, confirm who is ready, and launch a synchronized
-                  race with one shared seed and countdown for everyone in the room.
+                  Meet in one family-scoped lobby, confirm who is here, and then send everyone into
+                  the shared preflight screen where ready-up, fullscreen, and the synchronized
+                  countdown now live.
                 </p>
               </div>
             </div>
@@ -361,16 +323,13 @@ export default function GameLobbyPage() {
 
         <GameLobbyCard
           currentProfileId={profileId}
+          flightDeckHref={`${game.playPath}?sessionId=${session.id}`}
           joining={actionPending === "join"}
           members={members}
           onJoin={handleJoin}
           onPrepareRematch={handlePrepareRematch}
-          onSetReady={handleSetReady}
-          onStart={handleStart}
-          readyUpdating={actionPending === "ready"}
           rematchPending={actionPending === "rematch"}
           session={session}
-          starting={actionPending === "start"}
         />
       </div>
     </DashboardLayout>

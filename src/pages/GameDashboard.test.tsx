@@ -266,13 +266,13 @@ describe("GameDashboard", () => {
 
     expect(playLink?.getAttribute("href")).toBe("/dashboard/games/flappy-plane/lobby");
 
-    const launchLinks = Array.from(rendered.querySelectorAll("a")).filter(
+    const featuredJoinLink = Array.from(rendered.querySelectorAll("a")).find(
       (anchor) => anchor.textContent?.includes("Join lobby"),
     );
 
-    expect(launchLinks.length).toBeGreaterThan(0);
-    expect(launchLinks[0]?.getAttribute("href")).toBe("/dashboard/games/flappy-plane/lobby");
-    expect(rendered.textContent).toContain("Solo preview");
+    expect(featuredJoinLink?.getAttribute("href")).toBe("/dashboard/games/flappy-plane/lobby");
+    expect(rendered.textContent).toContain("Open solo start screen");
+    expect(rendered.textContent).toContain("Challenge board");
 
     const plannedGameLinks = Array.from(rendered.querySelectorAll("a")).filter(
       (anchor) => anchor.textContent?.includes("See game plan"),

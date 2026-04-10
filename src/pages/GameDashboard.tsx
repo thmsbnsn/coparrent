@@ -4,7 +4,6 @@ import { CarFront, Rocket, ShipWheel, TimerReset, type LucideIcon } from "lucide
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
 import { FamilyGameActivityPanel } from "@/components/games/FamilyGameActivityPanel";
 import { GameChallengeLeaderboard } from "@/components/games/GameChallengeLeaderboard";
-import { GameCard } from "@/components/games/GameCard";
 import { GameComingSoonCard } from "@/components/games/GameComingSoonCard";
 import { GameDashboardHero } from "@/components/games/GameDashboardHero";
 import { Button } from "@/components/ui/button";
@@ -21,7 +20,6 @@ import { isMissingSupabaseFunctionError } from "@/lib/featureAvailabilityErrors"
 import { getFamilyGameChallengeStatusLabel } from "@/lib/gameChallenges";
 import {
   FAMILY_GAMES,
-  PLAYABLE_FAMILY_GAMES,
   UPCOMING_FAMILY_GAMES,
   type FamilyGameSlug,
 } from "@/lib/gameRegistry";
@@ -113,22 +111,28 @@ export default function GameDashboard() {
       : familyLobbyUpdating
         ? `Open ${featuredGame.displayName} preview`
         : `Open ${featuredGame.displayName} lobby`;
-  const availableGames = PLAYABLE_FAMILY_GAMES.map((game) => ({
-    accentClass: game.accentClass,
-    actionLabel: featuredActionLabel,
-    artAlt: game.previewArtAlt,
-    artClassName: game.previewArtClassName,
-    artSrc: game.previewArtSrc,
-    description: game.dashboardDescription,
-    eyebrow: game.dashboardEyebrow,
-    icon: GAME_ICONS[game.slug],
-    title: game.displayName,
-    to: game.slug === featuredGame.slug ? featuredActionHref : game.playPath,
-  })).filter((game) => (game.title === featuredGame.displayName ? childCanPlayFlappy : true));
   const showCallLauncher =
     Boolean(roleFamilyId) && isParent && !isThirdParty && !isLawOffice && !isChildAccount;
   const childCanUseChallenges = !isChildAccount || (childCanPlayFlappy && multiplayer_enabled);
   const challengeLeader = leaderboard[0] ?? null;
+  const featuredLobbyTitle = sessionsScopeError
+    ? "Lobby unavailable"
+    : familyLobbyUpdating
+      ? "Solo preview only"
+      : sessionsLoading
+        ? "Checking lobby"
+        : openSession
+          ? "Family lobby live"
+          : "No lobby open yet";
+  const featuredLobbyMeta = sessionsScopeError
+    ? sessionsScopeError
+    : familyLobbyUpdating
+      ? "The shared lobby rollout is still finishing on this server, so the family can use the solo start screen for now."
+      : sessionsLoading
+        ? "Looking for an active Toy Plane Dash room for this family."
+        : openSession
+          ? `${openSession.memberCount}/${openSession.maxPlayers} pilots in the room. Host: ${openSession.createdByDisplayName}.`
+          : "Open the family lobby when everyone is ready to move into the shared preflight screen.";
 
   const handleCreateChallenge = async () => {
     setChallengeActionPending("create");
@@ -208,103 +212,118 @@ export default function GameDashboard() {
 
         <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
           <section className="min-w-0 space-y-6">
-            <div className="space-y-3">
-              <p className="section-kicker text-slate-500">
-                Featured game
-              </p>
-              {availableGames.length > 0 ? (
-                availableGames.map((game) => (
-                  <GameCard key={game.title} {...game} className="min-h-[20rem]" />
-                ))
-              ) : (
-                <section className="surface-primary p-6">
-                  <h2 className="text-2xl font-display font-semibold text-foreground">
-                    Games are unavailable for this child account right now.
-                  </h2>
-                  <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-                    A parent or guardian needs to turn games back on or explicitly allow Toy Plane
-                    Dash before this child can open the family game surface.
-                  </p>
-                </section>
-              )}
-            </div>
+            {childCanPlayFlappy ? (
+              <section className="surface-primary overflow-hidden p-5">
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_320px]">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <p className="section-kicker text-slate-500">
+                        Featured game
+                      </p>
+                      <StatusPill variant="highlight">
+                        1 live game
+                      </StatusPill>
+                    </div>
 
-            <section className="surface-primary p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="section-kicker text-muted-foreground">
-                    Available now
-                  </p>
-                  <h2 className="mt-1 text-2xl font-display font-semibold text-foreground">
-                    Start a quick round
-                  </h2>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-                    Shared games now start in a family-scoped lobby so everyone can gather before a
-                    synchronized seeded race begins.
-                  </p>
-                </div>
-                <StatusPill variant="highlight">
-                  1 live game
-                </StatusPill>
-              </div>
-
-              <div className="surface-secondary mt-5 p-4">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="space-y-1">
-                    <p className="section-kicker text-muted-foreground">
-                      Family lobby
+                    <h2 className="mt-3 text-3xl font-display font-semibold text-foreground sm:text-4xl">
+                      {featuredGame.displayName}
+                    </h2>
+                    <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+                      A gentler toy-plane run for solo play, plus a shared family flight deck with a
+                      real ready-up step before the synchronized countdown begins.
                     </p>
-                    {isChildAccount && !multiplayer_enabled ? (
-                      <p className="text-sm text-muted-foreground">
-                        Multiplayer is off for this child account, so shared lobbies stay hidden.
-                      </p>
-                    ) : familyLobbyUpdating ? (
-                      <p className="text-sm text-muted-foreground">
-                        Family lobbies are still being enabled on this server. Solo preview is
-                        available while we finish the update.
-                      </p>
-                    ) : sessionsScopeError ? (
-                      <p className="text-sm text-rose-700">{sessionsScopeError}</p>
-                    ) : sessionsLoading ? (
-                      <p className="text-sm text-muted-foreground">
-                        Checking for an open Toy Plane Dash lobby...
-                      </p>
-                    ) : openSession ? (
-                      <p className="text-sm text-muted-foreground">
-                        {openSession.memberCount}/{openSession.maxPlayers} pilots in the room.
-                        Host: {openSession.createdByDisplayName}.
-                      </p>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        No lobby is open yet. Start one and the family can gather here before
-                        launch.
-                      </p>
-                    )}
-                  </div>
 
-                  <div className="flex flex-wrap gap-3">
-                    {availableGames.length > 0 && (
+                    <div className="mt-5 flex flex-wrap gap-3">
                       <Button asChild className="rounded-full">
                         <Link to={featuredActionHref}>
                           {featuredActionLabel}
                         </Link>
                       </Button>
-                    )}
-                    {childCanPlayFlappy && (
                       <Button asChild variant="outline" className="rounded-full bg-background/85">
-                        <Link to={featuredGame.playPath}>Solo preview</Link>
+                        <Link to={featuredGame.playPath}>Open solo start screen</Link>
                       </Button>
-                    )}
+                      <Button asChild variant="outline" className="rounded-full bg-background/85">
+                        <Link to={featuredGame.challengePath}>Challenge board</Link>
+                      </Button>
+                    </div>
+
+                    <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-[1.5rem] border border-border/70 bg-white/80 p-4 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          Solo path
+                        </p>
+                        <p className="mt-2 text-lg font-display font-semibold text-foreground">
+                          Start from preflight
+                        </p>
+                        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                          No more auto-start on page load. Kids land on a clear start screen first.
+                        </p>
+                      </div>
+                      <div className="rounded-[1.5rem] border border-border/70 bg-white/80 p-4 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          Family lobby
+                        </p>
+                        <p className="mt-2 text-lg font-display font-semibold text-foreground">
+                          Join, then ready up
+                        </p>
+                        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                          Presence and family scope stay in the lobby, but the countdown waits for the shared preflight screen.
+                        </p>
+                      </div>
+                      <div className="rounded-[1.5rem] border border-border/70 bg-white/80 p-4 shadow-sm">
+                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                          Challenge mode
+                        </p>
+                        <p className="mt-2 text-lg font-display font-semibold text-foreground">
+                          Async leaderboard
+                        </p>
+                        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                          Keep best-score-only family competition without needing everyone online at once.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="rounded-[1.75rem] border border-sky-200/70 bg-[linear-gradient(180deg,rgba(239,246,255,0.95),rgba(255,255,255,0.98))] p-5 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700/70">
+                        Family lobby
+                      </p>
+                      <h3 className="mt-2 text-xl font-display font-semibold text-slate-950">
+                        {featuredLobbyTitle}
+                      </h3>
+                      <p className={`mt-2 text-sm leading-6 ${sessionsScopeError ? "text-rose-700" : "text-muted-foreground"}`}>
+                        {isChildAccount && !multiplayer_enabled
+                          ? "Multiplayer is off for this child account, so the shared lobby stays hidden and solo play remains available."
+                          : featuredLobbyMeta}
+                      </p>
+                    </div>
+
+                    <div className="rounded-[1.75rem] border border-border/70 bg-slate-950 p-5 text-white shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/65">
+                        Best feel
+                      </p>
+                      <p className="mt-2 text-lg font-display font-semibold">
+                        Floatier plane, friendlier start
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-white/75">
+                        Early obstacles stay wider and calmer so the first runs feel playful instead of punishing.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                {availableGames.map((game) => (
-                  <GameCard key={`${game.title}-grid`} {...game} className="min-h-[15rem]" />
-                ))}
-              </div>
-            </section>
+              </section>
+            ) : (
+              <section className="surface-primary p-6">
+                <h2 className="text-2xl font-display font-semibold text-foreground">
+                  Games are unavailable for this child account right now.
+                </h2>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  A parent or guardian needs to turn games back on or explicitly allow Toy Plane
+                  Dash before this child can open the family game surface.
+                </p>
+              </section>
+            )}
 
             <section className="surface-standard p-5">
               <div className="space-y-2">
@@ -478,16 +497,37 @@ export default function GameDashboard() {
 
             <section className="surface-standard p-5">
               <p className="section-kicker text-muted-foreground">
-                Multiplayer lane
+                Family loop
               </p>
               <h2 className="mt-1 text-2xl font-display font-semibold text-foreground">
-                Built for shared family play
+                Cleaner shared-game flow
               </h2>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                The shared games dashboard is the family entry point for quick rounds, async
-                family challenges, and cleaner multiplayer matchmaking later. Presence already
-                shows who is browsing or playing without exposing parent-only tools.
+                Open the lobby, move into the flight deck, then let everyone ready up only after
+                their device setup feels right. The shared dashboard stays readable without stacking
+                repeated dark panels across every step.
               </p>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-[1.5rem] border border-border/70 bg-white/75 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    1. Gather
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">Join the family lobby</p>
+                </div>
+                <div className="rounded-[1.5rem] border border-border/70 bg-white/75 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    2. Preflight
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">Fullscreen and rotate first</p>
+                </div>
+                <div className="rounded-[1.5rem] border border-border/70 bg-white/75 p-4 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                    3. Launch
+                  </p>
+                  <p className="mt-2 text-sm font-semibold text-foreground">Ready up, then start the countdown</p>
+                </div>
+              </div>
             </section>
           </div>
         </div>

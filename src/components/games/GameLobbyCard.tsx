@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Loader2, Play, Rocket, RotateCcw, Users } from "lucide-react";
+import { ArrowRight, Loader2, RotateCcw, TimerReset, Users } from "lucide-react";
 import { GameLobbyMemberRow } from "@/components/games/GameLobbyMemberRow";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -10,58 +10,48 @@ import {
   type FamilyGameLobbyMember,
   type FamilyGameSessionSummary,
 } from "@/lib/gameSessions";
-import { cn } from "@/lib/utils";
 
 interface GameLobbyCardProps {
   currentProfileId: string | null;
+  flightDeckHref: string;
   joining?: boolean;
   members: FamilyGameLobbyMember[];
   onJoin: () => Promise<void> | void;
   onPrepareRematch?: () => Promise<void> | void;
-  onSetReady: (isReady: boolean) => Promise<void> | void;
-  onStart: () => Promise<void> | void;
-  readyUpdating?: boolean;
   rematchPending?: boolean;
   session: FamilyGameSessionSummary;
-  starting?: boolean;
 }
 
 export const GameLobbyCard = ({
   currentProfileId,
+  flightDeckHref,
   joining = false,
   members,
   onJoin,
   onPrepareRematch,
-  onSetReady,
-  onStart,
-  readyUpdating = false,
   rematchPending = false,
   session,
-  starting = false,
 }: GameLobbyCardProps) => {
   const game = FAMILY_GAMES.flappyPlane;
   const currentMember = members.find((member) => member.profileId === currentProfileId) ?? null;
-  const canStart = isFamilyGameSessionStartable(session) && Boolean(currentMember?.isCreator);
   const isSessionActive = session.status === "active";
   const isSessionFinished = session.status === "finished";
   const statusLabel = getFamilyGameSessionStatusLabel(session.status);
   const readyLabel = `${session.readyCount}/${session.memberCount} ready`;
   const readinessMessage = isSessionFinished
     ? currentMember?.isCreator
-      ? "Reset this room with a fresh shared seed, then ask everyone to mark ready again for the rematch."
-      : "The race is over. Return here after the host resets the room, then mark ready again for the next launch."
+      ? "Reset this room with a fresh shared seed, then have everyone reopen the preflight screen before the next launch."
+      : "The race is over. Wait for the host to reset the room, then reopen the preflight screen for the next takeoff."
     : isSessionActive
-      ? "The synchronized launch is already in progress. New readiness changes stay locked until the race ends."
-      : canStart
-        ? "Everyone is marked ready. The host can launch the synchronized race now."
-        : currentMember
-          ? currentMember.status === "ready"
-            ? "You are marked ready. Wait for the rest of the family so the host can launch."
-            : "Mark yourself ready once you want to be counted for the synchronized launch."
-          : "Join this family-scoped room first, then mark yourself ready so the host can launch.";
+      ? "The synchronized race is already live. Rejoin the flight deck to keep flying or watch the standings land."
+      : currentMember
+        ? isFamilyGameSessionStartable(session)
+          ? "Everyone is in place. Open the flight deck so the host can begin the countdown after the family is fully set."
+          : "Open the flight deck when you are ready to rotate, fullscreen, and mark yourself ready for takeoff."
+        : "Join this family-scoped room first, then open the flight deck when you want to start your preflight setup.";
 
   return (
-    <section className="rounded-[2rem] border border-border/70 bg-card/90 p-5 shadow-sm sm:p-6">
+    <section className="rounded-[2rem] border border-border/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(244,248,255,0.88))] p-5 shadow-[0_28px_58px_-42px_rgba(8,21,47,0.42)] sm:p-6">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-3">
           <div className="inline-flex items-center rounded-full bg-sky-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-sky-700">
@@ -69,23 +59,24 @@ export const GameLobbyCard = ({
           </div>
           <div>
             <h1 className="text-3xl font-display font-semibold text-slate-950 sm:text-4xl">
-              Gather the family before takeoff
+              Gather the family, then move into preflight
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Join the same family-scoped lobby, mark everyone ready, and use this room as the
-              launch step before the live race layer is added.
+              Use this room to gather the family and confirm who is here. The actual ready-up,
+              fullscreen setup, rotate hint, and synchronized launch now happen inside the flight
+              deck so nobody loses time before the countdown begins.
             </p>
           </div>
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="rounded-[1.5rem] bg-slate-950 px-4 py-4 text-white">
+          <div className="rounded-[1.5rem] bg-slate-950 px-4 py-4 text-white shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-white/65">
               Session status
             </p>
             <p className="mt-2 text-sm font-medium">{statusLabel}</p>
           </div>
-          <div className="rounded-[1.5rem] bg-sky-50 px-4 py-4 text-slate-900">
+          <div className="rounded-[1.5rem] border border-sky-200/80 bg-sky-50 px-4 py-4 text-slate-900">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-sky-700/70">
               Pilots ready
             </p>
@@ -97,7 +88,7 @@ export const GameLobbyCard = ({
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-[1.5rem] border border-border/70 bg-muted/30 px-4 py-4">
+            <div className="rounded-[1.5rem] border border-white/70 bg-white/70 px-4 py-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Host
               </p>
@@ -105,7 +96,7 @@ export const GameLobbyCard = ({
                 {session.createdByDisplayName}
               </p>
             </div>
-            <div className="rounded-[1.5rem] border border-border/70 bg-muted/30 px-4 py-4">
+            <div className="rounded-[1.5rem] border border-white/70 bg-white/70 px-4 py-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Seats
               </p>
@@ -113,7 +104,7 @@ export const GameLobbyCard = ({
                 {session.memberCount} / {session.maxPlayers}
               </p>
             </div>
-            <div className="rounded-[1.5rem] border border-border/70 bg-muted/30 px-4 py-4">
+            <div className="rounded-[1.5rem] border border-white/70 bg-white/70 px-4 py-4 shadow-sm">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
                 Session
               </p>
@@ -134,31 +125,31 @@ export const GameLobbyCard = ({
           </div>
         </div>
 
-        <aside className="rounded-[1.75rem] border border-border/70 bg-slate-950 p-5 text-white shadow-sm">
-          <div className="flex items-center gap-2 text-sky-200">
-            <Users className="h-4 w-4" />
-            <p className="text-sm font-semibold">Pre-flight controls</p>
+        <aside className="rounded-[1.75rem] border border-sky-200/70 bg-[linear-gradient(180deg,rgba(239,246,255,0.94),rgba(255,255,255,0.96))] p-5 text-slate-900 shadow-sm">
+          <div className="flex items-center gap-2 text-sky-700">
+            <TimerReset className="h-4 w-4" />
+            <p className="text-sm font-semibold">Flight deck handoff</p>
           </div>
 
           <div className="mt-4 space-y-4">
-            <p className="text-sm leading-6 text-slate-200/86">
+            <p className="text-sm leading-6 text-slate-700">
               {isSessionFinished
-                ? "This race is complete. The host can reset the same family-scoped room with a fresh shared seed, then everyone readies up again for the next launch."
-                : "Everyone can join this family lobby. Ready status is tracked server-side, the host starts the shared countdown, and the game page uses the same family-scoped session state for the race seed and results."}
+                ? "This race is complete. Reset the room here, then send everyone back into the flight deck for another family-scoped countdown."
+                : "This room only tracks who is here. Ready status and launch timing stay server-owned, but the actual ready-up happens in the flight deck after each player has had a chance to rotate and fullscreen."}
             </p>
 
-            <div className="rounded-[1.4rem] border border-white/12 bg-white/8 px-4 py-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300/78">
-                Ready check
+            <div className="rounded-[1.4rem] border border-sky-200/80 bg-white px-4 py-3 shadow-sm">
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Launch status
               </p>
-              <p className="mt-2 text-sm leading-6 text-white/90">{readinessMessage}</p>
+              <p className="mt-2 text-sm leading-6 text-slate-700">{readinessMessage}</p>
             </div>
 
             {isSessionFinished ? (
               currentMember?.isCreator ? (
                 <Button
                   type="button"
-                  className="h-12 w-full rounded-full bg-white text-slate-950 hover:bg-slate-100"
+                  className="h-12 w-full rounded-full bg-slate-950 text-white hover:bg-slate-800"
                   disabled={rematchPending}
                   onClick={() => {
                     void onPrepareRematch?.();
@@ -176,7 +167,7 @@ export const GameLobbyCard = ({
               ) : (
                 <Button
                   type="button"
-                  className="h-12 w-full rounded-full bg-white/12 text-white hover:bg-white/12"
+                  className="h-12 w-full rounded-full bg-slate-100 text-slate-500 hover:bg-slate-100"
                   disabled
                 >
                   Waiting for host reset
@@ -185,7 +176,7 @@ export const GameLobbyCard = ({
             ) : !currentMember ? (
               <Button
                 type="button"
-                className="h-12 w-full rounded-full bg-white text-slate-950 hover:bg-slate-100"
+                className="h-12 w-full rounded-full bg-slate-950 text-white hover:bg-slate-800"
                 disabled={joining || isSessionActive}
                 onClick={() => {
                   void onJoin();
@@ -201,67 +192,33 @@ export const GameLobbyCard = ({
                 )}
               </Button>
             ) : (
-              <Button
-                type="button"
-                className={cn(
-                  "h-12 w-full rounded-full text-white",
-                  currentMember.status === "ready"
-                    ? "bg-amber-500 hover:bg-amber-400"
-                    : "bg-emerald-500 hover:bg-emerald-400",
-                )}
-                disabled={readyUpdating || isSessionActive}
-                onClick={() => {
-                  void onSetReady(currentMember.status !== "ready");
-                }}
-              >
-                {readyUpdating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : currentMember.status === "ready" ? (
-                  "Not ready yet"
-                ) : (
-                  <>
-                    <Rocket className="mr-2 h-4 w-4" />
-                    I'm ready
-                  </>
-                )}
+              <Button asChild className="h-12 w-full rounded-full bg-sky-600 text-white hover:bg-sky-500">
+                <Link to={flightDeckHref}>
+                  {isSessionActive ? "Rejoin live flight" : "Open flight deck"}
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Link>
               </Button>
             )}
-
-            <Button
-              type="button"
-              className="h-12 w-full rounded-full bg-sky-500 text-white hover:bg-sky-400"
-              disabled={isSessionFinished || !canStart || starting}
-                onClick={() => {
-                  void onStart();
-                }}
-              >
-              {starting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : isSessionFinished ? (
-                "Reset the room first"
-              ) : isSessionActive ? (
-                "Race is live"
-              ) : (
-                <>
-                  <Play className="mr-2 h-4 w-4" />
-                  Start synchronized race
-                </>
-              )}
-            </Button>
 
             <Separator className="bg-white/12" />
 
             <div className="space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-300/78">
-                Quick fallback
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                Quick options
               </p>
+              {currentMember && !isSessionFinished ? (
+                <div className="rounded-[1.35rem] border border-sky-200/70 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-900">
+                  Open the flight deck before marking ready. That preflight screen is where
+                  fullscreen, rotate guidance, and the shared countdown now live.
+                </div>
+              ) : null}
               <Button
                 asChild
                 type="button"
                 variant="outline"
-                className="h-11 w-full rounded-full border-white/15 bg-transparent text-white hover:bg-white/10 hover:text-white"
+                className="h-11 w-full rounded-full border-border/70 bg-white hover:bg-slate-50"
               >
-                <Link to={game.playPath}>Open solo preview</Link>
+                <Link to={game.playPath}>Open solo start screen</Link>
               </Button>
             </div>
           </div>
