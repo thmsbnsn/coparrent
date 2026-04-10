@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { Search, Shield, ArrowLeft, RefreshCw, Loader2, Users, Scale, ClipboardCheck, Database, Activity, Bell } from "lucide-react";
+import { Search, Shield, ArrowLeft, RefreshCw, Loader2, Users, Scale, ClipboardCheck, Database, Activity, Bell, Ticket } from "lucide-react";
 import { resolveDisplayValue } from "@/lib/displayResolver";
 import {
   AlertDialog,
@@ -28,6 +28,7 @@ import { ProductionChecklist } from "@/components/admin/ProductionChecklist";
 import { SeedDataPanel } from "@/components/admin/SeedDataPanel";
 import { MigrationDryRunPanel } from "@/components/admin/MigrationDryRunPanel";
 import { AdminPushTester } from "@/components/admin/AdminPushTester";
+import { AdminAccessCodeManager } from "@/components/admin/AdminAccessCodeManager";
 
 interface UserProfile {
   id: string;
@@ -259,6 +260,10 @@ const AdminDashboard = () => {
               <Scale className="h-4 w-4" />
               Law Library
             </TabsTrigger>
+            <TabsTrigger value="access-codes" className="flex items-center gap-2">
+              <Ticket className="h-4 w-4" />
+              Access Codes
+            </TabsTrigger>
             <TabsTrigger value="checklist" className="flex items-center gap-2">
               <ClipboardCheck className="h-4 w-4" />
               Production
@@ -406,6 +411,10 @@ const AdminDashboard = () => {
 
           <TabsContent value="law-library">
             <AdminLawLibraryManager />
+          </TabsContent>
+
+          <TabsContent value="access-codes">
+            <AdminAccessCodeManager />
           </TabsContent>
 
           <TabsContent value="checklist">

@@ -24,6 +24,46 @@ type RedeemResponse = {
   };
 };
 
+interface ResponseLike {
+  clone?: () => ResponseLike;
+  json?: () => Promise<unknown>;
+}
+
+const REDEEM_ERROR_TITLES: Record<string, string> = {
+  ALREADY_REDEEMED: "Code already redeemed",
+  AUTH_FAILED: "Authentication failed",
+  AUTH_REQUIRED: "Authentication required",
+  CODE_EXHAUSTED: "Code exhausted",
+  EXPIRED_CODE: "Code expired",
+  INACTIVE_CODE: "Code inactive",
+  INVALID_CODE: "Invalid code",
+  INVALID_REQUEST: "Invalid request",
+  PROFILE_NOT_FOUND: "Profile not found",
+  REDEEM_FAILED: "Redeem failed",
+  SERVICE_UNAVAILABLE: "Service unavailable",
+};
+
+const isRedeemResponse = (value: unknown): value is RedeemResponse =>
+  typeof value === "object" && value !== null && ("ok" in value || "code" in value || "message" in value);
+
+const extractRedeemResponseFromError = async (error: unknown): Promise<RedeemResponse | null> => {
+  if (!error || typeof error !== "object" || !("context" in error)) {
+    return null;
+  }
+
+  const response = (error as { context?: ResponseLike }).context;
+  if (!response) {
+    return null;
+  }
+
+  try {
+    const payload = response.clone ? await response.clone().json?.() : await response.json?.();
+    return isRedeemResponse(payload) ? payload : null;
+  } catch {
+    return null;
+  }
+};
+
 export function AccessCodeRedeemer({ onRedeemed }: AccessCodeRedeemerProps) {
   const { toast } = useToast();
   const { freeAccess, accessReason, subscribed, trial, checkSubscription } = useSubscription();
@@ -53,27 +93,31 @@ export function AccessCodeRedeemer({ onRedeemed }: AccessCodeRedeemerProps) {
         body: { code: normalizedCode },
       });
 
-      if (error) {
+      const responseData = data ?? (error ? await extractRedeemResponseFromError(error) : null);
+
+      if (error && !responseData) {
         throw error;
       }
 
-      if (!data?.ok) {
+      if (!responseData?.ok) {
         toast({
-          title: data?.code === "INVALID_CODE" ? "Invalid code" : "Unable to redeem code",
-          description: data?.message || "The code could not be redeemed.",
+          title: responseData?.code
+            ? REDEEM_ERROR_TITLES[responseData.code] ?? "Unable to redeem code"
+            : "Unable to redeem code",
+          description: responseData?.message || "The code could not be redeemed.",
           variant: "destructive",
         });
         return;
       }
 
       setCode("");
-      setLastRedeemedLabel(data.data?.label || null);
+      setLastRedeemedLabel(responseData.data?.label || null);
       await checkSubscription();
       await onRedeemed?.();
 
       toast({
-        title: data.code === "ALREADY_REDEEMED" ? "Code already redeemed" : "Power access activated",
-        description: data.message || "Your account has been updated.",
+        title: responseData.code === "ALREADY_REDEEMED" ? "Code already redeemed" : "Power access activated",
+        description: responseData.message || "Your account has been updated.",
       });
     } catch (error) {
       const description = error instanceof Error ? error.message : "There was a problem redeeming your code.";

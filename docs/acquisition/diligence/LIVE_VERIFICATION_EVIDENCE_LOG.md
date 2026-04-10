@@ -1,6 +1,6 @@
 # CoParrent Live Verification Evidence Log
 
-_Last updated: 2026-03-28_
+_Last updated: 2026-04-10_
 
 Prepared for:
 - **BNSN Solutions**
@@ -29,6 +29,7 @@ This file started as a template. Completed live-verification entries now live he
 | Production auth verification | Passed with notes | 2026-03-27 | No |
 | Problem-report submission verification | Passed with notes | 2026-03-28 | No |
 | Production smoke verification | Passed with notes | 2026-03-28 | No |
+| Complimentary access-code verification | Passed with notes | 2026-04-10 | No |
 | Push notification verification | Blocked | 2026-03-25 | Yes |
 | PWA install verification | Not started | TBD | Yes |
 | Preview vs production alignment verification | Passed with notes | 2026-03-27 | No |
@@ -377,6 +378,20 @@ Use status values like:
 - **Pass / Fail:** Passed with notes
 - **Notes:** The harness file is still named `verify-preview-smoke.ts`, but it now labels the configured target honestly and can be pointed at production as well as preview. This run is the current lightweight proof that the live public domain is healthy across the core public and authenticated routes.
 - **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/preview-smoke-20260329T020541Z-report.json)
+
+## 14. Complimentary Access-Code Verification
+
+### Entry 2026-04-10
+
+- **Date:** 2026-04-10
+- **Environment:** Local current client `http://127.0.0.1:4174` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** admin `coparrenttesting@yahoo.com` (`Parent A`) plus production QA users created for this verification
+- **Scenario:** Deploy `admin-manage-access-codes` to production, verify the admin dashboard can issue complimentary Power-access codes with one-time raw reveal and preview-only inventory visibility, redeem one real QA code through Settings on a real QA account, verify the redeemed profile receives complimentary Power access, then issue and deactivate a second QA code and verify a separate QA account is blocked with the inactive-code message
+- **Expected Result:** The production backend accepts the new admin function, the admin UI issues codes server-side without exposing stored raw secrets, the redeemed QA account ends with `free_premium_access=true`, `subscription_status=active`, and `subscription_tier=power`, the redeemed code inventory row becomes exhausted, and a deactivated code is blocked cleanly with the inactive-code message on the current client
+- **Actual Result:** Passed with notes. `admin-manage-access-codes` was deployed successfully to production. The admin UI issued codes with a one-time raw-code reveal and preview-only inventory listing. A real QA redemption succeeded against the production backend and set the redeemed profile to complimentary Power access. A separate deactivated QA code was blocked server-side, and after a small client-side error-handling fix in the local current client the blocked QA account saw the correct inactive-code message instead of a generic edge-function transport error. Leftover active QA codes from earlier verifier-only false starts were deactivated after the proof.
+- **Pass / Fail:** Passed with notes
+- **Notes:** This is honest backend proof and current-client proof, not proof that the public production frontend already exposes the new admin UI. The current public production host still needs a clean frontend deploy before this feature is visible there. The evidence set for this item spans two same-day subpasses because the first full verifier run proved redemption before the blocked-redeem error-handling bug was fixed locally. The underlying production backend behavior was correct throughout; the only defect found was the client surfacing a generic `Edge Function returned a non-2xx status code` message instead of the server's inactive-code response.
+- **Screenshots / Video Evidence:** [combined verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-verification-20260410-final-report.json), [redeemed user screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-verification-20260410T181327Z-user-redeemed.png), [redeemed inventory screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-verification-20260410T181327Z-admin-inventory-redeemed.png), [issued-once screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-deactivate-proof-20260410T181541Z-admin-issued-once.png), [inactive inventory screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-deactivate-proof-20260410T181541Z-admin-inventory-inactive.png), [inactive user screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-deactivate-proof-20260410T181541Z-user-inactive-rejected.png)
 
 ## Working Notes
 
