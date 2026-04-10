@@ -26,10 +26,11 @@ Do not mint or distribute any code until all of the following are true:
 As of 2026-04-10:
 
 - `admin-manage-access-codes` is deployed to production Supabase project `jnxtskcpwzuxyxjzqrkv`
-- production-backed QA proved issuance, inventory visibility, redemption, and deactivation
-- that proof used the current local client against the production backend because the public production frontend bundle still needs a clean deploy to expose the new admin access-code UI
+- the public production frontend was redeployed from a clean worktree to the real `coparrent` Vercel project
+- public-host QA on `https://www.coparrent.com` proved issuance, one-time raw reveal, inventory visibility, redemption, complimentary Power state reflection, deactivation, and the inactive-code rejection message
+- both `https://www.coparrent.com/login` and `https://coparrent.com/login` returned the fresh production deploy immediately after rollout
 
-Do not treat the public production host as verified for this feature until that frontend deploy is complete.
+The current public production host is verified for this feature. If the frontend changes again, rerun the QA proof steps before sending a new batch.
 
 ## Exact Apply Step
 
@@ -158,6 +159,7 @@ Run this before sending any real external batch.
 6. Confirm the UI returns a success or already-redeemed result from the server.
 7. Confirm the profile now shows complimentary Power access under the existing subscription/access model.
 8. Return to the admin dashboard and confirm the code inventory reflects the redemption count.
+   Click `Refresh` before reading the updated inventory state. The current admin table does not auto-refresh.
 9. Issue a second QA code, deactivate it, and confirm a separate QA user sees the inactive-code message if they try to redeem it.
 10. Record the result in the launch evidence log or QA record.
 

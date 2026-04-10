@@ -6,7 +6,7 @@ This file answers one narrow question: can CoParrent safely run a phase-1 compli
 
 ## Executive Summary
 
-Current answer: **Yes, with one remaining manual frontend step.**
+Current answer: **Yes.**
 
 What now exists in the repo:
 
@@ -21,18 +21,19 @@ What now exists in the repo:
 - targeted edge-function tests
 - operator runbook
 
-What is now live-verified in production-backed QA:
+What is now live-verified:
 
 - `admin-manage-access-codes` is deployed to production project `jnxtskcpwzuxyxjzqrkv`
-- admin issuance, inventory visibility, and deactivation work against the production backend
-- a real QA redemption grants complimentary Power access on the target profile
-- a deactivated code is blocked server-side and the current client now surfaces the inactive-code message cleanly
+- the public production frontend now exposes the admin `Access Codes` tab
+- admin issuance, inventory visibility, and deactivation work on the live public host
+- a real QA redemption on the live public host grants complimentary Power access on the target profile
+- a deactivated code is blocked on the live public host with the exact inactive-code message
+- both `https://www.coparrent.com/login` and `https://coparrent.com/login` returned the fresh production deploy immediately after rollout
 
 What is still required before broad real distribution:
 
-- deploy the current frontend bundle cleanly so the public production host exposes the new admin access-code UI
-- confirm the public production frontend is serving the fixed inactive-code error handling
 - train support on invalid, expired, exhausted, and inactive code handling
+- distribute codes in small controlled batches rather than bulk
 
 ## Direct Audit Answers
 
@@ -187,11 +188,11 @@ Covered now:
 | --- | --- | --- |
 | Redemption backend | Implemented | Low |
 | Redemption UI | Implemented | Low |
-| Admin issuance tooling | Deployed and production-backed QA verified | Low |
-| Admin deactivate flow | Deployed and production-backed QA verified | Low |
+| Admin issuance tooling | Deployed and public-host verified | Low |
+| Admin deactivate flow | Deployed and public-host verified | Low |
 | Operator runbook | Implemented and exercised in QA | Low |
 | Targeted tests | Implemented in repo | Low |
-| Live verification | Completed against production backend with notes | Medium |
+| Live verification | Completed on the public production host | Low |
 
 ## Phase-1 Model
 
@@ -210,10 +211,9 @@ Current repo behavior stays aligned to the existing complimentary-access model:
 
 ## Minimum Remaining Steps Before Real Distribution
 
-1. Deploy the current frontend bundle cleanly so the admin access-code UI is visible on the public production host.
-2. Recheck one admin issuance pass on that deployed frontend.
-3. Confirm support follows the operator runbook.
-4. Only then distribute a first real code batch.
+1. Confirm support follows the operator runbook.
+2. Distribute the first real batch in small controlled slices.
+3. Re-run the QA proof if the frontend or access-code surface changes again before the next batch.
 
 ## Smallest Acceptable Phase-1 Ops Model
 
@@ -241,6 +241,6 @@ More precise wording:
 
 - **Repo-ready:** yes
 - **Production backend ready:** yes
-- **Public production frontend ready:** not yet proven on the current live host
+- **Public production frontend ready:** yes
 
-The remaining work is now narrow and operational: deploy the current frontend cleanly, rerun one short admin-host check on that live bundle, and then distribute codes in a controlled batch.
+The remaining work is now operational, not implementation work: follow the operator runbook, keep distribution controlled, and rerun the QA proof if the frontend or access-code surface changes again.
