@@ -1,5 +1,6 @@
 # CoParrent Codex Rules
 - Limit the amount of editors that stay open. Dont overwhelm the pc and cause performance issues with the number of extenstion windows staying open.
+- Keep browser-based tooling lean. Reuse one browser session when needed, do not leave tool-opened browser windows or extension webviews running after verification, and avoid duplicate preview windows for the same task.
 ## Primary architecture rule
 
 Use `activeFamilyId` on the client and explicit `family_id` on the server as the only valid scope for family-scoped operations.
