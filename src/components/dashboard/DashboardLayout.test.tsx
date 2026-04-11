@@ -190,7 +190,7 @@ describe("DashboardLayout", () => {
     expect(rendered.querySelector("#nav-documents")).toBeNull();
     expect(rendered.querySelector("#nav-expenses")).toBeNull();
     expect(rendered.querySelector("#nav-settings")).toBeNull();
-    expect(rendered.textContent).toContain("family-presence-toggle");
+    expect(rendered.textContent).not.toContain("family-presence-toggle");
   });
 
   it("keeps child-scoped users limited to child-allowed navigation links", async () => {
@@ -247,6 +247,37 @@ describe("DashboardLayout", () => {
     expect(rendered.textContent).toContain("header-call");
   });
 
+  it("shows a mobile header title, links the avatar to settings, and keeps settings out of the main nav", async () => {
+    const rendered = await renderLayout("/dashboard/messages");
+    const mobileHeaderTitle = rendered.querySelector("[data-mobile-header-title]");
+    const settingsLinks = Array.from(rendered.querySelectorAll<HTMLAnchorElement>('a[href="/dashboard/settings"]'));
+
+    expect(mobileHeaderTitle?.textContent).toBe("Messages");
+    expect(settingsLinks.length).toBeGreaterThan(0);
+    expect(rendered.querySelector("#nav-settings")).toBeNull();
+  });
+
+  it("renders parent navigation in the updated order", async () => {
+    const rendered = await renderLayout("/dashboard");
+    const navIds = Array.from(rendered.querySelectorAll<HTMLAnchorElement>("nav a[id]")).map((link) => link.id);
+
+    expect(navIds.slice(0, 13)).toEqual([
+      "nav-dashboard",
+      "nav-messages",
+      "nav-calendar",
+      "nav-calls",
+      "nav-children",
+      "nav-sports",
+      "nav-games",
+      "nav-kids-hub",
+      "nav-documents",
+      "nav-expenses",
+      "nav-journal",
+      "nav-law-library",
+      "nav-blog",
+    ]);
+  });
+
   it("can hide the family presence toggle when a page opts out", async () => {
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -264,5 +295,24 @@ describe("DashboardLayout", () => {
     });
 
     expect(container.textContent).not.toContain("family-presence-toggle");
+  });
+
+  it("shows the family presence toggle only when a page opts in", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <MemoryRouter initialEntries={["/dashboard/games"]}>
+          <DashboardLayout showFamilyPresenceToggle>
+            <div>layout-content</div>
+          </DashboardLayout>
+        </MemoryRouter>,
+      );
+      await flushPromises();
+    });
+
+    expect(container.textContent).toContain("family-presence-toggle");
   });
 });

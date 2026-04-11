@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Bell, MoreHorizontal, ChevronDown, ChevronUp } from "lucide-react";
-import { formatDistanceToNow, differenceInHours, differenceInDays } from "date-fns";
+import { differenceInHours, differenceInDays } from "date-fns";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -72,7 +72,13 @@ const groupConsecutiveNotifications = (notifications: Notification[]): GroupedNo
   return result;
 };
 
-export const NotificationDropdown = () => {
+interface NotificationDropdownProps {
+  buttonClassName?: string;
+}
+
+export const NotificationDropdown = ({
+  buttonClassName,
+}: NotificationDropdownProps) => {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,7 +211,11 @@ export const NotificationDropdown = () => {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn("relative h-9 w-9", buttonClassName)}
+        >
           <Bell className="w-5 h-5" />
           {unreadCount > 0 && (
             <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-destructive" />

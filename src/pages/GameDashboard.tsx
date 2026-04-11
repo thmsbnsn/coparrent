@@ -197,7 +197,7 @@ export default function GameDashboard() {
       headerActions={
         showCallLauncher ? <ParentHeaderCallAction /> : null
       }
-      showFamilyPresenceToggle={false}
+      showFamilyPresenceToggle
     >
       <div className="page-shell-app page-stack min-w-0">
         <GameDashboardHero

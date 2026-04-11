@@ -35,11 +35,20 @@ vi.mock("@/hooks/useFamilyRole", () => ({
 }));
 
 vi.mock("@/components/dashboard/DashboardLayout", () => ({
-  DashboardLayout: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-}));
-
-vi.mock("@/components/ui/LoadingSpinner", () => ({
-  LoadingSpinner: () => <div>loading-spinner</div>,
+  DashboardLayout: ({
+    children,
+    mobileHeader,
+  }: {
+    children?: ReactNode;
+    mobileHeader?: { leading?: ReactNode; title?: ReactNode; trailing?: ReactNode };
+  }) => (
+    <div>
+      <div>{mobileHeader?.leading}</div>
+      <div>{mobileHeader?.title}</div>
+      <div>{mobileHeader?.trailing}</div>
+      {children}
+    </div>
+  ),
 }));
 
 const mockedUseCallHistory = vi.mocked(useCallHistory);
@@ -122,13 +131,28 @@ describe("CallHistoryPage", () => {
     return container;
   };
 
-  it("shows call direction, timestamps, and calls the other participant back through the server path", async () => {
+  it("shows a compact call summary, expands details, and calls the other participant back through the server path", async () => {
     const rendered = await renderPage();
 
-    expect(rendered?.textContent).toContain("You called Alex Co-Parent");
-    expect(rendered?.textContent).toContain("You made this call");
+    expect(rendered?.textContent).toContain("Call History");
+    expect(rendered?.textContent).toContain("Alex Co-Parent");
     expect(rendered?.textContent).toContain("Outgoing");
-    expect(rendered?.textContent).toContain("Started:");
+    expect(rendered?.textContent).toContain("Audio");
+    expect(rendered?.textContent).not.toContain("You called Alex Co-Parent");
+    expect(rendered?.textContent).not.toContain("You made this call");
+
+    const summaryButton = rendered?.querySelector<HTMLButtonElement>('button[aria-expanded="false"]');
+    expect(summaryButton).not.toBeNull();
+
+    await act(async () => {
+      summaryButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await flushPromises();
+    });
+
+    expect(rendered?.textContent).toContain("Status");
+    expect(rendered?.textContent).toContain("Started");
+    expect(rendered?.textContent).toContain("Answered");
+    expect(rendered?.textContent).toContain("Ended");
 
     const callBackButton = rendered?.querySelector<HTMLButtonElement>('button[aria-label="Call Alex Co-Parent back"]');
     expect(callBackButton).not.toBeNull();
@@ -144,6 +168,20 @@ describe("CallHistoryPage", () => {
       source: "dashboard",
     });
     expect(mockState.history.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders the humane empty state copy", async () => {
+    mockState.history = {
+      calls: [],
+      loading: false,
+      refresh: vi.fn(),
+      scopeError: null,
+    };
+
+    const rendered = await renderPage();
+
+    expect(rendered?.textContent).toContain("No calls yet");
+    expect(rendered?.textContent).toContain("Start a conversation to see your call history here.");
   });
 
   it("renders explicit scope errors instead of a call list", async () => {
