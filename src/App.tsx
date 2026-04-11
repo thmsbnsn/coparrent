@@ -59,6 +59,7 @@ const GameChallengePage = lazy(() => import("./pages/GameChallengePage"));
 const CalendarPage = lazy(() => import("./pages/CalendarPage"));
 const ChildrenPage = lazy(() => import("./pages/ChildrenPage"));
 const MessagingHubPage = lazy(() => import("./pages/MessagingHubPage"));
+const CallHistoryPage = lazy(() => import("./pages/CallHistoryPage"));
 const DocumentsPage = lazy(() => import("./pages/DocumentsPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const AddFamilyPage = lazy(() => import("./pages/AddFamilyPage"));
@@ -167,6 +168,7 @@ const App = () => (
                 <Route path="/dashboard/calendar" element={<ProtectedRoute><RouteErrorBoundary routeName="Calendar"><CalendarPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/children" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Children"><ChildrenPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/messages" element={<ProtectedRoute><RouteErrorBoundary routeName="Messages"><MessagingHubPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/calls" element={<ProtectedRoute><RouteErrorBoundary routeName="Calls"><CallHistoryPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/messages-legacy" element={<Navigate to="/dashboard/messages" replace />} />
                 <Route path="/dashboard/documents" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Documents"><DocumentsPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/settings" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Settings"><SettingsPage /></RouteErrorBoundary></ProtectedRoute>} />

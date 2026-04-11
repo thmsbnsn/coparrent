@@ -9,7 +9,11 @@ import { useFamilyRole } from "@/hooks/useFamilyRole";
 
 export const ParentHeaderCallAction = () => {
   const { activeFamilyId, isLawOffice, isParent, isThirdParty, profileId } = useFamilyRole();
-  const { loading: callableLoading, members: callableMembers } = useCallableFamilyMembers();
+  const {
+    loading: callableLoading,
+    members: callableMembers,
+    scopeError: callableScopeError,
+  } = useCallableFamilyMembers();
   const {
     activeSession,
     createCall,
@@ -51,6 +55,7 @@ export const ParentHeaderCallAction = () => {
     <DashboardCallLauncher
       contacts={callableMembers}
       disabled={Boolean(incomingSession || dashboardOutgoingSession || activeSession)}
+      error={callableScopeError}
       loading={callableLoading}
       onStartCall={handleStartDashboardCall}
     />

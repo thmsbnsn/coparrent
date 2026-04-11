@@ -179,6 +179,7 @@ describe("DashboardLayout", () => {
     expect(gamesLink?.getAttribute("href")).toBe("/dashboard/games");
     expect(rendered.querySelector("#nav-calendar")).not.toBeNull();
     expect(rendered.querySelector("#nav-messages")).not.toBeNull();
+    expect(rendered.querySelector("#nav-calls")).not.toBeNull();
     expect(rendered.querySelector("#nav-journal")).not.toBeNull();
     expect(rendered.querySelector("#nav-law-library")).not.toBeNull();
     expect(rendered.querySelector("#nav-blog")).not.toBeNull();
@@ -214,6 +215,7 @@ describe("DashboardLayout", () => {
     expect(rendered.querySelector("#nav-messages")).not.toBeNull();
 
     expect(rendered.querySelector("#nav-dashboard")).toBeNull();
+    expect(rendered.querySelector("#nav-calls")).toBeNull();
     expect(rendered.querySelector("#nav-children")).toBeNull();
     expect(rendered.querySelector("#nav-journal")).toBeNull();
     expect(rendered.querySelector("#nav-law-library")).toBeNull();

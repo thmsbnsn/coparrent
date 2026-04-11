@@ -18,6 +18,7 @@ import type { CallableFamilyMember } from "@/hooks/useCallableFamilyMembers";
 interface DashboardCallLauncherProps {
   contacts: CallableFamilyMember[];
   disabled?: boolean;
+  error?: string | null;
   loading?: boolean;
   onStartCall: (contact: CallableFamilyMember, callType: "audio" | "video") => Promise<void> | void;
 }
@@ -36,6 +37,7 @@ const getInitials = (name: string | null, email: string | null) => {
 export const DashboardCallLauncher = ({
   contacts,
   disabled = false,
+  error = null,
   loading = false,
   onStartCall,
 }: DashboardCallLauncherProps) => {
@@ -108,6 +110,13 @@ export const DashboardCallLauncher = ({
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Loading callable family members
               </div>
+            </div>
+          ) : error ? (
+            <div className="rounded-[1.75rem] border border-destructive/30 bg-destructive/10 p-8 text-center">
+              <p className="text-base font-semibold text-foreground">Callable family members did not load</p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                {error}
+              </p>
             </div>
           ) : contacts.length > 0 ? (
             <div className="space-y-3">

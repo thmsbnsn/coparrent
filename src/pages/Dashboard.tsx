@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Calendar, MessageSquare, Users, ArrowRight, Clock, BookHeart, DollarSign } from "lucide-react";
+import { Calendar, MessageSquare, Users, ArrowRight, Clock, BookHeart, DollarSign, Phone } from "lucide-react";
 import { Link } from "react-router-dom";
 import { format, differenceInYears, parseISO } from "date-fns";
 import { DashboardLayout } from "@/components/dashboard/DashboardLayout";
@@ -23,7 +23,6 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
 import { useRealtimeChildren } from "@/hooks/useRealtimeChildren";
-import { ParentHeaderCallAction } from "@/components/calls/ParentHeaderCallAction";
 import { BlogDashboardCard } from "@/components/dashboard/BlogDashboardCard";
 import { resolveSenderName } from "@/lib/displayResolver";
 import { fetchFamilyParentProfiles, type FamilyParentProfile } from "@/lib/familyScope";
@@ -45,7 +44,7 @@ interface RecentMessage {
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const { isParent, isThirdParty, profileId: activeProfileId, activeFamilyId } = useFamilyRole();
+  const { isThirdParty, profileId: activeProfileId, activeFamilyId } = useFamilyRole();
   const { children: realtimeChildren } = useRealtimeChildren();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [otherParent, setOtherParent] = useState<FamilyParentProfile | null>(null);
@@ -252,16 +251,22 @@ const Dashboard = () => {
 
   const quickLinks = [
     {
-      label: "Calendar",
-      description: schedule ? "Review the current schedule" : "Set up parenting time",
-      href: "/dashboard/calendar",
-      icon: Calendar,
-    },
-    {
       label: "Messages",
       description: messages.length > 0 ? "See the latest thread activity" : "Start a clean written record",
       href: "/dashboard/messages",
       icon: MessageSquare,
+    },
+    {
+      label: "Calls",
+      description: "Review call history and return family calls",
+      href: "/dashboard/calls",
+      icon: Phone,
+    },
+    {
+      label: "Calendar",
+      description: schedule ? "Review the current schedule" : "Set up parenting time",
+      href: "/dashboard/calendar",
+      icon: Calendar,
     },
     {
       label: "Children",
@@ -316,11 +321,7 @@ const Dashboard = () => {
   ];
 
   return (
-    <DashboardLayout
-      headerActions={
-        isParent ? <ParentHeaderCallAction /> : null
-      }
-    >
+    <DashboardLayout>
       <div className="page-shell-app page-stack">
         {/* Subscription Status Banner */}
         <div className="surface-primary relative isolate overflow-hidden p-[1px]">
@@ -421,14 +422,14 @@ const Dashboard = () => {
               ))}
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {quickLinks.map(({ label, description, href, icon: Icon }, index) => (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {quickLinks.map(({ label, description, href, icon: Icon }) => (
                 <Button
                   key={href}
                   variant="outline"
                   className={cn(
                     "group h-auto rounded-[26px] border border-white/10 bg-white/5 p-0 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all duration-200 hover:-translate-y-1 hover:border-white/20 hover:bg-white/10 hover:shadow-[0_20px_35px_-24px_rgba(15,23,42,0.95)]",
-                    index === 1 && "border-primary/20 bg-primary/10",
+                    (href === "/dashboard/messages" || href === "/dashboard/calls") && "border-primary/20 bg-primary/10",
                   )}
                   asChild
                 >

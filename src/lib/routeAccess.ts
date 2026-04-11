@@ -11,6 +11,7 @@ const PROTECTED_ROUTE_RULES: readonly ProtectedRouteRule[] = [
   { path: "/dashboard/calendar", allowThirdParty: true, allowLawOffice: false, allowChild: true, familyScoped: true },
   { path: "/dashboard/children", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
   { path: "/dashboard/messages", allowThirdParty: true, allowLawOffice: false, allowChild: true, familyScoped: true },
+  { path: "/dashboard/calls", allowThirdParty: true, allowLawOffice: false, allowChild: false, familyScoped: true },
   { path: "/dashboard/documents", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
   { path: "/dashboard/settings", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: true },
   { path: "/dashboard/families", allowThirdParty: false, allowLawOffice: false, allowChild: false, familyScoped: false },

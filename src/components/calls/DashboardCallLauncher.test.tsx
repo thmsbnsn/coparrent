@@ -40,6 +40,7 @@ describe("DashboardCallLauncher", () => {
               avatarUrl: null,
               email: "taylor@example.com",
               fullName: "Taylor Parent",
+              membershipId: "membership-taylor",
               profileId: "profile-taylor",
               relationshipLabel: "Co-parent",
               role: "parent",
@@ -71,5 +72,25 @@ describe("DashboardCallLauncher", () => {
       expect.objectContaining({ profileId: "profile-taylor" }),
       "audio",
     );
+  });
+
+  it("shows an explicit load error instead of an empty-recipient state", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <DashboardCallLauncher
+          contacts={[]}
+          error="Unable to load callable family members for the active family."
+          onStartCall={vi.fn()}
+        />,
+      );
+    });
+
+    expect(container.textContent).toContain("Callable family members did not load");
+    expect(container.textContent).toContain("Unable to load callable family members for the active family.");
+    expect(container.textContent).not.toContain("No callable family members yet");
   });
 });

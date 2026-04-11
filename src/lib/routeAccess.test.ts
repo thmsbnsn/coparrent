@@ -21,6 +21,7 @@ describe("routeAccess", () => {
     expect(isChildAllowedRoute("/dashboard/games/flappy-plane/challenges")).toBe(true);
     expect(isChildAllowedRoute("/dashboard/games/flappy-plane/lobby/session-1")).toBe(true);
     expect(isChildAllowedRoute("/dashboard/messages/thread-1")).toBe(true);
+    expect(isChildAllowedRoute("/dashboard/calls")).toBe(false);
     expect(isChildAllowedRoute("/kids/portal")).toBe(true);
     expect(isChildAllowedRoute("/kids/games/flappy-plane")).toBe(true);
     expect(isChildAllowedRoute("/dashboard/expenses")).toBe(false);
@@ -41,6 +42,7 @@ describe("routeAccess", () => {
   it("blocks third-party users from parent-only routes while allowing approved read paths", () => {
     expect(canThirdPartyAccessRoute("/dashboard/games")).toBe(true);
     expect(canThirdPartyAccessRoute("/dashboard/messages/thread-1")).toBe(true);
+    expect(canThirdPartyAccessRoute("/dashboard/calls")).toBe(true);
     expect(canThirdPartyAccessRoute("/dashboard/settings")).toBe(false);
 
     expect(
@@ -103,6 +105,7 @@ describe("routeAccess", () => {
     expect(requiresActiveFamilyScope("/dashboard/games/flappy-plane/challenges")).toBe(true);
     expect(requiresActiveFamilyScope("/dashboard/games/flappy-plane/lobby/session-1")).toBe(true);
     expect(requiresActiveFamilyScope("/dashboard/messages")).toBe(true);
+    expect(requiresActiveFamilyScope("/dashboard/calls")).toBe(true);
     expect(requiresActiveFamilyScope("/dashboard/settings/child-access/child-1")).toBe(true);
     expect(requiresActiveFamilyScope("/kids/portal")).toBe(true);
     expect(requiresActiveFamilyScope("/kids/games/flappy-plane")).toBe(true);

@@ -360,7 +360,8 @@ describe("Dashboard family scoping", () => {
     expect(rendered.textContent).toContain("Other parent/guardian: Taylor Parent");
     expect(rendered.textContent).toContain("Family A update");
     expect(rendered.textContent).toContain("Alex");
-    expect(rendered.textContent).toContain("dashboard-call-launcher");
+    expect(rendered.querySelector('a[href="/dashboard/messages"]')).not.toBeNull();
+    expect(rendered.querySelector('a[href="/dashboard/calls"]')).not.toBeNull();
     expect(rendered.textContent).not.toContain("Family B update");
     expect(rendered.textContent).not.toContain("Jordan");
   });
@@ -414,6 +415,7 @@ describe("Dashboard family scoping", () => {
 
     expect(rendered.querySelector('a[href="/dashboard/calendar"]')).not.toBeNull();
     expect(rendered.querySelector('a[href="/dashboard/messages"]')).not.toBeNull();
+    expect(rendered.querySelector('a[href="/dashboard/calls"]')).not.toBeNull();
     expect(rendered.querySelector('a[href="/dashboard/children"]')).toBeNull();
     expect(rendered.querySelector('a[href="/dashboard/expenses"]')).toBeNull();
     expect(rendered.querySelector('a[href="/dashboard/settings"]')).toBeNull();

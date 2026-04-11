@@ -1918,8 +1918,9 @@ const MessagingHubPage = () => {
 
         <div
           ref={refreshContainerRef}
+          data-testid="messaging-page-shell"
           className={cn(
-            "relative flex h-[calc(100vh-8rem)] flex-col",
+            "relative flex min-h-[calc(100vh-8rem)] flex-col",
             courtView && "print-area",
           )}
         >
@@ -2311,7 +2312,7 @@ const MessagingHubPage = () => {
           </Sheet>
 
           {/* Main Content Area */}
-          <div className="flex min-h-0 flex-1 gap-4">
+          <div className="flex min-h-[38rem] flex-1 gap-4">
             {/* Desktop Sidebar */}
             {!isMobile && (
               <motion.div
@@ -2330,8 +2331,9 @@ const MessagingHubPage = () => {
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
+              data-testid="messaging-thread-shell"
               className={cn(
-                "flex min-w-0 flex-1 flex-col overflow-hidden rounded-[30px] border",
+                "flex min-h-[38rem] min-w-0 flex-1 flex-col overflow-hidden rounded-[30px] border",
                 threadShellClass,
               )}
             >

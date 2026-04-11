@@ -908,6 +908,17 @@ describe("MessagingHubPage", () => {
     expect(rendered.querySelector('[data-testid="composer"]')?.getAttribute("data-disabled")).toBe("false");
   });
 
+  it("keeps the active thread shell tall enough for the composer instead of clipping it", async () => {
+    const rendered = await renderPage("/dashboard/messages?thread=direct-thread-jessica");
+
+    const pageShell = rendered.querySelector('[data-testid="messaging-page-shell"]');
+    const threadShell = rendered.querySelector('[data-testid="messaging-thread-shell"]');
+
+    expect(pageShell?.className).toContain("min-h-[calc(100vh-8rem)]");
+    expect(threadShell?.className).toContain("min-h-[38rem]");
+    expect(rendered.querySelector('[data-testid="composer"]')).toBeTruthy();
+  });
+
   it("shows an explicit blocked state when a direct thread fails to hydrate", async () => {
     messagingMockState.mockScenario.mode = "error";
     const rendered = await renderPage();

@@ -68,6 +68,10 @@ vi.mock("./pages/MessagingHubPage", () => ({
   default: () => <div>messaging-hub-page</div>,
 }));
 
+vi.mock("./pages/CallHistoryPage", () => ({
+  default: () => <div>call-history-page</div>,
+}));
+
 vi.mock("./pages/LawOfficeLogin", () => ({
   default: () => <div>law-office-login-page</div>,
 }));
@@ -141,6 +145,15 @@ describe("App messaging routes", () => {
 
     expect(window.location.pathname).toBe("/dashboard/messages");
     expect(container.textContent).toContain("messaging-hub-page");
+  });
+
+  it("activates the call history route", async () => {
+    const rendered = await renderAppAtPath("/dashboard/calls");
+    container = rendered.container;
+    root = rendered.root;
+
+    expect(window.location.pathname).toBe("/dashboard/calls");
+    expect(container.textContent).toContain("call-history-page");
   });
 
   it("hides /dashboard/kids-hub/chore-chart by replacing it with Kids Hub", async () => {
