@@ -5,7 +5,7 @@ import type { CallSessionRow, CallSource, CallType } from "@/lib/calls";
 import { toast } from "sonner";
 
 const OPEN_STATUSES = ["ringing", "accepted"] as const;
-const CALL_SESSION_MUTATION_EVENT = "coparrent:call-session-mutated";
+export const CALL_SESSION_MUTATION_EVENT = "coparrent:call-session-mutated";
 
 const notifyCallSessionMutation = () => {
   if (typeof window === "undefined") {

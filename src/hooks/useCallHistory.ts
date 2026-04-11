@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useFamilyRole } from "@/hooks/useFamilyRole";
+import { CALL_SESSION_MUTATION_EVENT } from "@/hooks/useCallSessions";
 import type { CallSessionRow } from "@/lib/calls";
 
 const CALL_HISTORY_LIMIT = 50;
@@ -45,7 +46,7 @@ export const useCallHistory = () => {
   const [scopeError, setScopeError] = useState<string | null>(null);
   const latestFetchIdRef = useRef(0);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (options?: { background?: boolean }) => {
     const fetchId = latestFetchIdRef.current + 1;
     latestFetchIdRef.current = fetchId;
 
@@ -56,7 +57,9 @@ export const useCallHistory = () => {
       return;
     }
 
-    setLoading(true);
+    if (!options?.background) {
+      setLoading(true);
+    }
 
     const { data, error } = await supabase
       .from("call_sessions")
@@ -86,6 +89,22 @@ export const useCallHistory = () => {
 
   useEffect(() => {
     void refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const handleCallMutation = () => {
+      void refresh({ background: true });
+    };
+
+    window.addEventListener(CALL_SESSION_MUTATION_EVENT, handleCallMutation);
+
+    return () => {
+      window.removeEventListener(CALL_SESSION_MUTATION_EVENT, handleCallMutation);
+    };
   }, [refresh]);
 
   return {

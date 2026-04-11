@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useCallHistory } from "@/hooks/useCallHistory";
+import { CALL_SESSION_MUTATION_EVENT } from "@/hooks/useCallSessions";
 
 type QueryLog =
   | { method: "eq"; field: string; value: unknown }
@@ -171,5 +172,64 @@ describe("useCallHistory", () => {
     expect(mockState.from).not.toHaveBeenCalled();
     expect(container?.textContent).toContain("loading:false");
     expect(container?.textContent).toContain("An active family and profile are required before loading call history.");
+  });
+
+  it("refreshes when another call surface mutates a call session", async () => {
+    mockState.result = {
+      data: [
+        {
+          answered_at: null,
+          callee_display_name: "Alex Co-Parent",
+          callee_profile_id: "profile-other",
+          call_type: "video",
+          created_at: "2026-04-10T15:00:00.000Z",
+          ended_at: null,
+          family_id: "family-1",
+          id: "call-ringing",
+          initiator_display_name: "Current Parent",
+          initiator_profile_id: "profile-current",
+          source: "dashboard",
+          status: "ringing",
+          thread_id: null,
+        },
+      ],
+      error: null,
+    };
+
+    await act(async () => {
+      root?.render(<HookHarness />);
+      await flushPromises();
+    });
+
+    expect(container?.textContent).toContain("calls:call-ringing");
+
+    mockState.result = {
+      data: [
+        {
+          answered_at: null,
+          callee_display_name: "Alex Co-Parent",
+          callee_profile_id: "profile-other",
+          call_type: "video",
+          created_at: "2026-04-10T15:00:00.000Z",
+          ended_at: "2026-04-10T15:00:30.000Z",
+          family_id: "family-1",
+          id: "call-cancelled",
+          initiator_display_name: "Current Parent",
+          initiator_profile_id: "profile-current",
+          source: "dashboard",
+          status: "cancelled",
+          thread_id: null,
+        },
+      ],
+      error: null,
+    };
+
+    await act(async () => {
+      window.dispatchEvent(new Event(CALL_SESSION_MUTATION_EVENT));
+      await flushPromises();
+    });
+
+    expect(mockState.from).toHaveBeenCalledTimes(2);
+    expect(container?.textContent).toContain("calls:call-cancelled");
   });
 });
