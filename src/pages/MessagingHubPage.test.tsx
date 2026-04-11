@@ -794,12 +794,21 @@ describe("MessagingHubPage", () => {
   const createObjectUrl = vi.fn(() => "blob:mock");
   const revokeObjectUrl = vi.fn();
   const clipboardWriteText = vi.fn(async () => undefined);
+  const scrollIntoViewMock = vi.fn();
+  const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
+    callback(0);
+    return 1;
+  });
+  const cancelAnimationFrameMock = vi.fn();
 
   beforeEach(() => {
     messagingMockState.activeFamilyId = "family-1";
     messagingMockState.mockScenario.mode = "interactive";
     messagingMockState.viewport.isMobile = false;
     messagingMockState.swipeableTabsMounts = 0;
+    scrollIntoViewMock.mockReset();
+    requestAnimationFrameMock.mockClear();
+    cancelAnimationFrameMock.mockClear();
     supabaseMockState.exportList = [
       {
         artifact_hash: "artifact-hash-123",
@@ -847,6 +856,18 @@ describe("MessagingHubPage", () => {
     Object.defineProperty(URL, "revokeObjectURL", {
       configurable: true,
       value: revokeObjectUrl,
+    });
+    Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoViewMock,
+    });
+    Object.defineProperty(window, "requestAnimationFrame", {
+      configurable: true,
+      value: requestAnimationFrameMock,
+    });
+    Object.defineProperty(window, "cancelAnimationFrame", {
+      configurable: true,
+      value: cancelAnimationFrameMock,
     });
   });
 
@@ -951,6 +972,22 @@ describe("MessagingHubPage", () => {
     });
 
     expect(messagingMockState.swipeableTabsMounts).toBe(1);
+  });
+
+  it("scrolls the mobile view to the composer after a direct thread finishes loading", async () => {
+    messagingMockState.viewport.isMobile = true;
+
+    await renderPage("/dashboard/messages?thread=direct-thread-jessica");
+
+    const scrollCallsAfterInitialRender = scrollIntoViewMock.mock.calls.length;
+
+    await act(async () => {
+      vi.runAllTimers();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(scrollIntoViewMock.mock.calls.length).toBeGreaterThan(scrollCallsAfterInitialRender);
   });
 
   it("shows an explicit blocked state when a direct thread fails to hydrate", async () => {

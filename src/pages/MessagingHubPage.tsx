@@ -616,6 +616,7 @@ const MessagingHubPage = () => {
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [verificationResult, setVerificationResult] = useState<MessagingThreadExportVerifyResponse | null>(null);
   const receiptCopyResetRef = useRef<number | null>(null);
+  const composerSectionRef = useRef<HTMLDivElement | null>(null);
   
   /**
    * Court View State
@@ -686,6 +687,25 @@ const MessagingHubPage = () => {
       setActiveThread(familyChannel);
     }
   }, [familyChannel, activeThread, setActiveThread]);
+
+  useEffect(() => {
+    if (!isMobile || !activeThread || activeThreadLoading) {
+      return;
+    }
+
+    const composerSection = composerSectionRef.current;
+    if (!composerSection) {
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      composerSection.scrollIntoView({ block: "end" });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [activeThread, activeThreadLoading, isMobile]);
 
   useEffect(() => {
     const targetThreadId = searchParams.get("thread");
@@ -2612,7 +2632,10 @@ const MessagingHubPage = () => {
                     RULE: Feel deliberate, not impulsive
                     RULE: Visually separate drafting from history
                    */}
-                  <div className={cn("no-print border-t px-3 pb-3 pt-3 sm:px-4", composerSectionClass)}>
+                  <div
+                    ref={composerSectionRef}
+                    className={cn("no-print border-t px-3 pb-3 pt-3 sm:px-4", composerSectionClass)}
+                  >
                     <div className={cn("mb-3 rounded-[20px] border px-4 py-2.5", evidenceCardClass)}>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                         Deliberate composer
