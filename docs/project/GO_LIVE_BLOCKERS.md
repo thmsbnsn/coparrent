@@ -2,123 +2,157 @@
 
 Last updated: 2026-04-10
 
-This file only tracks blockers that materially affect a controlled launch decision. It is intentionally operational and blunt.
+This file tracks active blockers for a controlled phase-1 launch decision.
 
-## Blocker Summary
+Complimentary access codes are no longer an active blocker:
 
-| Blocker | Risk | Blocks phase-1 user onboarding | Blocks redeem-code rollout | Current status |
-| --- | --- | --- | --- | --- |
-| Redeem-code rollout public-host proof | Low | No | No | Closed on 2026-04-10 |
-| Current production auth/onboarding/invite/billing proof is stale or partial after the 2026-04-02 production changes | Critical | Yes | Yes | Open |
-| Canonical-host and auth posture are not fully closed | High | Yes | Yes | Open |
-| Fresh production export verification is missing | High | Yes if exports are part of launch promise | No | Open |
-| Production schema rollout remains fragile for launch changes | High | Yes | Yes | Open |
+- repo-ready
+- production backend ready
+- public production frontend ready
+- live public-host proof complete on 2026-04-10
 
-## 1. Redeem-code rollout public-host proof
+Only rerun access-code QA if the admin issuance or end-user redemption surface changes again before another batch.
 
-- **Why it matters:** Phase-1 code distribution must not rely on unproven admin tooling or manual profile toggles.
-- **Current status:** Closed. `admin-manage-access-codes` is deployed to production, the public production frontend exposes the admin `Access Codes` tab, and public-host QA proved issuance, one-time raw reveal, inventory visibility, redemption, complimentary Power state reflection, deactivation, and inactive-code rejection.
+## Active Blocker Summary
+
+| Blocker | Classification | Risk | Current status |
+| --- | --- | --- | --- |
+| Current production third-party invite path is broken | Still blocks first external cohort | Critical | Open |
+
+## Recently Closed Or Removed From First-Cohort Scope
+
+- **Closed item:** Public-host auth misconfiguration
+- **Closed on:** 2026-04-10
+- **Current state:** `https://coparrent.com/login` and `https://coparrent.com/signup` no longer show the broken missing-site-key captcha state. Production login and signup were re-proven on the public host after explicitly setting `VITE_AUTH_CAPTCHA_ENABLED=false` and redeploying the frontend.
 - **Evidence files:**
-  - [../../supabase/migrations/20260313120000_recover_access_code_system.sql](../../supabase/migrations/20260313120000_recover_access_code_system.sql)
-  - [../../supabase/functions/redeem-access-code/index.ts](../../supabase/functions/redeem-access-code/index.ts)
-  - [../../supabase/functions/admin-manage-access-codes/index.ts](../../supabase/functions/admin-manage-access-codes/index.ts)
-  - [../../src/components/settings/AccessCodeRedeemer.tsx](../../src/components/settings/AccessCodeRedeemer.tsx)
-  - [../../src/components/admin/AdminAccessCodeManager.tsx](../../src/components/admin/AdminAccessCodeManager.tsx)
-  - [../../src/pages/AdminDashboard.tsx](../../src/pages/AdminDashboard.tsx)
-  - [REDEEM_CODE_OPERATOR_RUNBOOK.md](REDEEM_CODE_OPERATOR_RUNBOOK.md)
-  - [REDEEM_CODE_READINESS.md](REDEEM_CODE_READINESS.md)
-  - [../../supabase/functions/_shared/adminManageAccessCodes.test.ts](../../supabase/functions/_shared/adminManageAccessCodes.test.ts)
-- **Risk level:** Low
-- **Launch impact:** This no longer blocks phase-1 redeem-code rollout. Distribution should still be small-batch and operator-controlled.
-- **Exact next action:** Use the operator runbook for the first real batch. Click `Refresh` before reading post-redemption admin inventory state because the table does not auto-refresh.
-- **Owner suggestion:** Engineering + ops
-- **Blocks phase-1 user onboarding:** No
-- **Blocks redeem-code rollout:** No
-
-## 2. Current production auth, onboarding, invite, and billing proof is stale or partial after the 2026-04-02 production changes
-
-- **Why it matters:** The repo and docs show historical live proof for auth, invites, and Stripe, but that proof mostly predates the 2026-04-02 production frontend redeploy and apex alias claim. Launch needs current proof on the actual public host.
-- **Current status:** Historical proof exists. Current-production rerun is missing.
-- **Evidence files:**
-  - [../../README.md](../../README.md)
-  - [CURRENT_STATUS.md](CURRENT_STATUS.md)
-  - [../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md)
-  - [../../src/pages/Onboarding.tsx](../../src/pages/Onboarding.tsx)
-  - [../../src/pages/AcceptInvite.tsx](../../src/pages/AcceptInvite.tsx)
-  - [../../src/hooks/useSubscription.ts](../../src/hooks/useSubscription.ts)
-  - [../../supabase/functions/create-checkout/index.ts](../../supabase/functions/create-checkout/index.ts)
-  - [../../supabase/functions/customer-portal/index.ts](../../supabase/functions/customer-portal/index.ts)
-- **Risk level:** Critical
-- **Launch impact:** Without a current rerun, the first external cohort would rely on stale evidence for the most important user acquisition and monetization paths.
-- **Exact next action:** Re-run end-to-end on the chosen public host: login, signup, captcha gate, onboarding, co-parent invite, third-party invite, pricing entry, checkout, webhook confirmation, and customer portal.
-- **Owner suggestion:** QA + engineering
-- **Blocks phase-1 user onboarding:** Yes
-- **Blocks redeem-code rollout:** Partially. Codes can be distributed, but recipients still rely on sign-in and account setup.
-
-## 3. Canonical-host and auth posture are not fully closed
-
-- **Why it matters:** The repo currently points to apex `https://coparrent.com`, but the auth confirmation checklist still says to keep `https://www.coparrent.com` canonical until apex is confirmed from multiple networks. That is not a documentation nit. It directly affects invite links, auth callbacks, public trust, and launch messaging.
-- **Current status:** Open. Repo defaults and operational docs are not aligned.
-- **Evidence files:**
-  - [../../index.html](../../index.html)
-  - [../../.env.example](../../.env.example)
-  - [DEPLOYMENT_AUTH_CONFIRMATION_CHECKLIST.md](DEPLOYMENT_AUTH_CONFIRMATION_CHECKLIST.md)
   - [../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md)
   - [../../src/lib/authCapabilities.ts](../../src/lib/authCapabilities.ts)
-  - [../../src/components/auth/AuthCaptcha.tsx](../../src/components/auth/AuthCaptcha.tsx)
-  - [../../src/components/auth/PasskeySetup.tsx](../../src/components/auth/PasskeySetup.tsx)
-- **Risk level:** High
-- **Launch impact:** This can create broken or ambiguous public links, muddled auth behavior, and unclear product posture around captcha and passkeys.
-- **Exact next action:** Make one host decision, prove it from multiple networks, then update the docs and env posture to match that one decision. At the same time, explicitly record whether passkeys stay disabled for launch.
-- **Owner suggestion:** Ops + engineering
-- **Blocks phase-1 user onboarding:** Yes
-- **Blocks redeem-code rollout:** Yes
+  - [../../src/pages/Login.tsx](../../src/pages/Login.tsx)
+  - [../../src/pages/Signup.tsx](../../src/pages/Signup.tsx)
+- **Operational note:** Current first-cohort auth posture does not rely on captcha. Direct auth API requests without captcha tokens remain allowed until the operator deliberately configures both public-site and server-side captcha enforcement and reruns proof.
 
-## 4. Fresh production export verification is missing
-
-- **Why it matters:** Court/export integrity is one of the repo’s strongest differentiated surfaces. The repo and tests are strong, but the docs explicitly still call for a fresh live verification pass of the Object Lock-backed export path after meaningful releases.
-- **Current status:** Open. Repo-complete, not freshly live-reverified.
+- **Closed item:** Current production onboarding proof
+- **Closed on:** 2026-04-10
+- **Current state:** A fresh live signup completed end to end through confirmation handoff, onboarding, child creation, and dashboard landing in a usable family context on `https://coparrent.com`.
 - **Evidence files:**
-  - [CURRENT_STATUS.md](CURRENT_STATUS.md)
-  - [PROJECT_COMPLETION_REVIEW.md](PROJECT_COMPLETION_REVIEW.md)
-  - [../../src/hooks/useCourtExport.ts](../../src/hooks/useCourtExport.ts)
-  - [../../src/pages/LawOfficeDashboard.tsx](../../src/pages/LawOfficeDashboard.tsx)
-  - [../../supabase/functions/_shared/courtRecordExport.test.ts](../../supabase/functions/_shared/courtRecordExport.test.ts)
-- **Risk level:** High
-- **Launch impact:** If exports are part of the first-cohort value proposition, launching without fresh proof weakens both trust and support readiness.
-- **Exact next action:** Create a fresh production export, download both stored artifacts, run verification against stored source and stored PDF, and record the result in the live evidence log.
-- **Owner suggestion:** QA + engineering
-- **Blocks phase-1 user onboarding:** Yes if the first cohort is being sold on export/legal evidence value; otherwise high-risk partial
-- **Blocks redeem-code rollout:** No
+  - [../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md)
+  - [../../src/pages/Onboarding.tsx](../../src/pages/Onboarding.tsx)
+  - [../../src/contexts/FamilyContext.tsx](../../src/contexts/FamilyContext.tsx)
+- **Operational note:** Re-run this only if the public auth or onboarding surface changes again before the cohort.
 
-## 5. Production schema rollout remains fragile for launch changes
-
-- **Why it matters:** Recent docs explicitly say some production rollout work was done manually because the remote project was behind on a broader migration backlog and a blind `supabase db push` was intentionally avoided. That means any last-minute launch change still needs disciplined rollout and rollback steps.
-- **Current status:** Open operational risk.
+- **Closed item:** Current production co-parent invite acceptance proof
+- **Closed on:** 2026-04-10
+- **Current state:** The live Settings page created a co-parent invite under an explicit current-client `activeFamilyId`, and the invitee completed account creation, acceptance, and dashboard landing on the public host.
 - **Evidence files:**
-  - [PROBLEM_REPORT_SETUP.md](PROBLEM_REPORT_SETUP.md)
-  - [CURRENT_STATUS.md](CURRENT_STATUS.md)
+  - [../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md)
+  - [../../src/components/settings/CoParentInvite.tsx](../../src/components/settings/CoParentInvite.tsx)
+  - [../../src/pages/AcceptInvite.tsx](../../src/pages/AcceptInvite.tsx)
+- **Operational note:** This path is now re-proven on the public host. Re-run only if the co-parent invite surface changes again.
+
+- **Closed item:** Complimentary access-code rollout proof
+- **Closed on:** 2026-04-10
+- **Current state:** `admin-manage-access-codes` is deployed to production, the public production frontend exposes the admin `Access Codes` tab, and live public-host QA proved issuance, one-time raw reveal, inventory visibility, redemption, complimentary Power state reflection, deactivation, and inactive-code rejection.
+- **Evidence files:**
+  - [REDEEM_CODE_READINESS.md](REDEEM_CODE_READINESS.md)
+  - [REDEEM_CODE_OPERATOR_RUNBOOK.md](REDEEM_CODE_OPERATOR_RUNBOOK.md)
+  - [../../supabase/functions/admin-manage-access-codes/index.ts](../../supabase/functions/admin-manage-access-codes/index.ts)
+  - [../../src/components/admin/AdminAccessCodeManager.tsx](../../src/components/admin/AdminAccessCodeManager.tsx)
+  - [../../src/components/settings/AccessCodeRedeemer.tsx](../../src/components/settings/AccessCodeRedeemer.tsx)
+  - [../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md)
+- **Operational note:** Re-run this QA proof only if the access-code admin or redemption surface changes again.
+
+- **Closed item:** Canonical public-host posture
+- **Closed on:** 2026-04-10
+- **Current state:** `https://coparrent.com` is now the canonical public host for the launch docs. `https://www.coparrent.com` does not redirect yet, but it intentionally serves the same app and the rendered canonical metadata points to the apex host.
+- **Evidence files:**
+  - [../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md)
   - [../../docs/acquisition/diligence/DEPLOYMENT_RUNBOOK.md](../../docs/acquisition/diligence/DEPLOYMENT_RUNBOOK.md)
-- **Risk level:** High
-- **Launch impact:** A bad or rushed launch-day rollout can break onboarding, billing, or other launch-critical paths with no simple recovery path.
-- **Exact next action:** Freeze required schema/config changes, document the exact apply order and rollback plan, and avoid any unnecessary production schema work during the external cohort launch window.
+  - [../../.env.example](../../.env.example)
+- **Operational note:** Redirect cleanup can wait until later as long as launch docs and env posture stay aligned to the apex host.
+
+- **Closed item:** Current production pricing, checkout, webhook, and customer-portal proof
+- **Closed on:** 2026-04-10
+- **Current state:** The live public pricing route was rechecked on `https://coparrent.com`, a safe no-charge live trial checkout returned successfully to `/settings?success=true`, the webhook promoted the QA profile to active Power access, `check-subscription` returned the expected paid state, and the customer portal completed a safe action.
+- **Evidence files:**
+  - [../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md)
+  - [../../src/pages/Pricing.tsx](../../src/pages/Pricing.tsx)
+  - [../../src/hooks/useSubscription.ts](../../src/hooks/useSubscription.ts)
+  - [../../supabase/functions/check-subscription/index.ts](../../supabase/functions/check-subscription/index.ts)
+  - [../../supabase/functions/customer-portal/index.ts](../../supabase/functions/customer-portal/index.ts)
+- **Operational note:** The exact dashboard subscription-banner click itself was not rerun separately in the safe-trial pass. Re-run that UI affordance only if the banner path changes again.
+
+- **Removed from first-cohort scope:** Fresh production court/export verification
+- **Removed on:** 2026-04-10
+- **Current state:** Exports are no longer gating the first external cohort. They stay out of the phase-1 promise until a fresh production export pass is rerun deliberately.
+- **Evidence files:**
+  - [LAUNCH_READINESS_AUDIT.md](LAUNCH_READINESS_AUDIT.md)
+  - [INITIAL_USER_ROLLOUT_PLAN.md](INITIAL_USER_ROLLOUT_PLAN.md)
+  - [PHASE_1_LAUNCH_CHECKLIST.md](PHASE_1_LAUNCH_CHECKLIST.md)
+- **Operational note:** Keep exports out of first-cohort messaging until the evidence package and PDF verification path are rerun on production.
+
+- **Removed from first-cohort scope:** Fresh Law Office Portal live verification
+- **Removed on:** 2026-04-10
+- **Current state:** The Lawyer Portal / Law Office Portal is present in repo and phase-1 read-only, but it is not part of the first-cohort promise and has not been freshly live-verified on the current public host.
+- **Evidence files:**
+  - [../../src/pages/LawOfficeDashboard.tsx](../../src/pages/LawOfficeDashboard.tsx)
+  - [LAUNCH_READINESS_AUDIT.md](LAUNCH_READINESS_AUDIT.md)
+  - [PHASE_1_LAUNCH_CHECKLIST.md](PHASE_1_LAUNCH_CHECKLIST.md)
+- **Operational note:** Do not promise law-office export review in launch messaging until the login, assigned-family selection, stored download, and verify actions are re-proven on the public host.
+
+- **Closed item:** First-cohort support and monitoring ownership
+- **Closed on:** 2026-04-10
+- **Current state:** Support ownership is now explicitly assigned for the first cohort.
+- **Ownership:**
+  - support inbox owner: CoParrent Development Team (`support@coparrent.com`)
+  - general contact owner: CoParrent Development Team (`hello@coparrent.com`)
+  - legal / law-office inquiry owner: CoParrent Development Team (`legal@coparrent.com`)
+  - problem report triage owner: CoParrent Development Team
+  - edge-function / runtime log owner: CoParrent Development Team
+  - transactional sender mailbox: `no-reply@coparrent.com` outbound only, not monitored for support
+  - Sentry posture for first cohort: intentionally absent unless enabled before external users
+- **Operating posture:** Check `support@coparrent.com` at least twice daily during pilot, check problem reports daily, review runtime / edge-function logs daily during pilot, and route legal or law-office requests through `legal@coparrent.com`.
+
+## 1. Current Production Third-Party Invite Path Is Broken
+
+- **Why it matters:** Third-party invite acceptance is a separate family-role path. It is not safe to assume it works because co-parent invites now pass.
+- **Current status:** Open.
+- **Evidence files:**
+  - [../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md](../../docs/acquisition/diligence/LIVE_VERIFICATION_EVIDENCE_LOG.md)
+  - [../../src/components/settings/ThirdPartyManager.tsx](../../src/components/settings/ThirdPartyManager.tsx)
+  - [../../src/pages/AcceptInvite.tsx](../../src/pages/AcceptInvite.tsx)
+  - [../../supabase/migrations/20260329153000_scope_third_party_invites_to_active_family.sql](../../supabase/migrations/20260329153000_scope_third_party_invites_to_active_family.sql)
+- **Risk level:** Critical
+- **Launch impact:** Still blocks the first external cohort unless the third-party invite surface is deliberately removed from first-cohort scope.
+- **Exact next action:** Correct production so `public.rpc_create_third_party_invite` exposes the scoped `p_family_id` signature that the current client sends, then rerun the third-party invite flow end to end on `https://coparrent.com`.
 - **Owner suggestion:** Engineering
-- **Blocks phase-1 user onboarding:** Yes for any cohort that depends on additional launch changes
-- **Blocks redeem-code rollout:** No for the current proven access-code system. Yes only if new schema or server changes are introduced before code distribution.
+- **Classification:** Still blocks first external cohort
+- **Observed live defect:** The live browser request returned `404` with `PGRST202`, and the response indicated production still exposes the older unscoped RPC signature instead of the scoped repo contract.
 
-## Non-Blocking But Important
+## Law Office Portal Status
 
-These should stay visible, but they do not have to block the first small cohort if they are clearly out of scope:
+- **Present in repo:** Yes
+- **What it currently does:** Read-only review of immutable family-wide court-record exports, stored-artifact download, and receipt-backed verification for assigned families
+- **Phase-1 read-only:** Yes
+- **In first-cohort scope:** No
+- **Freshly live-verified on the current public host:** No
+- **What still has to happen before it can be promised:** Re-prove law-office login, assigned-family selection, stored download, and verification actions on the public host, then decide to bring exports back into launch scope deliberately
 
-- Real-device push/PWA validation is still open.
-- Async family challenges are repo-complete but not promoted/live-verified.
-- Shared-game mobile verification remains worth doing.
-- Production monitoring posture is only partially documented. `VITE_SENTRY_DSN` was not present in the last recorded Vercel env inventory.
-- Child-device flow is a foundation, not a launch-closed child-install program.
+## Should Finish Before Public Launch
 
-Relevant evidence:
+These are not current first-cohort blockers if they stay out of scope:
 
-- [PUSH_PWA_DEVICE_VALIDATION_CHECKLIST.md](PUSH_PWA_DEVICE_VALIDATION_CHECKLIST.md)
-- [GAME_SYSTEM_STATUS.md](GAME_SYSTEM_STATUS.md)
-- [../../docs/acquisition/diligence/SECRETS_AND_ENV_INVENTORY.md](../../docs/acquisition/diligence/SECRETS_AND_ENV_INVENTORY.md)
-- [../../src/pages/ChildAppPage.tsx](../../src/pages/ChildAppPage.tsx)
+- fresh production export verification if exports will be promised again
+- fresh Law Office Portal live verification if law-office review will be promised again
+- captcha hardening, only if the operator wants to re-enable captcha before public launch
+- real-device push/PWA validation
+- async family challenge promotion and live verification
+- shared-game mobile verification
+- redirect cleanup for the `www` host if the team wants a single-host redirect posture
+
+## Can Wait Until After First Cohort
+
+- child-device rollout polish
+- broader analytics and monitoring upgrades beyond the minimum owned launch posture
+- additional game consumers and broader multiplayer scope
+- passkey enablement, if intentionally deferred
+- exports and law-office review, until they are deliberately reverified and brought back into scope

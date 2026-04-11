@@ -45,7 +45,7 @@ Target branded Google OAuth callback:
 - `https://auth.coparrent.com/auth/v1/callback`
 
 Public app callback after Supabase:
-- `https://www.coparrent.com/auth/callback`
+- `https://coparrent.com/auth/callback`
 
 ## Important Scope Note
 
@@ -123,7 +123,7 @@ Do this in:
 Also confirm the OAuth branding screen is complete:
 - app name: `CoParrent`
 - app logo
-- home page: `https://www.coparrent.com`
+- home page: `https://coparrent.com`
 - privacy policy URL
 - terms URL
 - support email
@@ -169,7 +169,7 @@ PUBLIC_APP_URL=https://coparrent.com
 SITE_URL=https://coparrent.com
 ```
 
-These are the browser/app URL constants. Keep `https://www.coparrent.com` as the canonical user-facing public URL until the apex host is confirmed clean from multiple networks, as tracked in `docs/project/DEPLOYMENT_AUTH_CONFIRMATION_CHECKLIST.md`.
+These are the browser/app URL constants. The current launch docs now treat `https://coparrent.com` as canonical. `https://www.coparrent.com` still serves the same app today, but it is a non-canonical alias rather than the preferred public URL.
 
 For now, backend tooling and Supabase CLI/runtime values can stay on the default project URL unless there is a deliberate reason to migrate them too. The current app only needs the browser client switched to get the branding benefit.
 
@@ -188,7 +188,7 @@ Expected result:
 - not `to continue to jnxtskcpwzuxyxjzqrkv.supabase.co`
 
 Test these flows:
-- Google sign-in from `https://www.coparrent.com/login`
+- Google sign-in from `https://coparrent.com/login`
 - Google sign-in from a preview deployment
 - normal email/password login
 - forgot-password

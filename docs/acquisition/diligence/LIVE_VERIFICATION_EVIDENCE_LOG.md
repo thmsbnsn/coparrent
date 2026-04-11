@@ -20,16 +20,19 @@ This file started as a template. Completed live-verification entries now live he
 | Item | Status | Last Verified Date | Blocker |
 |---|---|---|---|
 | Messaging Hub thread creation verification | Passed with notes | 2026-03-23 | No |
-| Invite acceptance verification | Passed with notes | 2026-03-25 | No |
-| Stripe checkout verification | Passed with notes | 2026-03-24 | No |
-| Stripe webhook verification | Passed with notes | 2026-03-24 | No |
-| Customer portal verification | Passed with notes | 2026-03-24 | No |
+| Co-parent invite acceptance verification | Passed with notes | 2026-04-10 | No |
+| Third-party invite acceptance verification | Failed | 2026-04-10 | Yes |
+| Stripe checkout verification | Passed with notes | 2026-04-10 | No |
+| Stripe webhook verification | Passed with notes | 2026-04-10 | No |
+| Customer portal verification | Passed with notes | 2026-04-10 | No |
 | OpenRouter runtime verification | Passed with notes | 2026-03-24 | No |
 | Daily audio/video call verification | Passed with notes | 2026-03-27 | No |
-| Production auth verification | Passed with notes | 2026-03-27 | No |
+| Production auth verification | Passed with notes | 2026-04-10 | No |
 | Problem-report submission verification | Passed with notes | 2026-03-28 | No |
 | Production smoke verification | Passed with notes | 2026-03-28 | No |
 | Complimentary access-code verification | Passed | 2026-04-10 | No |
+| Canonical public-host verification | Passed with notes | 2026-04-10 | No |
+| End-to-end onboarding verification | Passed with notes | 2026-04-10 | No |
 | Push notification verification | Blocked | 2026-03-25 | Yes |
 | PWA install verification | Not started | TBD | Yes |
 | Preview vs production alignment verification | Passed with notes | 2026-03-27 | No |
@@ -404,6 +407,117 @@ Use status values like:
 - **Pass / Fail:** Passed
 - **Notes:** The deployed admin inventory surface is not auto-live-updating. After a redemption or deactivate action, the operator must click `Refresh` to observe the latest inventory state. That matches the shipped admin UI contract and is not a blocker. The first deploy attempt from the clean worktree created a throwaway Vercel project because the worktree was not linked yet; that stray project was removed, the worktree was relinked to the real `coparrent` project, and the final production deploy was executed from the corrected clean worktree.
 - **Screenshots / Video Evidence:** [public-host verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-live-host-20260410T194032Z-report.json), [admin tab screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-live-host-20260410T194032Z-admin-tab.png), [issued-once screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-live-host-20260410T194032Z-issued-once.png), [inventory screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-live-host-20260410T194032Z-inventory.png), [redeemed user screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-live-host-20260410T194032Z-user-redeemed.png), [admin inactive screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-live-host-20260410T194032Z-admin-inactive.png), [inactive user screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/access-code-live-host-20260410T194032Z-user-inactive.png)
+
+## 15. Canonical Public-Host Verification
+
+### Entry 2026-04-10
+
+- **Date:** 2026-04-10
+- **Environment:** Public hosts `https://coparrent.com` and `https://www.coparrent.com`
+- **Tester:** Codex live-host verification using direct HTTP checks and browser inspection
+- **Scenario:** Re-check both public hosts after the access-code closeout, confirm whether the non-canonical host redirects or intentionally serves the same app, and inspect the rendered canonical metadata
+- **Expected Result:** The intended canonical host is explicit, the non-canonical host either redirects cleanly or intentionally serves the same app, and the rendered HTML matches the documented host posture
+- **Actual Result:** Passed with notes. `https://coparrent.com/`, `https://coparrent.com/login`, `https://www.coparrent.com/`, and `https://www.coparrent.com/login` all returned `200` from the same fresh production deploy. The `www` host did not redirect; it intentionally served the same app. The rendered HTML on both hosts declared `<link rel="canonical" href="https://coparrent.com/" />` and `og:url=https://coparrent.com/`.
+- **Pass / Fail:** Passed with notes
+- **Notes:** This closes the canonical-host decision to the apex host for current launch docs. Redirect cleanup can still wait until later because the non-canonical host is serving the same app rather than failing.
+
+## 16. Current Public-Host Auth Verification
+
+### Entry 2026-04-10
+
+- **Date:** 2026-04-10
+- **Environment:** Production frontend `https://coparrent.com` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** Codex live-host verification using browser inspection plus direct Supabase auth API probes
+- **Scenario:** Re-check the live login and signup surfaces after the production frontend redeploy, confirm the current captcha posture on the public host, then verify whether the backend auth API actually rejects requests that omit a captcha token
+- **Expected Result:** Login and signup load on the live host, the captcha widget renders correctly, users can complete the flow only after captcha, and the backend auth API rejects sign-in or sign-up attempts that omit a captcha token
+- **Actual Result:** Failed. Both `https://coparrent.com/login` and `https://coparrent.com/signup` loaded, but each page rendered the message `Captcha protection is required for sign-in, but the site key is not configured.` and kept the submit button disabled. A direct `signInWithPassword` call for the real tester account succeeded without any captcha token. A direct `signUp` call for a throwaway QA email also succeeded without any captcha token, and the QA user was then cleaned up immediately.
+- **Pass / Fail:** Failed
+- **Notes:** This is no longer just a stale-proof gap. The current public auth surface is misconfigured, and captcha enforcement is not currently server-side hardening for direct auth API calls.
+
+### Entry 2026-04-10: Auth Posture Fixed And Re-Proven
+
+- **Date:** 2026-04-10
+- **Environment:** Production frontend `https://coparrent.com` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** Codex live-host verification using the public login and signup pages plus real production QA accounts
+- **Scenario:** After explicitly setting `VITE_AUTH_CAPTCHA_ENABLED=false` for the production frontend and redeploying, reopen `https://coparrent.com/login` and `https://coparrent.com/signup`, confirm the broken missing-site-key state is gone, sign in as `coparrenttesting@yahoo.com`, then create a fresh production QA account from the live signup page
+- **Expected Result:** The public auth pages load without the broken captcha warning, login succeeds through the real public form, and signup succeeds through the real public form under the current launch posture
+- **Actual Result:** Passed with notes. The public login page loaded without the missing-site-key captcha warning, `coparrenttesting@yahoo.com` signed in successfully and landed on `/dashboard`, and a fresh signup for `tlbenson.1988+coparrent-phase1-20260410t2127@gmail.com` succeeded on the live host with the success state `Account created!` and `Let's set up your profile.`
+- **Pass / Fail:** Passed with notes
+- **Notes:** Current first-cohort auth posture is now explicit rather than broken: the public frontend intentionally has captcha disabled through `VITE_AUTH_CAPTCHA_ENABLED=false`. Direct auth API calls without captcha tokens are therefore still allowed by the current posture and should not be described as server-side captcha hardening. If hCaptcha is re-enabled later, both the public site key and the Supabase-side enforcement path need a separate fresh proof before launch messaging changes.
+
+## 17. Current Public-Host Billing Verification
+
+### Entry 2026-04-10
+
+- **Date:** 2026-04-10
+- **Environment:** Production frontend `https://coparrent.com` against live Stripe and production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** QA user `stripe-refresh-1775853513207@coparrent.test`
+- **Scenario:** Load the current pricing route on the live public host with the dashboard-source query string, complete a safe no-charge live trial checkout, wait for the webhook-backed profile update, confirm subscription-gating state, and open the real Stripe customer portal for one safe action
+- **Expected Result:** The live pricing route loads, checkout returns to the production app successfully, the profile is updated to active Power access by webhook, `check-subscription` resolves correctly, and the customer portal opens and permits one safe action
+- **Actual Result:** Passed with notes. The pricing page loaded on `https://coparrent.com/pricing?source=dashboard&intent=upgrade-to-power`. A no-charge one-day live trial checkout session returned to `/settings?success=true`. The QA profile updated to `subscription_status=active`, `subscription_tier=power`, and `free_premium_access=false`. `check-subscription` returned `subscribed=true`, `tier=power`, and `status=trial`. The customer portal opened successfully and the safe `Update information` action completed.
+- **Pass / Fail:** Passed with notes
+- **Notes:** The checkout proof intentionally used a no-charge one-day live trial Checkout Session so the real checkout, webhook, and customer-portal paths could be exercised without an immediate charge. The exact dashboard subscription-banner click itself was not rerun separately in this pass.
+- **Screenshots / Video Evidence:** [verification report](E:/Files/.coparrent/docs/acquisition/diligence/evidence/stripe-production-20260410T203834Z-report.json), [pricing screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/stripe-production-20260410T203834Z-pricing.png), [checkout success screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/stripe-production-20260410T203834Z-checkout-success.png), [portal screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/stripe-production-20260410T203834Z-portal.png), [portal action screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/stripe-production-20260410T203834Z-portal-after.png)
+
+## 18. Current Public-Host Onboarding Verification
+
+### Entry 2026-04-10
+
+- **Date:** 2026-04-10
+- **Environment:** Production frontend `https://coparrent.com/onboarding` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** authenticated QA user `stripe-refresh-1775853513207@coparrent.test`
+- **Scenario:** Inject a real authenticated session for a QA user without family setup and confirm the live public onboarding route still renders the first-step role selection UI
+- **Expected Result:** The public onboarding route loads for an authenticated no-family account and shows the first-step role-selection experience instead of failing or redirecting unpredictably
+- **Actual Result:** Passed with notes. The live `/onboarding` route stayed on `https://coparrent.com/onboarding` and rendered `What's your role?` with the role options and `Continue` action.
+- **Pass / Fail:** Passed with notes
+- **Notes:** This is route-level proof only. The full onboarding path from new signup through family creation and a usable landed dashboard was not rerun in this pass because the public signup/login surface is currently blocked by the missing hCaptcha site key.
+- **Screenshots / Video Evidence:** [onboarding screenshot](E:/Files/.coparrent/docs/acquisition/diligence/evidence/onboarding-production-20260410.png)
+
+### Entry 2026-04-10: End-To-End Onboarding After Fresh Signup
+
+- **Date:** 2026-04-10
+- **Environment:** Production frontend `https://coparrent.com` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** fresh QA user `tlbenson.1988+coparrent-phase1-20260410t2127@gmail.com`
+- **Scenario:** Create a fresh account on the live signup page, complete email confirmation for that exact new auth user, finish onboarding through role selection and child creation, skip the co-parent invite step, and confirm the user lands in a usable family-scoped dashboard
+- **Expected Result:** A new public-host signup can complete onboarding end to end, create a family context, and land on `/dashboard` with a usable active family selection instead of stalling in setup
+- **Actual Result:** Passed with notes. The fresh QA user completed signup on the live host, was confirmed for the exact newly-created auth user, completed onboarding as `Father`, created child `QA Child One`, skipped the co-parent invite step, and landed on `https://coparrent.com/dashboard`. Follow-up profile and membership readback confirmed one active family membership in family `74d4bcc7-f69e-4d0b-937c-eb5db48994c9`.
+- **Pass / Fail:** Passed with notes
+- **Notes:** Gmail delivered the real signup confirmation email, but the plain-text URL extraction was lossy in the mailbox view used for this verification. The confirmation handoff therefore used an equivalent admin-generated action link for the exact same newly-created auth user instead of guessing at a malformed email URL. This still proves the live signup, confirmation handoff, onboarding, and usable family landing path on the current public host.
+
+## 19. Current Public-Host Invite Reverification Attempt
+
+### Entry 2026-04-10
+
+- **Date:** 2026-04-10
+- **Environment:** Production frontend `https://coparrent.com` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** inviter `coparrenttesting@yahoo.com` (`Parent A`), invitee `testingcoparrent@yahoo.com` (`Parent B`)
+- **Scenario:** Attempt to rerun co-parent and third-party invite acceptance on the live public host using injected authenticated sessions because the public login/signup pages are currently blocked by the missing hCaptcha site key
+- **Expected Result:** The live public invite flow can be rerun safely without guessing family scope, and the accepted invite lands the invitee in the inviter's intended family with the expected role
+- **Actual Result:** Blocked. The out-of-band verifier could not safely close this proof because it did not have a clean, current-client-derived `activeFamilyId` selection for the inviter invite-creation step. The first co-parent rerun produced a family-id mismatch between the inviter's expected family context and the accepted invitation state, so the pass was stopped instead of guessing or silently continuing.
+- **Pass / Fail:** Blocked
+- **Notes:** Historical live proof from 2026-03-25 still exists. It is not being reused here as fresh public-host proof. The invite blockers remain open until the flow is rerun through a safe current-client path with explicit family scope.
+
+### Entry 2026-04-10: Co-Parent Acceptance Through The Live Current Client
+
+- **Date:** 2026-04-10
+- **Environment:** Production frontend `https://coparrent.com` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** inviter `tlbenson.1988+coparrent-phase1-20260410t2127@gmail.com`, invitee `tlbenson.1988+coparrent-coparent-20260410t2133@gmail.com`
+- **Scenario:** Use the live Settings page on the current public host to create a fresh co-parent invite from a new single-family inviter account, record the inviter's explicit current-client `activeFamilyId`, open the live invite link, create and confirm the invitee account, accept the invite, and verify the invitee lands in the inviter's family as `parent`
+- **Expected Result:** The live co-parent invite flow succeeds end to end without guessing family scope, the invitation row stays scoped to the inviter's explicit `activeFamilyId`, and the accepted invitee session lands on `/dashboard` in the same family context
+- **Actual Result:** Passed with notes. The inviter's current-client `activeFamilyId` was `74d4bcc7-f69e-4d0b-937c-eb5db48994c9`. The live Settings page created invitation `81a478cc-9e93-489d-b4f1-9e462b44830d` with token `c9c80c67-5cbd-4e49-b6bd-13bb7959cb8d` scoped to that family. The invitee completed account creation, confirmation, and `Accept & Link Accounts` on the live public host, landed on `/dashboard`, and the final membership readback showed the invitee active in the same family as `parent`.
+- **Pass / Fail:** Passed with notes
+- **Notes:** This closes the fresh public-host co-parent proof. The inviter account was chosen specifically because it had one clean active family and no pre-existing linked co-parent, which avoided ambiguous family resolution during invite creation.
+
+### Entry 2026-04-10: Third-Party Invite Creation On The Live Current Client
+
+- **Date:** 2026-04-10
+- **Environment:** Production frontend `https://coparrent.com` against production Supabase backend `jnxtskcpwzuxyxjzqrkv`
+- **Tester:** inviter `coparrenttesting@yahoo.com` (`Parent A`)
+- **Scenario:** Log in through the live public login page, confirm the inviter's explicit current-client `activeFamilyId`, open the live Settings page, and create a third-party invite through the real `Third-Party Access` UI for `tlbenson.1988+coparrent-thirdparty-20260410t2140@gmail.com`
+- **Expected Result:** The live Settings page creates a pending third-party invitation scoped to the inviter's explicit active family, then the invitee can continue through the normal live accept-invite path
+- **Actual Result:** Failed. The live inviter login succeeded and the current-client `activeFamilyId` resolved to `2b14a8e4-4ae2-4dd1-b832-adf10b2bfdc1`, but the `Send Invitation` action failed server-side. The browser request to `public.rpc_create_third_party_invite` returned `404` with `PGRST202`, and the response indicated the production schema cache still exposes the older signature without `p_family_id` instead of the scoped repo signature.
+- **Pass / Fail:** Failed
+- **Notes:** This is a real production defect, not just missing proof. The current public client is correctly sending `p_family_id`, but production is still resolving the older unscoped RPC contract. Do not adapt the client back to the old inferred-family behavior. The production database function needs to be corrected or third-party invites need to be explicitly removed from first-cohort scope.
 
 ## Working Notes
 
