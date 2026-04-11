@@ -1398,13 +1398,13 @@ const MessagingHubPage = () => {
   );
 
   // Sidebar content - thread navigation
-  const SidebarContent = () => {
+  const renderSidebarContent = () => {
     const tabItems = ["family", "groups", "direct"] as const;
     const familyUnread = showIndicator ? getUnreadByType("family_channel") : 0;
     const groupsUnread = showIndicator ? getUnreadByType("group_chat") : 0;
     const directUnread = showIndicator ? getUnreadByType("direct_message") : 0;
 
-    const TabContentInner = () => (
+    const renderTabContentInner = () => (
       <>
         <TabsContent value="family" className="m-0 flex-1 overflow-auto p-2">
           {familyChannel && (
@@ -1665,10 +1665,10 @@ const MessagingHubPage = () => {
             onTabChange={(t) => setActiveTab(t as typeof activeTab)}
             className="flex-1"
           >
-            <TabContentInner />
+            {renderTabContentInner()}
           </SwipeableTabs>
         ) : (
-          <TabContentInner />
+          renderTabContentInner()
         )}
       </Tabs>
     );
@@ -2306,7 +2306,7 @@ const MessagingHubPage = () => {
                 </p>
               </SheetHeader>
               <div className="h-[calc(100%-60px)]">
-                <SidebarContent />
+                {renderSidebarContent()}
               </div>
             </SheetContent>
           </Sheet>
@@ -2320,7 +2320,7 @@ const MessagingHubPage = () => {
                 animate={{ opacity: 1, x: 0 }}
                 className="no-print flex w-72 flex-shrink-0 flex-col overflow-hidden rounded-[30px] border border-border/70 bg-gradient-to-b from-card via-card to-card/90 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.9)] lg:w-80"
               >
-                <SidebarContent />
+                {renderSidebarContent()}
               </motion.div>
             )}
 

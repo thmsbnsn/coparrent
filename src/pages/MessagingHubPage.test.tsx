@@ -1,5 +1,4 @@
-import type { ReactNode } from "react";
-import { act } from "react";
+import React, { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -95,6 +94,7 @@ const messagingMockState = vi.hoisted(() => ({
   viewport: {
     isMobile: false,
   },
+  swipeableTabsMounts: 0,
 }));
 
 const supabaseMockState = vi.hoisted(() => {
@@ -564,7 +564,13 @@ vi.mock("@/components/messages/UnreadBadge", () => ({
 }));
 
 vi.mock("@/components/messages/SwipeableTabs", () => ({
-  SwipeableTabs: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SwipeableTabs: ({ children }: { children?: ReactNode }) => {
+    React.useEffect(() => {
+      messagingMockState.swipeableTabsMounts += 1;
+    }, []);
+
+    return <div>{children}</div>;
+  },
 }));
 
 vi.mock("@/components/messages/EvidencePanel", () => ({
@@ -793,6 +799,7 @@ describe("MessagingHubPage", () => {
     messagingMockState.activeFamilyId = "family-1";
     messagingMockState.mockScenario.mode = "interactive";
     messagingMockState.viewport.isMobile = false;
+    messagingMockState.swipeableTabsMounts = 0;
     supabaseMockState.exportList = [
       {
         artifact_hash: "artifact-hash-123",
@@ -917,6 +924,33 @@ describe("MessagingHubPage", () => {
     expect(pageShell?.className).toContain("min-h-[calc(100vh-8rem)]");
     expect(threadShell?.className).toContain("min-h-[38rem]");
     expect(rendered.querySelector('[data-testid="composer"]')).toBeTruthy();
+  });
+
+  it("does not remount the mobile sidebar tab surface on ordinary page rerenders", async () => {
+    messagingMockState.viewport.isMobile = true;
+    const rendered = await renderPage("/dashboard/messages?thread=direct-thread-jessica");
+
+    const conversationsButton = findButton(rendered, "Conversations");
+    expect(conversationsButton).toBeTruthy();
+
+    await act(async () => {
+      conversationsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(messagingMockState.swipeableTabsMounts).toBe(1);
+
+    const courtToggle = findButton(rendered, "court-off");
+    expect(courtToggle).toBeTruthy();
+
+    await act(async () => {
+      courtToggle?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(messagingMockState.swipeableTabsMounts).toBe(1);
   });
 
   it("shows an explicit blocked state when a direct thread fails to hydrate", async () => {
