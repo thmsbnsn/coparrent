@@ -43,6 +43,7 @@ describe("routeAccess", () => {
     expect(canThirdPartyAccessRoute("/dashboard/games")).toBe(true);
     expect(canThirdPartyAccessRoute("/dashboard/messages/thread-1")).toBe(true);
     expect(canThirdPartyAccessRoute("/dashboard/calls")).toBe(true);
+    expect(canThirdPartyAccessRoute("/dashboard/media")).toBe(false);
     expect(canThirdPartyAccessRoute("/dashboard/settings")).toBe(false);
 
     expect(
@@ -106,6 +107,7 @@ describe("routeAccess", () => {
     expect(requiresActiveFamilyScope("/dashboard/games/flappy-plane/lobby/session-1")).toBe(true);
     expect(requiresActiveFamilyScope("/dashboard/messages")).toBe(true);
     expect(requiresActiveFamilyScope("/dashboard/calls")).toBe(true);
+    expect(requiresActiveFamilyScope("/dashboard/media")).toBe(true);
     expect(requiresActiveFamilyScope("/dashboard/settings/child-access/child-1")).toBe(true);
     expect(requiresActiveFamilyScope("/kids/portal")).toBe(true);
     expect(requiresActiveFamilyScope("/kids/games/flappy-plane")).toBe(true);
@@ -121,6 +123,17 @@ describe("routeAccess", () => {
       allowed: false,
       redirectTo: null,
       reason: "missing_active_family",
+    });
+
+    expect(
+      getProtectedRouteAccessDecision("/dashboard/media", {
+        activeFamilyId: "family-1",
+        isThirdParty: true,
+      }),
+    ).toEqual({
+      allowed: false,
+      redirectTo: "/dashboard",
+      reason: "third_party_route_restricted",
     });
 
     expect(

@@ -61,6 +61,7 @@ const ChildrenPage = lazy(() => import("./pages/ChildrenPage"));
 const MessagingHubPage = lazy(() => import("./pages/MessagingHubPage"));
 const CallHistoryPage = lazy(() => import("./pages/CallHistoryPage"));
 const DocumentsPage = lazy(() => import("./pages/DocumentsPage"));
+const MediaGalleryPage = lazy(() => import("./pages/MediaGalleryPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const AddFamilyPage = lazy(() => import("./pages/AddFamilyPage"));
 const AcceptInvite = lazy(() => import("./pages/AcceptInvite"));
@@ -171,6 +172,7 @@ const App = () => (
                 <Route path="/dashboard/calls" element={<ProtectedRoute><RouteErrorBoundary routeName="Calls"><CallHistoryPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/messages-legacy" element={<Navigate to="/dashboard/messages" replace />} />
                 <Route path="/dashboard/documents" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Documents"><DocumentsPage /></RouteErrorBoundary></ProtectedRoute>} />
+                <Route path="/dashboard/media" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Media Gallery"><MediaGalleryPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/settings" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Settings"><SettingsPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/settings/child-access/:childId" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Child Access Setup"><ChildAccessSetupPage /></RouteErrorBoundary></ProtectedRoute>} />
                 <Route path="/dashboard/families/new" element={<ProtectedRoute requireParent><RouteErrorBoundary routeName="Add Family"><AddFamilyPage /></RouteErrorBoundary></ProtectedRoute>} />

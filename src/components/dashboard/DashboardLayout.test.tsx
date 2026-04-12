@@ -188,6 +188,7 @@ describe("DashboardLayout", () => {
     expect(rendered.querySelector("#nav-sports")).toBeNull();
     expect(rendered.querySelector("#nav-kids-hub")).toBeNull();
     expect(rendered.querySelector("#nav-documents")).toBeNull();
+    expect(rendered.querySelector("#nav-media")).toBeNull();
     expect(rendered.querySelector("#nav-expenses")).toBeNull();
     expect(rendered.querySelector("#nav-settings")).toBeNull();
     expect(rendered.textContent).not.toContain("family-presence-toggle");
@@ -217,6 +218,7 @@ describe("DashboardLayout", () => {
     expect(rendered.querySelector("#nav-dashboard")).toBeNull();
     expect(rendered.querySelector("#nav-calls")).toBeNull();
     expect(rendered.querySelector("#nav-children")).toBeNull();
+    expect(rendered.querySelector("#nav-media")).toBeNull();
     expect(rendered.querySelector("#nav-journal")).toBeNull();
     expect(rendered.querySelector("#nav-law-library")).toBeNull();
     expect(rendered.querySelector("#nav-settings")).toBeNull();
@@ -261,7 +263,7 @@ describe("DashboardLayout", () => {
     const rendered = await renderLayout("/dashboard");
     const navIds = Array.from(rendered.querySelectorAll<HTMLAnchorElement>("nav a[id]")).map((link) => link.id);
 
-    expect(navIds.slice(0, 13)).toEqual([
+    expect(navIds.slice(0, 14)).toEqual([
       "nav-dashboard",
       "nav-messages",
       "nav-calendar",
@@ -271,6 +273,7 @@ describe("DashboardLayout", () => {
       "nav-games",
       "nav-kids-hub",
       "nav-documents",
+      "nav-media",
       "nav-expenses",
       "nav-journal",
       "nav-law-library",

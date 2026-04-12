@@ -72,6 +72,10 @@ vi.mock("./pages/CallHistoryPage", () => ({
   default: () => <div>call-history-page</div>,
 }));
 
+vi.mock("./pages/MediaGalleryPage", () => ({
+  default: () => <div>media-gallery-page</div>,
+}));
+
 vi.mock("./pages/LawOfficeLogin", () => ({
   default: () => <div>law-office-login-page</div>,
 }));
@@ -154,6 +158,15 @@ describe("App messaging routes", () => {
 
     expect(window.location.pathname).toBe("/dashboard/calls");
     expect(container.textContent).toContain("call-history-page");
+  });
+
+  it("activates the media gallery route", async () => {
+    const rendered = await renderAppAtPath("/dashboard/media");
+    container = rendered.container;
+    root = rendered.root;
+
+    expect(window.location.pathname).toBe("/dashboard/media");
+    expect(container.textContent).toContain("media-gallery-page");
   });
 
   it("hides /dashboard/kids-hub/chore-chart by replacing it with Kids Hub", async () => {

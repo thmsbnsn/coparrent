@@ -305,6 +305,7 @@ export const ROUTE_ENFORCEMENT_MAP: Record<string, RouteEnforcementConfig> = {
   "/dashboard/audit": { requiresParent: true, rlsProtected: true },
   "/dashboard/children": { requiresParent: true, rlsProtected: true },
   "/dashboard/documents": { requiresParent: true, rlsProtected: true },
+  "/dashboard/media": { requiresParent: true, rlsProtected: true },
   "/dashboard/expenses": { requiresParent: true, rlsProtected: true },
   "/dashboard/law-library": { requiresParent: true, rlsProtected: false },
   "/dashboard/kids-hub": { requiresParent: true, rlsProtected: true },
