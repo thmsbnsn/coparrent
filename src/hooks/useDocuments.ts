@@ -37,6 +37,13 @@ export interface DocumentAccessLog {
   created_at: string;
 }
 
+export interface DocumentPreview {
+  fileName: string;
+  fileType: string;
+  title: string;
+  url: string;
+}
+
 export const DOCUMENT_CATEGORIES = [
   { value: "legal", label: "Legal Documents" },
   { value: "medical", label: "Medical Records" },
@@ -294,7 +301,7 @@ export const useDocuments = () => {
   const viewDocument = async (document: Document) => {
     if (!isDocumentInActiveFamily(document)) {
       toast.error("That document is not available in the active family.");
-      return;
+      return null;
     }
 
     try {
@@ -307,10 +314,16 @@ export const useDocuments = () => {
       // Log the view
       await logAccess(document.id, "view");
 
-      window.open(data.signedUrl, '_blank');
+      return {
+        fileName: document.file_name,
+        fileType: document.file_type,
+        title: document.title,
+        url: data.signedUrl,
+      } satisfies DocumentPreview;
     } catch (error) {
       const message = handleError(error, { feature: 'Documents', action: 'view' });
       toast.error(message);
+      return null;
     }
   };
 

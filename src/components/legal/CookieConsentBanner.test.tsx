@@ -5,11 +5,32 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CookieConsentBanner } from "@/components/legal/CookieConsentBanner";
 
+const authState = vi.hoisted(() => ({
+  user: { id: "user-1" },
+}));
+
+const loadProfilePreferences = vi.hoisted(() => vi.fn());
+const saveProfilePreferencesPatch = vi.hoisted(() => vi.fn(async () => ({})));
+
 vi.mock("framer-motion", () => ({
   AnimatePresence: ({ children }: { children?: ReactNode }) => <>{children}</>,
   motion: {
     div: ({ children, ...props }: { children?: ReactNode }) => <div {...props}>{children}</div>,
   },
+}));
+
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({
+    loading: false,
+    session: null,
+    signOut: vi.fn(),
+    user: authState.user,
+  }),
+}));
+
+vi.mock("@/lib/profilePreferences", () => ({
+  loadProfilePreferences,
+  saveProfilePreferencesPatch,
 }));
 
 describe("CookieConsentBanner", () => {
@@ -28,6 +49,7 @@ describe("CookieConsentBanner", () => {
         </MemoryRouter>,
       );
       await Promise.resolve();
+      await Promise.resolve();
     });
 
     return container;
@@ -43,12 +65,18 @@ describe("CookieConsentBanner", () => {
     await act(async () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
       await Promise.resolve();
+      await Promise.resolve();
     });
   };
 
   beforeEach(() => {
     vi.useFakeTimers();
     localStorage.clear();
+    authState.user = { id: "user-1" };
+    loadProfilePreferences.mockReset();
+    saveProfilePreferencesPatch.mockReset();
+    saveProfilePreferencesPatch.mockResolvedValue({});
+    loadProfilePreferences.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -62,15 +90,15 @@ describe("CookieConsentBanner", () => {
     localStorage.clear();
   });
 
-  it("stays hidden when cookie consent was already saved", async () => {
+  it("stays hidden when cookie consent was already saved locally", async () => {
     localStorage.setItem(
       "coparrent_cookie_consent",
       JSON.stringify({
+        analytics: false,
         essential: true,
         functional: true,
-        analytics: false,
-        version: "1.0",
         timestamp: "2026-03-30T00:00:00.000Z",
+        version: "1.0",
       }),
     );
 
@@ -81,14 +109,40 @@ describe("CookieConsentBanner", () => {
       await Promise.resolve();
     });
 
+    expect(loadProfilePreferences).not.toHaveBeenCalled();
     expect(rendered.textContent).not.toContain("Cookie Preferences");
   });
 
-  it("saves consent locally and does not show the banner again after accepting", async () => {
+  it("hydrates persisted consent from profile preferences and caches it locally", async () => {
+    loadProfilePreferences.mockResolvedValue({
+      cookie_consent: {
+        analytics: false,
+        essential: true,
+        functional: true,
+        timestamp: "2026-03-30T00:00:00.000Z",
+        version: "1.0",
+      },
+    });
+
+    const rendered = await renderBanner();
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(loadProfilePreferences).toHaveBeenCalledWith("user-1");
+    expect(localStorage.getItem("coparrent_cookie_consent")).toContain("\"version\":\"1.0\"");
+    expect(rendered.textContent).not.toContain("Cookie Preferences");
+  });
+
+  it("persists consent locally and to profile preferences after accepting", async () => {
     const rendered = await renderBanner();
 
     await act(async () => {
       vi.advanceTimersByTime(1600);
+      await Promise.resolve();
       await Promise.resolve();
     });
 
@@ -99,6 +153,17 @@ describe("CookieConsentBanner", () => {
     const stored = localStorage.getItem("coparrent_cookie_consent");
     expect(stored).not.toBeNull();
     expect(stored).toContain("\"analytics\":true");
+    expect(saveProfilePreferencesPatch).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        cookie_consent: expect.objectContaining({
+          analytics: true,
+          essential: true,
+          functional: true,
+          version: "1.0",
+        }),
+      }),
+    );
 
     act(() => {
       root?.unmount();

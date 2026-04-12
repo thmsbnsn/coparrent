@@ -1,13 +1,16 @@
 import { format } from "date-fns";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { MessageAttachments } from "@/components/messages/MessageAttachments";
 import { ThreadSystemEventCard } from "@/components/messages/ThreadSystemEventCard";
 import type { MessageTimelineItem } from "@/components/messages/threadTimeline";
 import { cn } from "@/lib/utils";
 import { resolveSenderName } from "@/lib/displayResolver";
+import type { MessageAttachment } from "@/hooks/useMessagingHub";
 
 interface ChatThreadProps {
   hasUserMessages: boolean;
+  onOpenAttachment: (attachment: MessageAttachment) => void;
   timelineItems: MessageTimelineItem[];
 }
 
@@ -25,7 +28,11 @@ const getInitials = (name?: string | null) => {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 };
 
-export const ChatThread = ({ hasUserMessages, timelineItems }: ChatThreadProps) => {
+export const ChatThread = ({
+  hasUserMessages,
+  onOpenAttachment,
+  timelineItems,
+}: ChatThreadProps) => {
   return (
     <div className="space-y-4 p-4">
       {timelineItems.map((item) => {
@@ -76,6 +83,11 @@ export const ChatThread = ({ hasUserMessages, timelineItems }: ChatThreadProps) 
                 {message.content}
               </div>
 
+              <MessageAttachments
+                attachments={message.attachments ?? []}
+                onOpenAttachment={onOpenAttachment}
+              />
+
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                 <span>{format(new Date(message.created_at), "MMM d, h:mm a")}</span>
                 {message.read_by && message.read_by.length > 0 && (
@@ -101,7 +113,7 @@ export const ChatThread = ({ hasUserMessages, timelineItems }: ChatThreadProps) 
         <div className="rounded-2xl border border-dashed border-border bg-[linear-gradient(180deg,hsl(var(--background)/0.88),hsl(var(--muted)/0.2))] p-5 text-center">
           <p className="text-sm font-medium">No messages on record yet</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            The first message you send here will begin the conversation record. Use the deliberate composer below when you are ready.
+            The first message you send here will start the conversation record.
           </p>
         </div>
       )}

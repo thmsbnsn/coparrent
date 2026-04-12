@@ -28,7 +28,9 @@ import { useState, useCallback, useEffect, useMemo, useRef, type ChangeEvent } f
 import { motion } from "framer-motion";
 import { 
   AlertTriangle,
+  ChevronRight,
   Copy,
+  HelpCircle,
   Info,
   MessageSquare, 
   Plus,
@@ -36,7 +38,6 @@ import {
   FileText,
   UsersRound,
   Search,
-  Menu,
   RefreshCw,
   Printer,
   MoreHorizontal,
@@ -50,8 +51,18 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   DropdownMenu,
@@ -60,7 +71,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useMessagingHub, MessageThread, FamilyMember } from "@/hooks/useMessagingHub";
+import {
+  useMessagingHub,
+  MessageThread,
+  FamilyMember,
+  MessageAttachment,
+} from "@/hooks/useMessagingHub";
 import { useTypingIndicator } from "@/hooks/useTypingIndicator";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -68,8 +84,10 @@ import { MessageSearch } from "@/components/messages/MessageSearch";
 import { UnreadBadge } from "@/components/messages/UnreadBadge";
 import { SwipeableTabs } from "@/components/messages/SwipeableTabs";
 import { EvidencePanel } from "@/components/messages/EvidencePanel";
-import { DeliberateComposer } from "@/components/messages/DeliberateComposer";
-import { ThreadSummaryBar } from "@/components/messages/ThreadSummaryBar";
+import {
+  DeliberateComposer,
+  type ComposerAttachmentDraft,
+} from "@/components/messages/DeliberateComposer";
 import { CourtViewToggle } from "@/components/messages/CourtViewToggle";
 import { PullToRefreshIndicator } from "@/components/messages/PullToRefreshIndicator";
 import { CallActionButtons } from "@/components/calls/CallActionButtons";
@@ -78,6 +96,7 @@ import { useCallSessions } from "@/hooks/useCallSessions";
 import { useChildAccount } from "@/hooks/useChildAccount";
 import { useProblemReport } from "@/components/feedback/useProblemReport";
 import { buildMessageTimeline } from "@/components/messages/threadTimeline";
+import { AssetViewerDialog, type AssetViewerItem } from "@/components/media/AssetViewerDialog";
 import type {
   MessagingThreadCanonicalExportPayload,
   MessagingThreadExportEvidencePackage,
@@ -90,6 +109,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { resolveSenderName } from "@/lib/displayResolver";
 import { useSearchParams } from "react-router-dom";
+import { useDocuments, type Document } from "@/hooks/useDocuments";
 
 /**
  * Role labels for attribution - RULE: No reliance on color alone
@@ -319,6 +339,47 @@ type ReceiptPanelPresentation = {
   headline: string;
   isAlert: boolean;
 };
+
+type PendingThreadAttachment = {
+  document?: Document;
+  file?: File;
+  id: string;
+  kind: "document" | "image" | "video";
+  name: string;
+  previewUrl?: string | null;
+  sourceLabel: string;
+};
+
+type FamilyMediaAssetRecord = {
+  file_name: string;
+  file_path: string;
+  file_type: string;
+  id: string;
+};
+
+type ViewerOrigin = "document-picker" | "documents-page" | "message-thread";
+
+const classifyAttachmentKind = (fileType: string): PendingThreadAttachment["kind"] =>
+  fileType.startsWith("image/")
+    ? "image"
+    : fileType.startsWith("video/")
+      ? "video"
+      : "document";
+
+const isMediaAttachmentKind = (kind: PendingThreadAttachment["kind"]) =>
+  kind === "image" || kind === "video";
+
+const buildAttachmentRecordSummary = (attachments: Array<Pick<PendingThreadAttachment, "name">>) => {
+  const names = attachments.map((attachment) => attachment.name).filter(Boolean);
+  if (names.length === 0) {
+    return "";
+  }
+
+  return `${names.length === 1 ? "Attachment" : "Attachments"}: ${names.join(", ")}`;
+};
+
+const formatFamilyTag = (familyId: string | null) =>
+  familyId ? `Family ${familyId.slice(0, 8)}` : "Family scope required";
 
 const formatVerificationModeLabel = (mode: MessagingThreadExportVerificationMode) => {
   switch (mode) {
@@ -580,6 +641,11 @@ const MessagingHubPage = () => {
   } = useCallSessions(activeThread?.id ?? null);
   const { isChildAccount } = useChildAccount();
   const { openReportModal } = useProblemReport();
+  const {
+    documents,
+    uploadDocument,
+    viewDocument,
+  } = useDocuments();
   
   const { setTyping, clearTyping } = useTypingIndicator(activeThread?.id || null);
   const { 
@@ -601,6 +667,7 @@ const MessagingHubPage = () => {
   const [startingCallType, setStartingCallType] = useState<"audio" | "video" | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
+  const [showDocumentPicker, setShowDocumentPicker] = useState(false);
   const [threadExports, setThreadExports] = useState<MessagingThreadExportSummary[]>([]);
   const [threadExportsLoading, setThreadExportsLoading] = useState(false);
   const [threadExportsError, setThreadExportsError] = useState<string | null>(null);
@@ -615,8 +682,13 @@ const MessagingHubPage = () => {
   const [downloadingArtifact, setDownloadingArtifact] = useState<"json_evidence_package" | "pdf" | null>(null);
   const [verificationLoading, setVerificationLoading] = useState(false);
   const [verificationResult, setVerificationResult] = useState<MessagingThreadExportVerifyResponse | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingThreadAttachment[]>([]);
+  const [viewerAsset, setViewerAsset] = useState<AssetViewerItem | null>(null);
+  const [viewerOrigin, setViewerOrigin] = useState<ViewerOrigin>("message-thread");
+  const [viewerSourceLabel, setViewerSourceLabel] = useState("Message thread");
   const receiptCopyResetRef = useRef<number | null>(null);
   const composerSectionRef = useRef<HTMLDivElement | null>(null);
+  const pendingAttachmentsRef = useRef<PendingThreadAttachment[]>([]);
   
   /**
    * Court View State
@@ -673,6 +745,10 @@ const MessagingHubPage = () => {
   });
 
   useEffect(() => bindEvents(refreshContainerRef.current), [bindEvents]);
+
+  useEffect(() => {
+    pendingAttachmentsRef.current = pendingAttachments;
+  }, [pendingAttachments]);
 
   // Initialize family channel
   useEffect(() => {
@@ -733,14 +809,195 @@ const MessagingHubPage = () => {
     appliedThreadParamRef.current = targetThreadId;
   }, [familyChannel, groupChats, searchParams, setActiveThread, threads]);
 
+  const uploadFamilyMediaAsset = useCallback(async (file: File) => {
+    if (!activeFamilyId || !profileId) {
+      toast.error("Select an active family before sharing media.");
+      return null;
+    }
+
+    const fileExt = file.name.includes(".")
+      ? file.name.split(".").pop()
+      : undefined;
+    const storageFileName = fileExt
+      ? `${crypto.randomUUID()}.${fileExt}`
+      : crypto.randomUUID();
+    const filePath = `${activeFamilyId}/${profileId}/${storageFileName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("family-media")
+      .upload(filePath, file);
+
+    if (uploadError) {
+      console.error("Failed to upload family media asset:", uploadError);
+      toast.error("A photo or video could not be prepared for this thread.");
+      return null;
+    }
+
+    const { data, error } = await supabase
+      .from("family_media_assets")
+      .insert({
+        family_id: activeFamilyId,
+        file_name: file.name,
+        file_path: filePath,
+        file_size: file.size,
+        file_type: file.type,
+        uploaded_by: profileId,
+      })
+      .select("file_name, file_path, file_type, id")
+      .single();
+
+    if (error) {
+      console.error("Failed to persist family media asset:", error);
+      await supabase.storage.from("family-media").remove([filePath]);
+      toast.error("A photo or video could not be prepared for this thread.");
+      return null;
+    }
+
+    return data as FamilyMediaAssetRecord;
+  }, [activeFamilyId, profileId]);
+
+  const closeViewerToSource = useCallback(() => {
+    if (viewerOrigin === "document-picker") {
+      setViewerAsset(null);
+      setViewerSourceLabel("Document Vault");
+      setViewerOrigin("message-thread");
+      setShowDocumentPicker(true);
+      return;
+    }
+
+    setViewerAsset(null);
+    setViewerSourceLabel(viewerOrigin === "documents-page" ? "Document Vault" : "Message thread");
+    setViewerOrigin("message-thread");
+  }, [viewerOrigin]);
+
   /**
    * Handle message send - deliberate action
    * RULE: Action discipline - no rapid-fire encouragement
    */
   const handleSend = useCallback(async (message: string) => {
     clearTyping();
-    await sendMessage(message);
-  }, [clearTyping, sendMessage]);
+    const trimmedMessage = message.trim();
+
+    if (pendingAttachments.length === 0) {
+      await sendMessage(trimmedMessage);
+      return;
+    }
+
+    if (!activeFamilyId) {
+      toast.error("Select an active family before sharing attachments.");
+      return;
+    }
+
+    if (isChildAccount) {
+      toast.error("Attachment sharing is only available on the parent messaging surface.");
+      return;
+    }
+
+    const persistedAttachments: Array<{
+      attachment_type: "document" | "image" | "video";
+      document_id: string | null;
+      media_asset_id: string | null;
+    }> = [];
+
+    for (const attachment of pendingAttachments) {
+      if (attachment.document) {
+        if (attachment.document.family_id !== activeFamilyId) {
+          toast.error("One or more selected files do not belong to the active family.");
+          return;
+        }
+        persistedAttachments.push({
+          attachment_type: "document",
+          document_id: attachment.document.id,
+          media_asset_id: null,
+        });
+        continue;
+      }
+
+      if (!attachment.file) {
+        continue;
+      }
+
+      if (isMediaAttachmentKind(attachment.kind)) {
+        const mediaAsset = await uploadFamilyMediaAsset(attachment.file);
+
+        if (!mediaAsset) {
+          toast.error("A photo or video could not be prepared for this thread. Nothing was sent.");
+          return;
+        }
+
+        persistedAttachments.push({
+          attachment_type: attachment.kind,
+          document_id: null,
+          media_asset_id: mediaAsset.id,
+        });
+        continue;
+      }
+
+      const uploadedDocument = await uploadDocument(
+        attachment.file,
+        attachment.name,
+        "Shared from a recorded messaging thread.",
+        "other",
+      );
+
+      if (!uploadedDocument) {
+        toast.error("A file could not be prepared for this thread. Nothing was sent.");
+        return;
+      }
+
+      persistedAttachments.push({
+        attachment_type: "document",
+        document_id: (uploadedDocument as Document).id,
+        media_asset_id: null,
+      });
+    }
+
+    const attachmentSummary = buildAttachmentRecordSummary(pendingAttachments);
+    const content = trimmedMessage
+      ? attachmentSummary
+        ? `${trimmedMessage}\n\n${attachmentSummary}`
+        : trimmedMessage
+      : attachmentSummary;
+    const insertedMessage = await sendMessage(content);
+
+    if (!insertedMessage?.id) {
+      return;
+    }
+
+    const { error } = await supabase.from("message_attachments").insert(
+      persistedAttachments.map((attachment) => ({
+        attachment_type: attachment.attachment_type,
+        document_id: attachment.document_id,
+        family_id: activeFamilyId,
+        media_asset_id: attachment.media_asset_id,
+        message_id: insertedMessage.id,
+        thread_id: insertedMessage.thread_id,
+      })),
+    );
+
+    if (error) {
+      console.error("Failed to persist message attachments:", error);
+      toast.error("The message was sent, but the attachments were not linked to the thread.");
+      return;
+    }
+
+    pendingAttachments.forEach((attachment) => {
+      if (attachment.previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(attachment.previewUrl);
+      }
+    });
+    setPendingAttachments([]);
+    await handleRefresh({ silent: true });
+  }, [
+    activeFamilyId,
+    clearTyping,
+    handleRefresh,
+    isChildAccount,
+    pendingAttachments,
+    sendMessage,
+    uploadDocument,
+    uploadFamilyMediaAsset,
+  ]);
 
   useEffect(() => {
     if (!incomingSession?.thread_id || activeThread?.id === incomingSession.thread_id) {
@@ -835,7 +1092,25 @@ const MessagingHubPage = () => {
     setUploadedPdfName(null);
     setVerificationResult(null);
     setCopiedReceiptField(null);
+    setPendingAttachments((current) => {
+      current.forEach((attachment) => {
+        if (attachment.previewUrl?.startsWith("blob:")) {
+          URL.revokeObjectURL(attachment.previewUrl);
+        }
+      });
+      return [];
+    });
   }, [activeThread?.id]);
+
+  useEffect(() => {
+    return () => {
+      pendingAttachmentsRef.current.forEach((attachment) => {
+        if (attachment.previewUrl?.startsWith("blob:")) {
+          URL.revokeObjectURL(attachment.previewUrl);
+        }
+      });
+    };
+  }, []);
 
   useEffect(() => () => {
     if (receiptCopyResetRef.current) {
@@ -1151,6 +1426,121 @@ const MessagingHubPage = () => {
            "Direct Message";
   };
 
+  const recentThreads = useMemo(() => {
+    const ordered = [
+      ...(familyChannel ? [familyChannel] : []),
+      ...groupChats,
+      ...threads,
+    ].sort((left, right) => {
+      const leftTimestamp = left.last_message?.created_at ?? left.created_at;
+      const rightTimestamp = right.last_message?.created_at ?? right.created_at;
+      return new Date(rightTimestamp).getTime() - new Date(leftTimestamp).getTime();
+    });
+
+    if (!activeThread) {
+      return ordered.slice(0, 4);
+    }
+
+    const nextThreads = [
+      activeThread,
+      ...ordered.filter((thread) => thread.id !== activeThread.id),
+    ];
+
+    return nextThreads.slice(0, 4);
+  }, [activeThread, familyChannel, groupChats, threads]);
+
+  const removePendingAttachment = useCallback((attachmentId: string) => {
+    setPendingAttachments((current) => {
+      const attachment = current.find((item) => item.id === attachmentId);
+      if (attachment?.previewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(attachment.previewUrl);
+      }
+
+      return current.filter((item) => item.id !== attachmentId);
+    });
+  }, []);
+
+  const queueFilesForComposer = useCallback((files: File[], sourceLabel: string) => {
+    if (!activeFamilyId) {
+      toast.error("Select an active family before adding attachments.");
+      return;
+    }
+
+    setPendingAttachments((current) => [
+      ...current,
+      ...files.map((file) => ({
+        file,
+        id: crypto.randomUUID(),
+        kind: classifyAttachmentKind(file.type),
+        name: file.name,
+        previewUrl: file.type.startsWith("image/") || file.type.startsWith("video/")
+          ? URL.createObjectURL(file)
+          : null,
+        sourceLabel,
+      })),
+    ]);
+  }, [activeFamilyId]);
+
+  const handleSelectVaultDocument = useCallback((document: Document) => {
+    if (!activeFamilyId || document.family_id !== activeFamilyId) {
+      toast.error("That document is not available in the active family.");
+      return;
+    }
+
+    setPendingAttachments((current) => {
+      if (current.some((attachment) => attachment.document?.id === document.id)) {
+        return current;
+      }
+
+      return [
+        ...current,
+        {
+          document,
+          id: crypto.randomUUID(),
+          kind: classifyAttachmentKind(document.file_type),
+          name: document.title || document.file_name,
+          sourceLabel: "From Document Vault",
+        },
+      ];
+    });
+    setShowDocumentPicker(false);
+  }, [activeFamilyId]);
+
+  const openViewerFromDocument = useCallback(async (
+    document: Document,
+    origin: ViewerOrigin,
+    sourceLabel: string,
+  ) => {
+    const preview = await viewDocument(document);
+    if (!preview) {
+      return;
+    }
+
+    if (origin === "document-picker") {
+      setShowDocumentPicker(false);
+    }
+
+    setViewerAsset(preview);
+    setViewerOrigin(origin);
+    setViewerSourceLabel(sourceLabel);
+  }, [viewDocument]);
+
+  const openViewerFromAttachment = useCallback((attachment: MessageAttachment) => {
+    if (!attachment.preview_url) {
+      toast.error("That attachment preview is not available right now.");
+      return;
+    }
+
+    setViewerAsset({
+      fileName: attachment.file_name,
+      fileType: attachment.file_type,
+      title: attachment.title,
+      url: attachment.preview_url,
+    });
+    setViewerOrigin("message-thread");
+    setViewerSourceLabel("Message thread");
+  }, []);
+
   // Thread selection handlers
   const toggleMemberSelection = (member: FamilyMember) => {
     if (member.profile_id === profileId) return;
@@ -1301,9 +1691,6 @@ const MessagingHubPage = () => {
         ? "Compose a group-thread update for the record..."
         : "Compose your message for the shared family record...";
   const currentThreadTitle = activeThread ? getThreadDisplayName(activeThread) : "Open a conversation";
-  const currentThreadDescription = activeThread
-    ? recordStateDescription
-    : "Start in the family channel or pick a direct or group thread.";
   const currentThreadTypeLabel = activeThread
     ? activeThread.thread_type === "family_channel"
       ? "Family channel"
@@ -1311,7 +1698,6 @@ const MessagingHubPage = () => {
         ? "Group thread"
         : "Direct thread"
     : "No thread selected";
-  const modeSummaryLabel = courtView ? "Legal view active" : "Chat view active";
   const threadShellClass = courtView
     ? "border-slate-300/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.99),rgba(245,245,244,0.97))] shadow-[0_28px_60px_-38px_rgba(120,113,108,0.3)]"
     : "border-border/70 bg-gradient-to-b from-card via-card to-card/90 shadow-[0_28px_60px_-38px_rgba(15,23,42,0.92)]";
@@ -1319,7 +1705,6 @@ const MessagingHubPage = () => {
     ? "border-slate-300/70 bg-[linear-gradient(180deg,rgba(250,250,249,0.98),rgba(244,244,245,0.94))]"
     : "border-border/80 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(15,23,42,0.7))]";
   const threadHeaderTextClass = courtView ? "text-slate-950" : "text-white";
-  const threadHeaderSubtleClass = courtView ? "text-slate-600" : "text-slate-300/70";
   const threadActionBarClass = courtView
     ? "border-slate-300/70 bg-white/92"
     : "border-white/10 bg-white/5";
@@ -1330,9 +1715,6 @@ const MessagingHubPage = () => {
   const evidenceShellClass = courtView
     ? "bg-[linear-gradient(180deg,rgba(161,161,170,0.08),transparent_28%)]"
     : "bg-[linear-gradient(180deg,rgba(15,23,42,0.06),transparent_35%)]";
-  const evidenceCardClass = courtView
-    ? "border-slate-300/70 bg-white/90"
-    : "border-border/70 bg-background/35";
   const evidencePanelClass = courtView
     ? "border-slate-300/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(245,245,244,0.96))]"
     : "border-border/70 bg-background/45";
@@ -1342,18 +1724,6 @@ const MessagingHubPage = () => {
   const composerCardClass = courtView
     ? "border-slate-300/70 bg-white/92"
     : "border-border/70 bg-background/55";
-  const evidenceSummaryLabel =
-    recordState === "loading_existing"
-      ? "Loading existing record"
-      : recordState === "loading_empty"
-        ? "Checking record"
-        : recordState === "error"
-          ? "Load blocked"
-          : recordState === "history_unavailable"
-            ? "History unavailable"
-            : recordState === "empty"
-              ? "Ready for first message"
-              : `${timelineItems.length} entr${timelineItems.length === 1 ? "y" : "ies"}`;
   const exportDisabled =
     !activeThread ||
     !activeFamilyId ||
@@ -1406,16 +1776,6 @@ const MessagingHubPage = () => {
         ? "border-primary/30 bg-[linear-gradient(135deg,rgba(45,212,191,0.14),rgba(15,23,42,0.16))] shadow-[0_20px_40px_-32px_rgba(15,23,42,0.9)]"
         : "border-transparent bg-background/30 hover:-translate-y-0.5 hover:border-border/70 hover:bg-background/55",
     );
-  const threadStatusBadgeClass = cn(
-    "border-white/10 bg-white/5 text-[10px] uppercase tracking-[0.14em] text-slate-200/70",
-    recordState === "loading_existing" || recordState === "loading_empty"
-      ? "border-primary/20 bg-primary/10 text-primary-foreground"
-      : recordState === "error" || recordState === "history_unavailable"
-        ? "border-warning/35 bg-warning/10 text-warning"
-        : recordState === "ready"
-          ? "border-accent/30 bg-accent/10 text-cyan-50"
-          : "border-white/10 bg-white/5 text-slate-200/70",
-  );
 
   // Sidebar content - thread navigation
   const renderSidebarContent = () => {
@@ -1454,7 +1814,7 @@ const MessagingHubPage = () => {
                   <p className="mt-1 truncate text-xs text-muted-foreground">
                     {getThreadPreviewText(
                       familyChannel,
-                      `${familyMembers.length} members • Official record`,
+                      `${familyMembers.length} family members`,
                     )}
                   </p>
                 </div>
@@ -1529,9 +1889,6 @@ const MessagingHubPage = () => {
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground/80">
-                    Group coordination
-                  </p>
                   <p className="mt-1 truncate text-xs text-muted-foreground">
                     {getThreadPreviewText(thread, `${thread.participants?.length || 0} members`)}
                   </p>
@@ -1547,7 +1904,7 @@ const MessagingHubPage = () => {
             <div className="rounded-[22px] border border-dashed border-border/70 bg-background/35 px-4 py-8 text-center">
               <p className="text-sm font-medium text-foreground">No group conversations yet</p>
               <p className="mt-2 text-sm text-muted-foreground">
-                Create a group only when the coordination is narrower than the family record.
+                Create a group when only part of the family needs the conversation.
               </p>
             </div>
           )}
@@ -1593,22 +1950,9 @@ const MessagingHubPage = () => {
                   </div>
                   <div className="mt-1 flex items-center gap-2">
                     {thread.other_participant?.role && getRoleBadge(thread.other_participant.role)}
-                    <span className={cn(
-                      "rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.14em]",
-                      thread.last_message
-                        ? "border-primary/15 bg-primary/10 text-primary"
-                        : "border-border/70 bg-background/45 text-muted-foreground",
-                    )}>
-                      {thread.last_message ? "Existing record" : "First message pending"}
-                    </span>
                   </div>
                   <p className="mt-1 truncate text-xs text-muted-foreground">
                     {getThreadPreviewText(thread, "No messages are on record yet")}
-                  </p>
-                  <p className="mt-1 text-[11px] text-muted-foreground/80">
-                    {thread.last_message
-                      ? "Recorded conversation already underway"
-                      : "The first message will begin this direct record"}
                   </p>
                 </div>
                 {showIndicator && getUnreadForThread(thread.id) > 0 && (
@@ -1635,16 +1979,12 @@ const MessagingHubPage = () => {
         <div className="border-b border-border/80 bg-background/45 px-4 py-4 backdrop-blur-sm">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Conversation lanes
-              </p>
+              <p className="text-sm font-semibold text-foreground">All conversations</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                Family channel is the permanent shared record. Use groups or direct messages for narrower coordination.
+                Switch threads, review receipts, and see the current record details here.
               </p>
             </div>
-            {showIndicator && totalUnread > 0 && (
-              <UnreadBadge count={totalUnread} />
-            )}
+            {showIndicator && totalUnread > 0 && <UnreadBadge count={totalUnread} />}
           </div>
         </div>
         <div className="px-3 pt-3">
@@ -1672,11 +2012,6 @@ const MessagingHubPage = () => {
             </TabsTrigger>
           </TabsList>
         </div>
-        <div className="px-3 pb-3 pt-2">
-          <p className="rounded-[18px] border border-border/70 bg-background/30 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
-            Family channel is the permanent shared record. Use groups or direct messages for narrower coordination.
-          </p>
-        </div>
 
         {isMobile ? (
           <SwipeableTabs
@@ -1690,224 +2025,215 @@ const MessagingHubPage = () => {
         ) : (
           renderTabContentInner()
         )}
+
+        <div className="border-t border-border/70 px-3 py-3">
+          {sidebarRecordPanel}
+          <div className="mt-3 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <span>Conversation lanes</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" className="rounded-full p-0.5 text-muted-foreground transition hover:text-foreground">
+                  <HelpCircle className="h-3.5 w-3.5" />
+                  <span className="sr-only">Conversation lane help</span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs leading-5">
+                Family channel is the shared family record. Groups and direct messages are narrower lanes when the conversation does not need the whole family.
+              </TooltipContent>
+            </Tooltip>
+          </div>
+        </div>
       </Tabs>
     );
   };
 
-  const exportReceiptPanel = activeThread ? (
-    <section className="no-print mt-4 rounded-[28px] border border-border/70 bg-[linear-gradient(180deg,hsl(var(--card)),hsl(var(--card)/0.92))] p-4 shadow-[0_24px_50px_-36px_rgba(15,23,42,0.9)] sm:p-5">
-      <div className="flex flex-col gap-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0 flex-1 space-y-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                Export Receipt
-              </p>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
-                  receiptPanelPresentation.badgeToneClass,
-                )}
-              >
-                {receiptPanelPresentation.isAlert ? (
-                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : receiptPanelPresentation.badgeLabel === "Verified" ? (
-                  <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                ) : (
-                  <Info className="h-3.5 w-3.5" aria-hidden="true" />
-                )}
-                {receiptPanelPresentation.badgeLabel}
-              </Badge>
-              {threadExportsLoading && (
-                <Badge variant="outline" className="rounded-full bg-background/70 text-muted-foreground">
-                  Loading records
-                </Badge>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-lg font-semibold text-foreground">
-                {latestThreadExport
-                  ? `Latest export receipt recorded ${format(new Date(latestThreadExport.exported_at), "MMM d, yyyy 'at' h:mm a")}`
-                  : receiptPanelPresentation.headline}
-              </p>
-              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-                {receiptPanelPresentation.description}
-              </p>
-              {latestThreadExport && (
-                <p className="text-xs text-muted-foreground">
-                  This export includes a tamper-evident receipt generated from server-authoritative records. You can verify whether the PDF still matches the stored receipt.
-                </p>
-              )}
-            </div>
-
-            {latestThreadExport && (
-              <div className="grid gap-3 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-border/70 bg-background/55 px-4 py-3 text-xs text-muted-foreground">
-                    <p className="font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                      Receipt ID
-                    </p>
-                    <code className="mt-3 block break-all text-[11px] leading-5 text-foreground">
-                      {latestThreadExport.id}
-                    </code>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="mt-3 h-8 rounded-lg px-2 text-[11px]"
-                      aria-label="Copy receipt ID"
-                      onClick={() =>
-                        void handleCopyReceiptValue(
-                          "Receipt ID",
-                          latestThreadExport.id,
-                          "receipt-id",
-                        )
-                      }
-                    >
-                      {copiedReceiptField === "receipt-id" ? (
-                        <>
-                          <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                          Copy receipt ID
-                        </>
-                      )}
-                    </Button>
-                  </div>
-
-                  <div className="rounded-2xl border border-border/70 bg-background/55 px-4 py-3 text-xs text-muted-foreground">
-                    <p className="font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                      Receipt details
-                    </p>
-                    <p className="mt-3 text-sm font-medium text-foreground">
-                      {latestThreadExport.record_count} record entr{latestThreadExport.record_count === 1 ? "y" : "ies"}
-                    </p>
-                    <div className="mt-3 space-y-1 text-[11px] leading-5 text-muted-foreground">
-                      <p>Raw result: {latestReceiptVerificationResult?.status ?? "unknown"}</p>
-                      {latestThreadExport.signing_key_id ? (
-                        <p>Signing key ID: {latestThreadExport.signing_key_id}</p>
-                      ) : null}
-                      {latestThreadExport.signature_algorithm ? (
-                        <p>Algorithm: {latestThreadExport.signature_algorithm}</p>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-border/70 bg-[linear-gradient(180deg,hsl(var(--background)/0.9),hsl(var(--muted)/0.2))] px-4 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        PDF Hash
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Full value is copyable. The stored receipt is what links this hash to the server-generated PDF artifact.
-                      </p>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-xl"
-                      aria-label="Copy PDF hash"
-                      disabled={!latestThreadExport.pdf_artifact_hash}
-                      onClick={() =>
-                        latestThreadExport.pdf_artifact_hash &&
-                        void handleCopyReceiptValue(
-                          "PDF hash",
-                          latestThreadExport.pdf_artifact_hash,
-                          "pdf-hash",
-                        )
-                      }
-                    >
-                      {copiedReceiptField === "pdf-hash" ? (
-                        <>
-                          <Check className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                          Copied
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-                          Copy hash
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                  <code className="mt-4 block break-all rounded-xl border border-border/70 bg-background/80 px-3 py-3 text-[12px] leading-6 text-foreground">
-                    {formatHashValue(latestThreadExport.pdf_artifact_hash)}
-                  </code>
-                </div>
-              </div>
-            )}
-
-            {latestThreadExport && (
-              <p className="text-xs text-muted-foreground">
-                The exact PDF bytes are generated on the server, hashed after rendering, and linked by the server-signed receipt. The PDF does not contain an embedded Acrobat-style digital signature.
-              </p>
-            )}
-            {threadExportsError && (
-              <p className="text-sm text-warning">{threadExportsError}</p>
-            )}
+  const sidebarRecordPanel = activeThread ? (
+    <div className="space-y-3">
+      <section className="rounded-[22px] border border-border/70 bg-background/35 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Thread details</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {messages.length} message{messages.length === 1 ? "" : "s"} in this record
+            </p>
           </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl"
-              disabled={!activeFamilyId || !latestThreadExport || downloadingArtifact === "pdf"}
-              onClick={() =>
-                void handleDownloadStoredArtifact("pdf", latestThreadExport?.id ?? null)
-              }
-            >
-              {downloadingArtifact === "pdf" ? "Downloading PDF..." : "Download PDF"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl"
-              disabled={!activeFamilyId || !latestThreadExport || downloadingArtifact === "json_evidence_package"}
-              onClick={() =>
-                void handleDownloadStoredArtifact(
-                  "json_evidence_package",
-                  latestThreadExport?.id ?? null,
-                )
-              }
-            >
-              {downloadingArtifact === "json_evidence_package"
-                ? "Downloading JSON..."
-                : "Download JSON package"}
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl"
-              disabled={!activeFamilyId || !activeThread || threadExportsLoading}
-              onClick={() => {
-                setSelectedExportId(latestThreadExport?.id ?? null);
-                setShowVerifyDialog(true);
-              }}
-            >
-              Verify receipt
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="rounded-xl"
-              disabled={!activeFamilyId || !activeThread || threadExportsLoading}
-              onClick={() => void loadThreadExports()}
-            >
-              Refresh records
-            </Button>
-          </div>
+          <Badge variant="outline" className="rounded-full bg-background/70 text-[11px]">
+            {recordStateLabel}
+          </Badge>
         </div>
-      </div>
-    </section>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Badge variant="outline" className="rounded-full bg-background/70 text-[11px]">
+            {formatFamilyTag(activeFamilyId)}
+          </Badge>
+          <Badge variant="outline" className="rounded-full bg-background/70 text-[11px]">
+            {currentThreadTypeLabel}
+          </Badge>
+          {showIndicator && getUnreadForThread(activeThread.id) > 0 ? (
+            <Badge variant="outline" className="rounded-full bg-background/70 text-[11px]">
+              {getUnreadForThread(activeThread.id)} unread
+            </Badge>
+          ) : null}
+        </div>
+      </section>
+
+      <section className="rounded-[22px] border border-border/70 bg-background/35 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            Export Receipt
+          </p>
+          <Badge
+            variant="outline"
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]",
+              receiptPanelPresentation.badgeToneClass,
+            )}
+          >
+            {receiptPanelPresentation.isAlert ? (
+              <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : receiptPanelPresentation.badgeLabel === "Verified" ? (
+              <Check className="h-3.5 w-3.5" aria-hidden="true" />
+            ) : (
+              <Info className="h-3.5 w-3.5" aria-hidden="true" />
+            )}
+            {receiptPanelPresentation.badgeLabel}
+          </Badge>
+        </div>
+
+        <p className="mt-3 text-sm font-medium text-foreground">
+          {latestThreadExport
+            ? `Latest export receipt recorded ${format(new Date(latestThreadExport.exported_at), "MMM d, yyyy 'at' h:mm a")}`
+            : receiptPanelPresentation.headline}
+        </p>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          {receiptPanelPresentation.description}
+        </p>
+
+        {latestThreadExport ? (
+          <div className="mt-3 space-y-3">
+            <div className="rounded-2xl border border-border/70 bg-background/60 px-3 py-3 text-xs text-muted-foreground">
+              <p className="font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Receipt ID
+              </p>
+              <code className="mt-2 block break-all text-[11px] leading-5 text-foreground">
+                {latestThreadExport.id}
+              </code>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="mt-2 h-8 rounded-lg px-2 text-[11px]"
+                aria-label="Copy receipt ID"
+                onClick={() =>
+                  void handleCopyReceiptValue(
+                    "Receipt ID",
+                    latestThreadExport.id,
+                    "receipt-id",
+                  )
+                }
+              >
+                {copiedReceiptField === "receipt-id" ? "Copied" : "Copy receipt ID"}
+              </Button>
+            </div>
+
+            <div className="rounded-2xl border border-border/70 bg-background/60 px-3 py-3 text-xs text-muted-foreground">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  PDF Hash
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-xl"
+                  aria-label="Copy PDF hash"
+                  disabled={!latestThreadExport.pdf_artifact_hash}
+                  onClick={() =>
+                    latestThreadExport.pdf_artifact_hash &&
+                    void handleCopyReceiptValue(
+                      "PDF hash",
+                      latestThreadExport.pdf_artifact_hash,
+                      "pdf-hash",
+                    )
+                  }
+                >
+                  {copiedReceiptField === "pdf-hash" ? "Copied" : "Copy hash"}
+                </Button>
+              </div>
+              <code className="mt-2 block break-all text-[11px] leading-5 text-foreground">
+                {formatHashValue(latestThreadExport.pdf_artifact_hash)}
+              </code>
+              <p className="mt-2 text-[11px] leading-5">
+                Raw result: {latestReceiptVerificationResult?.status ?? "unknown"}
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {threadExportsError ? (
+          <p className="mt-3 text-sm text-warning">{threadExportsError}</p>
+        ) : null}
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl"
+            disabled={exportDisabled}
+            onClick={() => void handleExportPDF()}
+          >
+            {exportingThread ? "Exporting..." : "Export evidence package"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl"
+            disabled={!activeFamilyId || !latestThreadExport || downloadingArtifact === "pdf"}
+            onClick={() =>
+              void handleDownloadStoredArtifact("pdf", latestThreadExport?.id ?? null)
+            }
+          >
+            {downloadingArtifact === "pdf" ? "Downloading PDF..." : "Download PDF"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl"
+            disabled={!activeFamilyId || !latestThreadExport || downloadingArtifact === "json_evidence_package"}
+            onClick={() =>
+              void handleDownloadStoredArtifact(
+                "json_evidence_package",
+                latestThreadExport?.id ?? null,
+              )
+            }
+          >
+            {downloadingArtifact === "json_evidence_package"
+              ? "Downloading JSON..."
+              : "Download JSON package"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl"
+            disabled={!activeFamilyId || !activeThread || threadExportsLoading}
+            onClick={() => {
+              setSelectedExportId(latestThreadExport?.id ?? null);
+              setShowVerifyDialog(true);
+            }}
+          >
+            Verify receipt
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-xl"
+            disabled={!activeFamilyId || !activeThread || threadExportsLoading}
+            onClick={() => void loadThreadExports()}
+          >
+            Refresh records
+          </Button>
+        </div>
+      </section>
+    </div>
   ) : null;
 
   if (loading) {
@@ -1961,68 +2287,21 @@ const MessagingHubPage = () => {
               <div className="absolute inset-x-0 top-0 h-px bg-white/10" />
               <div className="absolute left-8 top-6 h-32 w-32 rounded-full bg-primary/20 blur-3xl" />
               <div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-accent/15 blur-3xl" />
-              <div className="relative flex flex-col gap-5">
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-                  <div className="min-w-0 space-y-4">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <div className="eyebrow-pill-dark">
-                        Messaging record
-                      </div>
-                      <div className="status-pill-dark">
-                        {modeSummaryLabel}
-                      </div>
-                      {activeThread ? (
-                        <>
-                          <div className="status-pill-dark">
-                            {currentThreadTypeLabel}
-                          </div>
-                          <div className={cn("inline-flex rounded-full border px-3 py-1 text-xs font-medium", threadStatusBadgeClass)}>
-                            {recordStateLabel}
-                          </div>
-                        </>
-                      ) : null}
-                      {showIndicator && totalUnread > 0 && (
-                        <UnreadBadge count={totalUnread} size="md" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <h1 className="text-2xl font-semibold tracking-tight text-white md:text-3xl">
-                        Messaging Hub
-                      </h1>
-                      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-200/80">
-                        Review the current family record, switch into legal view when needed, and keep the conversation itself ahead of utility controls.
+              <div className="relative flex flex-col gap-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h1 className="text-2xl font-semibold tracking-tight text-white md:text-3xl">
+                      My Messages
+                    </h1>
+                    {activeThread ? (
+                      <p className="mt-2 truncate text-sm text-slate-200/80">
+                        {currentThreadTitle}
                       </p>
-                    </div>
-                    <div className="surface-hero-panel px-4 py-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-300/70">
-                        Selected conversation
-                      </p>
-                      <p className="mt-2 text-lg font-semibold text-white">{currentThreadTitle}</p>
-                      <p className="mt-1 text-sm leading-6 text-slate-300/76">
-                        {activeThread
-                          ? currentThreadDescription
-                          : "Choose the family channel, a group, or a direct thread to load the full record."}
-                      </p>
-                    </div>
+                    ) : null}
                   </div>
-                  {isMobile && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="relative w-fit rounded-2xl border-white/10 bg-white/5 px-4 text-white hover:bg-white/10"
-                      onClick={() => setShowSidebar(true)}
-                    >
-                      <Menu className="mr-2 h-4 w-4" />
-                      Conversations
-                      {showIndicator && totalUnread > 0 && (
-                        <UnreadBadge
-                          count={totalUnread}
-                          className="absolute -right-1.5 -top-1.5"
-                          size="sm"
-                        />
-                      )}
-                    </Button>
-                  )}
+                  {showIndicator && totalUnread > 0 ? (
+                    <UnreadBadge count={totalUnread} size="md" />
+                  ) : null}
                 </div>
 
                 {setupError && (
@@ -2316,13 +2595,13 @@ const MessagingHubPage = () => {
             <SheetContent side="left" className="w-[320px] border-r border-border/70 bg-card/95 p-0 backdrop-blur-sm">
               <SheetHeader className="border-b border-border/70 p-4">
                 <SheetTitle className="flex items-center gap-2 text-sm">
-                  Conversations
+                  All conversations
                   {showIndicator && totalUnread > 0 && (
                     <UnreadBadge count={totalUnread} size="md" />
                   )}
                 </SheetTitle>
                 <p className="text-sm text-muted-foreground">
-                  Use the family channel for the shared record, then branch into groups or direct messages only when the discussion is narrower.
+                  Switch threads, check receipts, and review the current record details.
                 </p>
               </SheetHeader>
               <div className="h-[calc(100%-60px)]">
@@ -2359,11 +2638,69 @@ const MessagingHubPage = () => {
             >
               {activeThread ? (
                 <>
-                  {/* Thread Header - Context for attribution */}
                   <div className={cn("border-b px-4 py-4 sm:px-5", threadHeaderClass)}>
                     <div className="flex flex-col gap-4">
-                      <div className="flex w-full items-start justify-between gap-3">
-                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+                      {isMobile && recentThreads.length > 1 ? (
+                        <div className="overflow-x-auto pb-1">
+                          <div className="flex min-w-max items-stretch px-1">
+                            {recentThreads.map((thread, index) => {
+                              const isActive = activeThread.id === thread.id;
+                              const threadName = getThreadDisplayName(thread);
+
+                              return (
+                                <button
+                                  key={thread.id}
+                                  type="button"
+                                  onClick={() => handleSelectThread(thread)}
+                                  className={cn(
+                                    "relative w-[132px] shrink-0 rounded-[24px] border px-3 py-3 text-left transition",
+                                    index === 0 ? "ml-0" : "-ml-5",
+                                    isActive
+                                      ? "z-30 border-primary/30 bg-background/90 shadow-[0_18px_36px_-26px_rgba(15,23,42,0.8)]"
+                                      : "border-white/10 bg-white/5 hover:bg-white/10",
+                                  )}
+                                  style={{
+                                    transform: `translateY(${Math.min(index, 3) * 4}px)`,
+                                    zIndex: recentThreads.length - index,
+                                  }}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 text-white">
+                                      {thread.thread_type === "family_channel" ? (
+                                        <Hash className="h-4 w-4" />
+                                      ) : thread.thread_type === "group_chat" ? (
+                                        <UsersRound className="h-4 w-4" />
+                                      ) : (
+                                        <span className="text-xs font-semibold">
+                                          {getInitials(
+                                            thread.other_participant?.full_name,
+                                            thread.other_participant?.email,
+                                          )}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="truncate text-sm font-medium text-white">
+                                        {threadName}
+                                      </p>
+                                      <p className="mt-1 truncate text-[11px] text-slate-300/75">
+                                        {thread.thread_type === "family_channel"
+                                          ? "Shared family lane"
+                                          : thread.thread_type === "group_chat"
+                                            ? "Group"
+                                            : "Direct"}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      <div className="flex w-full items-center justify-between gap-3">
+                        <div className="flex min-w-0 flex-1 items-center gap-3">
                           {activeThread.thread_type === "family_channel" ? (
                             <>
                               <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
@@ -2371,9 +2708,9 @@ const MessagingHubPage = () => {
                               </div>
                               <div className="min-w-0">
                                 <h2 className={cn("text-sm font-semibold", threadHeaderTextClass)}>Family Channel</h2>
-                                <p className={cn("text-[11px]", threadHeaderSubtleClass)}>
-                                  Official family communication record
-                                </p>
+                                <Badge variant="outline" className={cn("mt-2 rounded-full text-[11px]", threadActionBarClass, threadActionTextClass)}>
+                                  {formatFamilyTag(activeFamilyId)}
+                                </Badge>
                               </div>
                             </>
                           ) : activeThread.thread_type === "group_chat" ? (
@@ -2385,9 +2722,9 @@ const MessagingHubPage = () => {
                                 <h2 className={cn("truncate text-sm font-semibold", threadHeaderTextClass)}>
                                   {activeThread.name || "Group"}
                                 </h2>
-                                <p className={cn("truncate text-[11px]", threadHeaderSubtleClass)}>
-                                  {activeThread.participants?.map((p) => p.full_name || p.email).join(", ")}
-                                </p>
+                                <Badge variant="outline" className={cn("mt-2 rounded-full text-[11px]", threadActionBarClass, threadActionTextClass)}>
+                                  {formatFamilyTag(activeFamilyId)}
+                                </Badge>
                               </div>
                             </>
                           ) : (
@@ -2406,50 +2743,26 @@ const MessagingHubPage = () => {
                                    activeThread.other_participant?.email ||
                                    "Unknown"}
                                 </h2>
-                                <div className="mt-1 flex flex-wrap items-center gap-2">
-                                  {activeThread.other_participant?.role && (
-                                    getRoleBadge(activeThread.other_participant.role)
-                                  )}
-                                  <Badge
-                                    variant="outline"
-                                    className={cn(
-                                      "text-[10px] uppercase tracking-[0.14em]",
-                                      threadActionBarClass,
-                                      threadActionTextClass,
-                                    )}
-                                  >
-                                    Direct record
-                                  </Badge>
-                                  <Badge variant="outline" className={threadStatusBadgeClass}>
-                                    {recordStateLabel}
-                                  </Badge>
-                                </div>
+                                <Badge variant="outline" className={cn("mt-2 rounded-full text-[11px]", threadActionBarClass, threadActionTextClass)}>
+                                  {formatFamilyTag(activeFamilyId)}
+                                </Badge>
                               </div>
                             </>
                           )}
                         </div>
-                        {!isMobile && !isChildAccount && activeThread.thread_type === "direct_message" ? (
-                          <div className={cn("rounded-[18px] border p-1.5", threadActionBarClass)}>
-                            <CallActionButtons
-                              disabled={Boolean(currentThreadCall)}
-                              loading={Boolean(startingCallType)}
-                              onStartAudio={() => void handleStartCall("audio")}
-                              onStartVideo={() => void handleStartCall("video")}
-                            />
-                          </div>
-                        ) : null}
-                      </div>
-                      <div className={cn("flex flex-wrap items-center justify-between gap-3 rounded-[20px] border px-3 py-2.5", threadActionBarClass)}>
-                        <p className={cn("text-xs", threadActionTextClass)}>
-                          {recordState === "ready"
-                            ? `${messages.length} recorded message${messages.length === 1 ? "" : "s"} visible.`
-                            : recordState === "empty"
-                              ? "No messages on record yet."
-                              : recordStateDescription}
-                        </p>
                         <div className="flex flex-wrap items-center gap-2">
                           {!isChildAccount && activeThread.thread_type === "direct_message" ? (
                             <div className={cn("rounded-[18px] border p-1.5 md:hidden", threadActionBarClass)}>
+                              <CallActionButtons
+                                disabled={Boolean(currentThreadCall)}
+                                loading={Boolean(startingCallType)}
+                                onStartAudio={() => void handleStartCall("audio")}
+                                onStartVideo={() => void handleStartCall("video")}
+                              />
+                            </div>
+                          ) : null}
+                          {!isMobile && !isChildAccount && activeThread.thread_type === "direct_message" ? (
+                            <div className={cn("rounded-[18px] border p-1.5", threadActionBarClass)}>
                               <CallActionButtons
                                 disabled={Boolean(currentThreadCall)}
                                 loading={Boolean(startingCallType)}
@@ -2497,6 +2810,10 @@ const MessagingHubPage = () => {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-56">
+                              <DropdownMenuItem onClick={() => setShowSidebar(true)}>
+                                <MessageSquare className="mr-2 h-4 w-4" />
+                                Conversations
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => setShowSearch(true)}>
                                 <Search className="mr-2 h-4 w-4" />
                                 Search messages
@@ -2512,6 +2829,10 @@ const MessagingHubPage = () => {
                               >
                                 <FileText className="mr-2 h-4 w-4" />
                                 {exportingThread ? "Exporting evidence package..." : "Export evidence package"}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setShowSidebar(true)}>
+                                <Info className="mr-2 h-4 w-4" />
+                                Thread details
                               </DropdownMenuItem>
                               <DropdownMenuItem
                                 disabled={!activeThread || !activeFamilyId || threadExportsLoading}
@@ -2537,43 +2858,7 @@ const MessagingHubPage = () => {
                     </div>
                   </div>
 
-                  {/* 
-                    Thread Summary Bar
-                    RULE: Summary Before Scroll - users never scroll to understand urgency
-                  */}
-                  <ThreadSummaryBar
-                    unreadCount={showIndicator ? getUnreadForThread(activeThread.id) : 0}
-                    totalMessages={messages.length}
-                    recordState={recordState ?? undefined}
-                    threadType={activeThread.thread_type as "family_channel" | "group_chat" | "direct_message"}
-                    courtView={courtView}
-                    className={cn("no-print border-b px-5 py-3", courtView ? "border-slate-300/70" : "border-border/80")}
-                  />
-
-                  {/* 
-                    EVIDENCE SECTION - Message History
-                    RULE: Evidence and Action must be visually separated
-                  */}
                   <div className={cn("flex min-h-0 flex-1 flex-col px-3 py-3 sm:px-4", evidenceShellClass)}>
-                    <div className={cn("mb-3 flex flex-wrap items-center justify-between gap-3 rounded-[20px] border px-4 py-2.5", evidenceCardClass)}>
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                          Record timeline
-                        </p>
-                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                          {recordState === "loading_existing"
-                            ? "Existing conversation record is loading."
-                            : recordState === "loading_empty"
-                              ? "Checking this thread before the first message."
-                              : recordState === "history_unavailable" || recordState === "error"
-                                ? "Refresh before relying on the visible record."
-                                : "Messages, call activity, and system events remain in order."}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="rounded-full bg-background/70">
-                        {evidenceSummaryLabel}
-                      </Badge>
-                    </div>
                     {recordState === "loading_existing" || recordState === "loading_empty" ? (
                       <div className={cn("flex flex-1 items-center justify-center rounded-[26px] border px-6 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]", evidencePanelClass)}>
                         <div className="max-w-sm">
@@ -2620,6 +2905,7 @@ const MessagingHubPage = () => {
                       </div>
                     ) : (
                       <EvidencePanel
+                        onOpenAttachment={openViewerFromAttachment}
                         timelineItems={timelineItems}
                         viewMode={viewMode}
                         className={cn("flex-1 rounded-[26px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]", evidencePanelClass)}
@@ -2627,33 +2913,36 @@ const MessagingHubPage = () => {
                     )}
                   </div>
 
-                  {/* 
-                    ACTION SECTION - Deliberate Composer
-                    RULE: Feel deliberate, not impulsive
-                    RULE: Visually separate drafting from history
-                   */}
                   <div
                     ref={composerSectionRef}
                     className={cn("no-print border-t px-3 pb-3 pt-3 sm:px-4", composerSectionClass)}
                   >
-                    <div className={cn("mb-3 rounded-[20px] border px-4 py-2.5", evidenceCardClass)}>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                        Deliberate composer
-                      </p>
-                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                        {composerDisabled
-                          ? composerHelperText
-                          : "Draft carefully. Sending places the message into the permanent family record."}
-                      </p>
-                    </div>
                     <div className={cn("rounded-[26px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]", composerCardClass)}>
                       <DeliberateComposer
+                        attachments={pendingAttachments.map((attachment) => ({
+                          id: attachment.id,
+                          kind: attachment.kind,
+                          name: attachment.name,
+                          previewUrl: attachment.previewUrl,
+                          sourceLabel: attachment.sourceLabel,
+                        }) satisfies ComposerAttachmentDraft)}
                         disabled={composerDisabled}
                         helperText={composerHelperText}
                         onSend={handleSend}
+                        onOpenDocumentVault={() => setShowDocumentPicker(true)}
+                        onRemoveAttachment={removePendingAttachment}
+                        onSelectMediaFiles={(files) => queueFilesForComposer(files, "From device photos")}
+                        onSelectUploadFiles={(files) => queueFilesForComposer(files, "Uploaded file")}
                         onTyping={setTyping}
                         placeholder={composerPlaceholder}
+                        showAttachmentTools={!isChildAccount}
                       />
+                    </div>
+                    <div className="mt-3 rounded-[20px] border border-border/70 bg-background/35 px-4 py-3">
+                      <p className="text-sm font-medium text-foreground">Messages stay ordered for this family.</p>
+                      <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        Keep the thread itself focused. Use the menu for receipts, search, and record details.
+                      </p>
                     </div>
                   </div>
                 </>
@@ -2693,7 +2982,75 @@ const MessagingHubPage = () => {
             </motion.div>
           </div>
 
-          {exportReceiptPanel}
+          <AssetViewerDialog
+            asset={viewerAsset}
+            open={Boolean(viewerAsset)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setViewerAsset(null);
+              }
+            }}
+            onBack={closeViewerToSource}
+            sourceLabel={viewerSourceLabel}
+          />
+
+          <Dialog open={showDocumentPicker} onOpenChange={setShowDocumentPicker}>
+            <DialogContent className="mx-4 max-w-lg md:mx-auto">
+              <DialogHeader>
+                <DialogTitle>Attach from Document Vault</DialogTitle>
+              </DialogHeader>
+              {!activeFamilyId ? (
+                <div className="rounded-2xl border border-amber-300/30 bg-amber-500/10 px-4 py-4 text-sm text-amber-50">
+                  Select an active family before attaching a stored document.
+                </div>
+              ) : documents.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-border/70 bg-background/35 px-4 py-8 text-center">
+                  <p className="text-sm font-medium text-foreground">No documents available</p>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Upload a family document first, then attach it from here.
+                  </p>
+                </div>
+              ) : (
+                <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+                  {documents.map((document) => (
+                    <div
+                      key={document.id}
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/35 px-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-foreground">
+                          {document.title}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {document.file_name}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => void openViewerFromDocument(document, "document-picker", "Document Vault")}
+                        >
+                          Preview
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => handleSelectVaultDocument(document)}
+                        >
+                          Attach
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
 
           {/* New Conversation Modal */}
           <Dialog open={showNewDM && !showGroupConfirm} onOpenChange={(open) => {

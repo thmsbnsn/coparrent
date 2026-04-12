@@ -1,12 +1,15 @@
 import { Eye, EyeOff } from "lucide-react";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { MessageAttachments } from "@/components/messages/MessageAttachments";
 import { ThreadSystemEventCard } from "@/components/messages/ThreadSystemEventCard";
 import type { MessageTimelineItem } from "@/components/messages/threadTimeline";
 import { resolveSenderName } from "@/lib/displayResolver";
+import type { MessageAttachment } from "@/hooks/useMessagingHub";
 
 interface CourtThreadProps {
   hasUserMessages: boolean;
+  onOpenAttachment: (attachment: MessageAttachment) => void;
   timelineItems: MessageTimelineItem[];
 }
 
@@ -24,6 +27,7 @@ const formatReadSummary = (message: MessageTimelineItem & { kind: "message" }) =
 
 export const CourtThread = ({
   hasUserMessages,
+  onOpenAttachment,
   timelineItems,
 }: CourtThreadProps) => {
   return (
@@ -84,6 +88,13 @@ export const CourtThread = ({
             <div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-foreground">
               {message.content}
             </div>
+
+            <div className="mt-3">
+              <MessageAttachments
+                attachments={message.attachments ?? []}
+                onOpenAttachment={onOpenAttachment}
+              />
+            </div>
           </article>
         );
       })}
@@ -92,7 +103,7 @@ export const CourtThread = ({
         <div className="rounded-xl border border-dashed border-border bg-[linear-gradient(180deg,hsl(var(--background)/0.9),hsl(var(--muted)/0.2))] p-5 text-center">
           <p className="text-sm font-medium">No messages on record yet</p>
           <p className="mt-2 text-sm text-muted-foreground">
-            This record is open but still empty. Send the first message when you are ready to begin the documented conversation.
+            This record is open but still empty. Send the first message when you are ready.
           </p>
         </div>
       )}

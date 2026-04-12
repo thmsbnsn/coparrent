@@ -8,7 +8,7 @@
  * LAW 2: Stats summary (total, legal, medical, school) before document grid
  * LAW 6: Court Export is first-class - accessible from header actions
  */
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   FileText,
@@ -31,13 +31,14 @@ import {
 } from '@/components/ui/select';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 import { FeatureErrorBoundary } from '@/components/ui/FeatureErrorBoundary';
-import { useDocuments, DOCUMENT_CATEGORIES } from '@/hooks/useDocuments';
+import { useDocuments, DOCUMENT_CATEGORIES, type Document } from '@/hooks/useDocuments';
 import { DocumentUploadDialog } from '@/components/documents/DocumentUploadDialog';
 import { DocumentCard } from '@/components/documents/DocumentCard';
 import { CourtExportDialog } from '@/components/documents/CourtExportDialog';
 import { ViewOnlyBadge } from '@/components/ui/ViewOnlyBadge';
 import { PermissionButton } from '@/components/ui/PermissionButton';
 import { usePermissions } from '@/hooks/usePermissions';
+import { AssetViewerDialog, type AssetViewerItem } from '@/components/media/AssetViewerDialog';
 
 const DocumentsPageContent = () => {
   const {
@@ -57,6 +58,16 @@ const DocumentsPageContent = () => {
   const [showCourtExportDialog, setShowCourtExportDialog] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [viewerAsset, setViewerAsset] = useState<AssetViewerItem | null>(null);
+
+  const handleViewDocument = useCallback(async (document: Document) => {
+    const preview = await viewDocument(document);
+    if (!preview) {
+      return;
+    }
+
+    setViewerAsset(preview);
+  }, [viewDocument]);
 
   const filteredDocuments = documents.filter((doc) => {
     const matchesSearch =
@@ -178,7 +189,7 @@ const DocumentsPageContent = () => {
               <DocumentCard
                 key={doc.id}
                 document={doc}
-                onView={viewDocument}
+                onView={handleViewDocument}
                 onDownload={downloadDocument}
                 onDelete={deleteDocument}
                 getAccessLogs={getAccessLogs}
@@ -260,6 +271,18 @@ const DocumentsPageContent = () => {
       <CourtExportDialog
         open={showCourtExportDialog}
         onOpenChange={setShowCourtExportDialog}
+      />
+
+      <AssetViewerDialog
+        asset={viewerAsset}
+        open={Boolean(viewerAsset)}
+        onBack={() => setViewerAsset(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setViewerAsset(null);
+          }
+        }}
+        sourceLabel="Document Vault"
       />
     </DashboardLayout>
   );

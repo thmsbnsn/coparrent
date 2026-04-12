@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  loadProfilePreferences,
+  saveProfilePreferencesPatch,
+} from "@/lib/profilePreferences";
 
 const STORAGE_KEY = "coparrent_onboarding_dismissed";
 
@@ -25,7 +28,7 @@ export const ONBOARDING_TOOLTIPS: OnboardingTooltip[] = [
   {
     id: "messages",
     targetId: "nav-messages",
-    title: "Messaging Hub",
+    title: "My Messages",
     description: "Communicate with your co-parent in a documented, respectful way. All messages are saved.",
     position: "right",
     order: 2,
@@ -93,28 +96,23 @@ export function useOnboardingTooltips() {
       // If user is logged in, sync with database
       if (user) {
         try {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("preferences")
-            .eq("user_id", user.id)
-            .maybeSingle();
+          const prefs = await loadProfilePreferences(user.id);
+          const onboarding = prefs.onboarding_tooltips as OnboardingState | undefined;
 
-          if (profile?.preferences) {
-            const prefs = profile.preferences as Record<string, unknown>;
-            const onboarding = prefs.onboarding_tooltips as OnboardingState | undefined;
-            
-            if (onboarding) {
-              setDismissedTooltips(onboarding.dismissed || []);
-              setIsOnboardingComplete(!!onboarding.completedAt);
-              // Sync to localStorage
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(onboarding));
-            } else {
-              // New user - show onboarding
-              setIsOnboardingComplete(false);
-              setDismissedTooltips([]);
-            }
+          if (onboarding) {
+            setDismissedTooltips(onboarding.dismissed || []);
+            setIsOnboardingComplete(!!onboarding.completedAt);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(onboarding));
+          } else if (localParsed) {
+            setDismissedTooltips(localParsed.dismissed || []);
+            setIsOnboardingComplete(!!localParsed.completedAt);
+            void saveProfilePreferencesPatch(user.id, {
+              onboarding_tooltips: {
+                dismissed: localParsed.dismissed || [],
+                ...(localParsed.completedAt ? { completedAt: localParsed.completedAt } : {}),
+              },
+            });
           } else {
-            // New user - show onboarding
             setIsOnboardingComplete(false);
             setDismissedTooltips([]);
           }
@@ -135,15 +133,6 @@ export function useOnboardingTooltips() {
 
     if (user) {
       try {
-        // Get current preferences
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("preferences")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        const currentPrefs = (profile?.preferences as Record<string, unknown>) || {};
-        
         // Convert state to JSON-compatible format
         const onboardingState: Record<string, unknown> = {
           dismissed: state.dismissed,
@@ -152,15 +141,9 @@ export function useOnboardingTooltips() {
           onboardingState.completedAt = state.completedAt;
         }
         
-        await supabase
-          .from("profiles")
-          .update({
-            preferences: JSON.parse(JSON.stringify({
-              ...currentPrefs,
-              onboarding_tooltips: onboardingState,
-            })),
-          })
-          .eq("user_id", user.id);
+        await saveProfilePreferencesPatch(user.id, {
+          onboarding_tooltips: onboardingState,
+        });
       } catch (error) {
         console.error("Failed to persist onboarding state:", error);
       }

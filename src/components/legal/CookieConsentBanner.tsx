@@ -12,6 +12,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  loadProfilePreferences,
+  saveProfilePreferencesPatch,
+} from "@/lib/profilePreferences";
 
 const CONSENT_KEY = "coparrent_cookie_consent";
 const CONSENT_VERSION = "1.0";
@@ -33,31 +38,68 @@ const defaultPreferences: CookiePreferences = {
 };
 
 export const CookieConsentBanner = () => {
+  const { user } = useAuth();
   const [showBanner, setShowBanner] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [preferences, setPreferences] = useState<CookiePreferences>(defaultPreferences);
 
   useEffect(() => {
-    const stored = localStorage.getItem(CONSENT_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored) as CookiePreferences;
-        // Show banner again if consent version changed
-        if (parsed.version !== CONSENT_VERSION) {
+    let isActive = true;
+    let timer: number | null = null;
+
+    const loadConsent = async () => {
+      const stored = localStorage.getItem(CONSENT_KEY);
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as CookiePreferences;
+          if (!isActive) {
+            return;
+          }
+
+          setPreferences(parsed);
+          setShowBanner(parsed.version !== CONSENT_VERSION);
+          return;
+        } catch {
+          localStorage.removeItem(CONSENT_KEY);
+        }
+      }
+
+      if (user) {
+        try {
+          const profilePreferences = await loadProfilePreferences(user.id);
+          const profileConsent = profilePreferences.cookie_consent as
+            | CookiePreferences
+            | undefined;
+
+          if (profileConsent && isActive) {
+            localStorage.setItem(CONSENT_KEY, JSON.stringify(profileConsent));
+            setPreferences(profileConsent);
+            setShowBanner(profileConsent.version !== CONSENT_VERSION);
+            return;
+          }
+        } catch (error) {
+          console.error("Failed to load cookie consent preferences:", error);
+        }
+      }
+
+      timer = window.setTimeout(() => {
+        if (isActive) {
           setShowBanner(true);
         }
-        setPreferences(parsed);
-      } catch {
-        setShowBanner(true);
-      }
-    } else {
-      // Small delay before showing to not interrupt initial load
-      const timer = setTimeout(() => setShowBanner(true), 1500);
-      return () => clearTimeout(timer);
-    }
-  }, []);
+      }, 1500);
+    };
 
-  const savePreferences = (prefs: CookiePreferences) => {
+    void loadConsent();
+
+    return () => {
+      isActive = false;
+      if (timer) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [user]);
+
+  const savePreferences = async (prefs: CookiePreferences) => {
     const updated = {
       ...prefs,
       version: CONSENT_VERSION,
@@ -67,10 +109,22 @@ export const CookieConsentBanner = () => {
     setPreferences(updated);
     setShowBanner(false);
     setShowSettings(false);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      await saveProfilePreferencesPatch(user.id, {
+        cookie_consent: updated,
+      });
+    } catch (error) {
+      console.error("Failed to persist cookie consent preferences:", error);
+    }
   };
 
   const acceptAll = () => {
-    savePreferences({
+    void savePreferences({
       ...defaultPreferences,
       functional: true,
       analytics: true,
@@ -78,7 +132,7 @@ export const CookieConsentBanner = () => {
   };
 
   const acceptEssential = () => {
-    savePreferences({
+    void savePreferences({
       ...defaultPreferences,
       functional: false,
       analytics: false,
@@ -86,7 +140,7 @@ export const CookieConsentBanner = () => {
   };
 
   const saveCustom = () => {
-    savePreferences(preferences);
+    void savePreferences(preferences);
   };
 
   return (
@@ -245,18 +299,58 @@ export const CookieConsentBanner = () => {
 
 // Hook to check cookie consent status
 export const useCookieConsent = () => {
+  const { user } = useAuth();
   const [consent, setConsent] = useState<CookiePreferences | null>(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem(CONSENT_KEY);
-    if (stored) {
+    let isActive = true;
+
+    const loadConsent = async () => {
+      const stored = localStorage.getItem(CONSENT_KEY);
+      if (stored) {
+        try {
+          if (isActive) {
+            setConsent(JSON.parse(stored));
+          }
+          return;
+        } catch {
+          localStorage.removeItem(CONSENT_KEY);
+        }
+      }
+
+      if (!user) {
+        if (isActive) {
+          setConsent(null);
+        }
+        return;
+      }
+
       try {
-        setConsent(JSON.parse(stored));
-      } catch {
+        const profilePreferences = await loadProfilePreferences(user.id);
+        const profileConsent = profilePreferences.cookie_consent as
+          | CookiePreferences
+          | undefined;
+
+        if (profileConsent && isActive) {
+          localStorage.setItem(CONSENT_KEY, JSON.stringify(profileConsent));
+          setConsent(profileConsent);
+          return;
+        }
+      } catch (error) {
+        console.error("Failed to load cookie consent hook state:", error);
+      }
+
+      if (isActive) {
         setConsent(null);
       }
-    }
-  }, []);
+    };
+
+    void loadConsent();
+
+    return () => {
+      isActive = false;
+    };
+  }, [user]);
 
   return {
     hasConsent: consent !== null,

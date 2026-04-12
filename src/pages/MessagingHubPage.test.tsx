@@ -97,6 +97,28 @@ const messagingMockState = vi.hoisted(() => ({
   swipeableTabsMounts: 0,
 }));
 
+const documentsMockState = vi.hoisted(() => ({
+  documents: [
+    {
+      category: "legal",
+      child_id: null,
+      created_at: "2026-03-28T09:00:00.000Z",
+      description: null,
+      family_id: "family-1",
+      file_name: "family-plan.pdf",
+      file_path: "user-1/family-plan.pdf",
+      file_size: 2048,
+      file_type: "application/pdf",
+      id: "document-family-plan",
+      title: "Family Plan",
+      updated_at: "2026-03-28T09:00:00.000Z",
+      uploaded_by: "my-profile",
+    },
+  ],
+  uploadDocument: vi.fn(),
+  viewDocument: vi.fn(),
+}));
+
 const supabaseMockState = vi.hoisted(() => {
   const listExportRecord = {
     artifact_hash: "artifact-hash-123",
@@ -214,7 +236,18 @@ const supabaseMockState = vi.hoisted(() => {
   };
 
   return {
+    familyMediaAssets: [] as Array<{
+      family_id: string;
+      file_name: string;
+      file_path: string;
+      file_size: number;
+      file_type: string;
+      id: string;
+      uploaded_by: string;
+    }>,
+    messageAttachmentInsertCalls: [] as Array<Array<Record<string, unknown>>>,
     exportList: [listExportRecord],
+    storageUploads: [] as Array<{ bucket: string; fileName: string; filePath: string }>,
     verificationOverride: null as
       | {
           data: unknown;
@@ -457,6 +490,79 @@ const supabaseMockState = vi.hoisted(() => {
   };
 });
 
+vi.mock("@/integrations-supabase/client", () => ({
+  supabase: {
+    from: (table: string) => {
+      if (table === "family_media_assets") {
+        let pendingInsert: Record<string, unknown> | null = null;
+
+        const builder = {
+          insert: (payload: Record<string, unknown>) => {
+            pendingInsert = payload;
+            return builder;
+          },
+          select: () => builder,
+          single: async () => {
+            const row = {
+              family_id: pendingInsert?.family_id as string,
+              file_name: pendingInsert?.file_name as string,
+              file_path: pendingInsert?.file_path as string,
+              file_size: pendingInsert?.file_size as number,
+              file_type: pendingInsert?.file_type as string,
+              id: `media-asset-${supabaseMockState.familyMediaAssets.length + 1}`,
+              uploaded_by: pendingInsert?.uploaded_by as string,
+            };
+            supabaseMockState.familyMediaAssets.push(row);
+            return {
+              data: {
+                file_name: row.file_name,
+                file_path: row.file_path,
+                file_type: row.file_type,
+                id: row.id,
+              },
+              error: null,
+            };
+          },
+        };
+
+        return builder;
+      }
+
+      if (table === "message_attachments") {
+        return {
+          insert: async (payload: Array<Record<string, unknown>>) => {
+            supabaseMockState.messageAttachmentInsertCalls.push(
+              JSON.parse(JSON.stringify(payload)) as Array<Record<string, unknown>>,
+            );
+            return { error: null };
+          },
+        };
+      }
+
+      throw new Error(`Unexpected table access in MessagingHubPage test: ${table}`);
+    },
+    functions: {
+      invoke: supabaseMockState.invoke,
+    },
+    storage: {
+      from: (bucket: string) => ({
+        remove: async () => ({ data: null, error: null }),
+        upload: async (filePath: string, file: File) => {
+          supabaseMockState.storageUploads.push({
+            bucket,
+            fileName: file.name,
+            filePath,
+          });
+          return {
+            data: { path: filePath },
+            error: null,
+          };
+        },
+      }),
+    },
+  },
+}));
+
 vi.mock("framer-motion", () => ({
   motion: {
     div: ({ children, ...props }: { children?: ReactNode }) => <div {...props}>{children}</div>,
@@ -468,7 +574,10 @@ vi.mock("@/components/dashboard/DashboardLayout", () => ({
 }));
 
 vi.mock("@/components/ui/tooltip", () => ({
+  Tooltip: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   TooltipProvider: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children?: ReactNode }) => <>{children}</>,
 }));
 
 vi.mock("@/components/ui/dialog", () => ({
@@ -581,13 +690,25 @@ vi.mock("@/components/messages/EvidencePanel", () => ({
 
 vi.mock("@/components/messages/DeliberateComposer", () => ({
   DeliberateComposer: ({
+    attachments,
     disabled,
     helperText,
+    onOpenDocumentVault,
+    onSelectMediaFiles,
+    onSelectUploadFiles,
+    onSend,
     placeholder,
+    showAttachmentTools,
   }: {
+    attachments?: Array<{ name: string }>;
     disabled?: boolean;
     helperText?: string;
+    onOpenDocumentVault?: () => void;
+    onSelectMediaFiles?: (files: File[]) => void;
+    onSelectUploadFiles?: (files: File[]) => void;
+    onSend?: (message: string) => Promise<void> | void;
     placeholder?: string;
+    showAttachmentTools?: boolean;
   }) => (
     <div
       data-disabled={String(Boolean(disabled))}
@@ -595,6 +716,37 @@ vi.mock("@/components/messages/DeliberateComposer", () => ({
     >
       {placeholder}
       {helperText ?? ""}
+      <div data-testid="composer-attachments">{attachments?.map((attachment) => attachment.name).join(",")}</div>
+      {showAttachmentTools ? (
+        <>
+          <button onClick={onOpenDocumentVault} type="button">
+            open-vault
+          </button>
+          <button
+            onClick={() =>
+              onSelectMediaFiles?.([
+                new File(["image"], "pickup-photo.png", { type: "image/png" }),
+              ])
+            }
+            type="button"
+          >
+            attach-media
+          </button>
+          <button
+            onClick={() =>
+              onSelectUploadFiles?.([
+                new File(["doc"], "schedule-note.pdf", { type: "application/pdf" }),
+              ])
+            }
+            type="button"
+          >
+            attach-upload
+          </button>
+        </>
+      ) : null}
+      <button onClick={() => void onSend?.("Message from test")} type="button">
+        send-message
+      </button>
     </div>
   ),
 }));
@@ -605,6 +757,14 @@ vi.mock("@/components/messages/CourtViewToggle", () => ({
       {enabled ? "court-on" : "court-off"}
     </button>
   ),
+}));
+
+vi.mock("@/hooks/useDocuments", () => ({
+  useDocuments: () => ({
+    documents: documentsMockState.documents,
+    uploadDocument: documentsMockState.uploadDocument,
+    viewDocument: documentsMockState.viewDocument,
+  }),
 }));
 
 vi.mock("@/components/messages/PullToRefreshIndicator", () => ({
@@ -658,14 +818,6 @@ vi.mock("@/hooks/useChildAccount", () => ({
   }),
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    functions: {
-      invoke: supabaseMockState.invoke,
-    },
-  },
-}));
-
 vi.mock("@/components/feedback/useProblemReport", () => ({
   useProblemReport: () => ({
     openReportModal: vi.fn(),
@@ -686,7 +838,10 @@ vi.mock("@/hooks/useMessagingHub", async () => {
     loading: false,
     profileId: "my-profile",
     refreshActiveThread: vi.fn(async () => undefined),
-    sendMessage: vi.fn(async () => true),
+    sendMessage: vi.fn(async () => ({
+      id: "inserted-message-1",
+      thread_id: messagingMockState.familyChannel.id,
+    })),
     setupError: null,
     systemEvents: [],
     threads: [messagingMockState.directThread],
@@ -806,9 +961,51 @@ describe("MessagingHubPage", () => {
     messagingMockState.mockScenario.mode = "interactive";
     messagingMockState.viewport.isMobile = false;
     messagingMockState.swipeableTabsMounts = 0;
+    documentsMockState.documents = [
+      {
+        category: "legal",
+        child_id: null,
+        created_at: "2026-03-28T09:00:00.000Z",
+        description: null,
+        family_id: "family-1",
+        file_name: "family-plan.pdf",
+        file_path: "user-1/family-plan.pdf",
+        file_size: 2048,
+        file_type: "application/pdf",
+        id: "document-family-plan",
+        title: "Family Plan",
+        updated_at: "2026-03-28T09:00:00.000Z",
+        uploaded_by: "my-profile",
+      },
+    ];
+    documentsMockState.uploadDocument.mockReset();
+    documentsMockState.uploadDocument.mockImplementation(async (file: File, title?: string) => ({
+      category: "other",
+      child_id: null,
+      created_at: "2026-03-30T11:00:00.000Z",
+      description: null,
+      family_id: "family-1",
+      file_name: file.name,
+      file_path: `user-1/${file.name}`,
+      file_size: file.size,
+      file_type: file.type,
+      id: `uploaded-document-${file.name}`,
+      title: title ?? file.name,
+      updated_at: "2026-03-30T11:00:00.000Z",
+      uploaded_by: "my-profile",
+    }));
+    documentsMockState.viewDocument.mockReset();
+    documentsMockState.viewDocument.mockImplementation(async (document: { file_name: string; file_type: string; title: string }) => ({
+      fileName: document.file_name,
+      fileType: document.file_type,
+      title: document.title,
+      url: "https://example.test/document-preview",
+    }));
     scrollIntoViewMock.mockReset();
     requestAnimationFrameMock.mockClear();
     cancelAnimationFrameMock.mockClear();
+    supabaseMockState.familyMediaAssets = [];
+    supabaseMockState.messageAttachmentInsertCalls = [];
     supabaseMockState.exportList = [
       {
         artifact_hash: "artifact-hash-123",
@@ -839,6 +1036,7 @@ describe("MessagingHubPage", () => {
         total_system_events: 1,
       },
     ];
+    supabaseMockState.storageUploads = [];
     supabaseMockState.verificationOverride = null;
     supabaseMockState.invoke.mockClear();
     clipboardWriteText.mockClear();
@@ -905,8 +1103,19 @@ describe("MessagingHubPage", () => {
       button.textContent?.includes(text),
     ) as HTMLButtonElement | undefined;
 
+  const openSidebar = async (rendered: HTMLDivElement) => {
+    const conversationsButton = findButton(rendered, "Conversations");
+    expect(conversationsButton).toBeTruthy();
+
+    await act(async () => {
+      conversationsButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+
   const openVerifyDialog = async (rendered: HTMLDivElement) => {
-    const verifyReceiptButton = findButton(rendered, "Verify receipt");
+    const verifyReceiptButton = findButton(rendered, "Verify saved receipt");
     expect(verifyReceiptButton).toBeTruthy();
 
     await act(async () => {
@@ -932,7 +1141,7 @@ describe("MessagingHubPage", () => {
     });
 
     expect(rendered.textContent).toContain("Existing record");
-    expect(rendered.textContent).toContain("2 recorded messages currently visible in this conversation.");
+    expect(rendered.textContent).toContain("2 messages in this record");
     expect(rendered.querySelector('[data-testid="composer"]')?.getAttribute("data-disabled")).toBe("false");
   });
 
@@ -1043,18 +1252,20 @@ describe("MessagingHubPage", () => {
   });
 
   it("renders the export receipt panel with latest receipt metadata and safe wording", async () => {
+    messagingMockState.viewport.isMobile = true;
     const rendered = await renderPage();
+    await openSidebar(rendered);
 
     expect(rendered.textContent).toContain("Export Receipt");
     expect(rendered.textContent).toContain("Status unknown");
     expect(rendered.textContent).toContain("Latest export receipt recorded Mar 30, 2026");
     expect(rendered.textContent).toContain("Receipt ID");
     expect(rendered.textContent).toContain("PDF Hash");
-    expect(rendered.textContent).toContain("messaging-export-key-v1");
     expect(rendered.textContent).toContain("Copy hash");
     expect(rendered.textContent).toContain("Copy receipt ID");
-    expect(rendered.textContent).toContain("The exact PDF bytes are generated on the server");
-    expect(rendered.textContent).toContain("does not contain an embedded Acrobat-style digital signature");
+    expect(rendered.textContent).toContain("A server-generated receipt is recorded for this export.");
+    expect(rendered.textContent).toContain("You can verify whether the PDF still matches the stored receipt.");
+    expect(rendered.textContent).toContain("Raw result: unknown");
     expect(rendered.textContent).not.toContain("notarized");
     expect(rendered.textContent).not.toContain("court-certified");
     expect(rendered.textContent).not.toContain("signed PDF");
@@ -1062,7 +1273,9 @@ describe("MessagingHubPage", () => {
 
   it("shows a clean empty receipt state when no export has been created yet", async () => {
     supabaseMockState.exportList = [];
+    messagingMockState.viewport.isMobile = true;
     const rendered = await renderPage();
+    await openSidebar(rendered);
 
     expect(rendered.textContent).toContain("No export receipt recorded for this thread");
     expect(rendered.textContent).toContain("No receipt yet");
@@ -1070,7 +1283,9 @@ describe("MessagingHubPage", () => {
 
   it("fails explicitly in the receipt panel when family scope is missing", async () => {
     messagingMockState.activeFamilyId = null;
+    messagingMockState.viewport.isMobile = true;
     const rendered = await renderPage();
+    await openSidebar(rendered);
 
     expect(rendered.textContent).toContain("Family scope required");
     expect(rendered.textContent).toContain("Messaging export actions require explicit family scope");
@@ -1231,9 +1446,117 @@ describe("MessagingHubPage", () => {
     expect(rendered.textContent).toContain("Raw result: not_authorized");
   });
 
+  it("routes image attachments through the family media model instead of the document vault", async () => {
+    const rendered = await renderPage();
+
+    await act(async () => {
+      findButton(rendered, "attach-media")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(rendered.querySelector('[data-testid="composer-attachments"]')?.textContent).toContain("pickup-photo.png");
+
+    await act(async () => {
+      findButton(rendered, "send-message")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(documentsMockState.uploadDocument).not.toHaveBeenCalled();
+    expect(supabaseMockState.storageUploads).toContainEqual(
+      expect.objectContaining({
+        bucket: "family-media",
+        fileName: "pickup-photo.png",
+      }),
+    );
+    expect(supabaseMockState.familyMediaAssets).toHaveLength(1);
+    expect(supabaseMockState.messageAttachmentInsertCalls[0]).toContainEqual(
+      expect.objectContaining({
+        attachment_type: "image",
+        document_id: null,
+        family_id: "family-1",
+        media_asset_id: "media-asset-1",
+      }),
+    );
+  });
+
+  it("keeps vault document attachments on the document-vault model", async () => {
+    const rendered = await renderPage();
+
+    await act(async () => {
+      findButton(rendered, "open-vault")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const attachButton = findButton(rendered, "Attach");
+    expect(attachButton).toBeTruthy();
+
+    await act(async () => {
+      attachButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(rendered.querySelector('[data-testid="composer-attachments"]')?.textContent).toContain("Family Plan");
+
+    await act(async () => {
+      findButton(rendered, "send-message")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(documentsMockState.uploadDocument).not.toHaveBeenCalled();
+    expect(supabaseMockState.storageUploads).toHaveLength(0);
+    expect(supabaseMockState.messageAttachmentInsertCalls[0]).toContainEqual(
+      expect.objectContaining({
+        attachment_type: "document",
+        document_id: "document-family-plan",
+        family_id: "family-1",
+        media_asset_id: null,
+      }),
+    );
+  });
+
+  it("uploads direct file attachments through the document vault path", async () => {
+    const rendered = await renderPage();
+
+    await act(async () => {
+      findButton(rendered, "attach-upload")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(rendered.querySelector('[data-testid="composer-attachments"]')?.textContent).toContain("schedule-note.pdf");
+
+    await act(async () => {
+      findButton(rendered, "send-message")?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(documentsMockState.uploadDocument).toHaveBeenCalledWith(
+      expect.any(File),
+      "schedule-note.pdf",
+      "Shared from a recorded messaging thread.",
+      "other",
+    );
+    expect(supabaseMockState.storageUploads).toHaveLength(0);
+    expect(supabaseMockState.messageAttachmentInsertCalls[0]).toContainEqual(
+      expect.objectContaining({
+        attachment_type: "document",
+        document_id: "uploaded-document-schedule-note.pdf",
+        family_id: "family-1",
+        media_asset_id: null,
+      }),
+    );
+  });
+
   it("keeps the export receipt surface readable on mobile", async () => {
     messagingMockState.viewport.isMobile = true;
     const rendered = await renderPage();
+    await openSidebar(rendered);
 
     expect(rendered.textContent).toContain("Export Receipt");
     expect(rendered.textContent).toContain("Copy hash");

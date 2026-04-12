@@ -50,6 +50,20 @@ export interface ThreadMessage {
   sender_name?: string;
   is_from_me: boolean;
   read_by?: ReadReceipt[];
+  attachments?: MessageAttachment[];
+}
+
+export interface MessageAttachment {
+  attachment_type: "document" | "image" | "video";
+  document_id: string | null;
+  file_name: string;
+  file_path: string;
+  file_type: string;
+  id: string;
+  media_asset_id: string | null;
+  message_id: string;
+  preview_url?: string | null;
+  title: string;
 }
 
 export interface ReadReceipt {
@@ -130,6 +144,27 @@ interface ReadReceiptRow {
   reader_id: string;
   read_at: string;
   profiles: Pick<RelatedProfile, "full_name" | "email"> | null;
+}
+
+interface MessageAttachmentRow {
+  attachment_type: "document" | "image" | "video";
+  document_id: string | null;
+  documents: {
+    file_name: string;
+    file_path: string;
+    file_type: string;
+    id: string;
+    title: string;
+  } | null;
+  family_media_assets: {
+    file_name: string;
+    file_path: string;
+    file_type: string;
+    id: string;
+  } | null;
+  id: string;
+  media_asset_id: string | null;
+  message_id: string;
 }
 
 interface CallSessionThreadRow {
@@ -821,6 +856,80 @@ export const useMessagingHub = () => {
       );
 
       const messageIds = (data || []).map(m => m.id);
+      const attachmentRows =
+        messageIds.length > 0
+          ? (
+              await supabase
+                .from("message_attachments")
+                .select(`
+                  attachment_type,
+                  document_id,
+                  documents (
+                    file_name,
+                    file_path,
+                    file_type,
+                    id,
+                    title
+                  ),
+                  family_media_assets (
+                    file_name,
+                    file_path,
+                    file_type,
+                    id
+                  ),
+                  id,
+                  media_asset_id,
+                  message_id
+                `)
+                .in("message_id", messageIds)
+            ).data
+          : [];
+
+      const attachmentPreviewCache = new Map<string, string | null>();
+      const resolvedAttachments = await Promise.all(
+        ((attachmentRows as MessageAttachmentRow[] | null) ?? []).map(async (attachment) => {
+          const documentRecord = attachment.documents;
+          const mediaRecord = attachment.family_media_assets;
+          const assetRecord = documentRecord ?? mediaRecord;
+          const storageBucket = documentRecord ? "documents" : mediaRecord ? "family-media" : null;
+
+          if (!assetRecord || !storageBucket) {
+            return null;
+          }
+
+          const assetCacheKey = `${storageBucket}:${assetRecord.id}`;
+          let previewUrl = attachmentPreviewCache.get(assetCacheKey);
+          if (previewUrl === undefined) {
+            const { data: previewData, error: previewError } = await supabase.storage
+              .from(storageBucket)
+              .createSignedUrl(assetRecord.file_path, 60 * 60);
+
+            previewUrl = previewError ? null : previewData?.signedUrl ?? null;
+            attachmentPreviewCache.set(assetCacheKey, previewUrl);
+          }
+
+          return {
+            attachment_type: attachment.attachment_type,
+            document_id: documentRecord?.id ?? null,
+            file_name: assetRecord.file_name,
+            file_path: assetRecord.file_path,
+            file_type: assetRecord.file_type,
+            id: attachment.id,
+            media_asset_id: mediaRecord?.id ?? null,
+            message_id: attachment.message_id,
+            preview_url: previewUrl,
+            title: documentRecord?.title ?? mediaRecord?.file_name ?? assetRecord.file_name,
+          } satisfies MessageAttachment;
+        }),
+      );
+
+      const attachmentsByMessage = new Map<string, MessageAttachment[]>();
+      resolvedAttachments.filter(Boolean).forEach((attachment) => {
+        const existing = attachmentsByMessage.get(attachment!.message_id) ?? [];
+        existing.push(attachment!);
+        attachmentsByMessage.set(attachment!.message_id, existing);
+      });
+
       const receipts =
         messageIds.length > 0
           ? (
@@ -852,6 +961,7 @@ export const useMessagingHub = () => {
 
       const formattedMessages: ThreadMessage[] = (data || []).map(msg => ({
         ...msg,
+        attachments: attachmentsByMessage.get(msg.id) ?? [],
         sender_name: profileMap.get(msg.sender_id) || "Family member",
         is_from_me: msg.sender_id === profileId,
         read_by: receiptsByMessage.get(msg.id) || [],
@@ -1070,15 +1180,19 @@ export const useMessagingHub = () => {
     }
 
     try {
-      const { error } = await supabase.from("thread_messages").insert({
-        thread_id: activeThread.id,
-        sender_id: profileId,
-        sender_role: role,
-        content,
-      });
+      const { data, error } = await supabase
+        .from("thread_messages")
+        .insert({
+          thread_id: activeThread.id,
+          sender_id: profileId,
+          sender_role: role,
+          content,
+        })
+        .select()
+        .single();
 
       if (error) throw error;
-      return true;
+      return data;
     } catch (error) {
       console.error("Error sending message:", error);
       toast({
@@ -1086,7 +1200,7 @@ export const useMessagingHub = () => {
         description: ERROR_MESSAGES.MESSAGE_FAILED,
         variant: "destructive",
       });
-      return false;
+      return null;
     } finally {
       releaseMutationLock(mutationKey);
     }
@@ -1533,6 +1647,30 @@ export const useMessagingHub = () => {
       supabase.removeChannel(channel);
     };
   }, [activeThread, messages, profileId]);
+
+  useEffect(() => {
+    if (!activeThread) return;
+
+    const channel = supabase
+      .channel(`message-attachments-${activeThread.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "message_attachments",
+          filter: `thread_id=eq.${activeThread.id}`,
+        },
+        () => {
+          void fetchMessages(activeThread.id);
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeThread, fetchMessages]);
 
   useEffect(() => {
     if (!activeThread) return;

@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { useTheme } from "next-themes";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  loadProfilePreferences,
+  saveProfilePreferencesPatch,
+} from "@/lib/profilePreferences";
 
 export interface UserPreferences {
   theme: "light" | "dark" | "system";
@@ -26,22 +29,13 @@ export function useUserPreferences() {
       }
 
       try {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("preferences")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        if (profile?.preferences) {
-          const rawPrefs = profile.preferences as Record<string, unknown>;
-          const prefs: UserPreferences = {
-            theme: (rawPrefs.theme as UserPreferences["theme"]) || "system",
-          };
-          setPreferences(prefs);
-          // Apply theme from saved preferences
-          if (prefs.theme) {
-            setTheme(prefs.theme);
-          }
+        const rawPrefs = await loadProfilePreferences(user.id);
+        const prefs: UserPreferences = {
+          theme: (rawPrefs.theme as UserPreferences["theme"]) || "system",
+        };
+        setPreferences(prefs);
+        if (prefs.theme) {
+          setTheme(prefs.theme);
         }
       } catch (error) {
         console.error("Failed to load preferences:", error);
@@ -67,10 +61,7 @@ export function useUserPreferences() {
       if (!user) return;
 
       try {
-        await supabase
-          .from("profiles")
-          .update({ preferences: newPreferences })
-          .eq("user_id", user.id);
+        await saveProfilePreferencesPatch(user.id, newPreferences);
       } catch (error) {
         console.error("Failed to save preferences:", error);
       }
